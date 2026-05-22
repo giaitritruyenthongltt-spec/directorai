@@ -9,7 +9,9 @@ export class DirectorAIError extends Error {
     this.name = this.constructor.name;
     this.code = code;
     this.meta = options?.meta;
-    Error.captureStackTrace?.(this, this.constructor);
+    if (typeof Error.captureStackTrace === 'function') {
+      (Error.captureStackTrace as (t: object, c?: unknown) => void)(this, this.constructor);
+    }
   }
 }
 

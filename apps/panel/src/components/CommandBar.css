@@ -1,0 +1,50 @@
+.command-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.command-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+}
+
+.command-input:focus {
+  border-color: var(--accent);
+}
+
+.command-input:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+.command-input::placeholder {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.send-btn {
+  background: var(--accent);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 12px;
+  transition: background 0.15s;
+}
+
+.send-btn:hover { background: var(--accent-hover); }
+.send-btn:disabled {
+  background: var(--border);
+  cursor: not-allowed;
+}

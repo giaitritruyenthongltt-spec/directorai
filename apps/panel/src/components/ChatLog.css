@@ -1,0 +1,66 @@
+.chat-log {
+  height: 100%;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-log.empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  gap: 6px;
+}
+
+.chat-log.empty p { font-size: 13px; }
+.chat-log.empty small { font-size: 11px; }
+
+.log-entry {
+  display: flex;
+  gap: 8px;
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 6px 8px;
+  border-left: 2px solid transparent;
+}
+
+.log-tool_call { border-left-color: #5b9bd5; }
+.log-tool_result { border-left-color: #4caf50; }
+.log-error { border-left-color: #f44336; }
+.log-info { border-left-color: #555; }
+
+.log-icon {
+  font-weight: bold;
+  font-size: 12px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.log-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.log-method {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.log-value {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+}
+
+.log-ts {
+  font-size: 10px;
+  color: var(--text-dim);
+  display: block;
+  margin-top: 2px;
+}
