@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "editorconfig.editorconfig",
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "vitest.explorer",
+    "redhat.vscode-yaml",
+    "yzhang.markdown-all-in-one",
+    "streetsidesoftware.code-spell-checker",
+    "gruntfuggly.todo-tree"
+  ]
+}

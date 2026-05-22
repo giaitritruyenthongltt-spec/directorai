@@ -1,0 +1,99 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.pnp.*
+.yarn/
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+.next/
+.turbo/
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.uv-cache/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+credentials.json
+.anthropic_key
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.idea/
+*.swp
+*.swo
+
+# Claude (per-user local config)
+.claude/
+CLAUDE.local.md
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing & coverage
+coverage/
+.nyc_output/
+
+# Media (project local — not committed)
+samples/raw/
+samples/output/
+*.mp4
+*.mov
+*.mkv
+*.wav
+*.mp3
+
+# Models (huge — downloaded by setup)
+models/
+*.bin
+*.gguf
+*.onnx
+
+# Local data
+*.sqlite
+*.sqlite3
+*.db
+data/
+
+# Adobe / Premiere artifacts
+*.prproj.lock
+*.prproj~
+Adobe Premiere Pro Auto-Save/
+*.cfa
+*.pek
+
+# UXP / CEP build artifacts
+*.ccx
+*.zxp
