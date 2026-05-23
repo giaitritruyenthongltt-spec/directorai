@@ -11,6 +11,7 @@ const TYPE_ICON: Record<LogEntry['type'], string> = {
   tool_result: '←',
   error: '✗',
   info: 'i',
+  inbound: '⇩',
 };
 
 const TYPE_COLOR: Record<LogEntry['type'], string> = {
@@ -18,6 +19,7 @@ const TYPE_COLOR: Record<LogEntry['type'], string> = {
   tool_result: '#4caf50',
   error: '#f44336',
   info: '#888',
+  inbound: '#9c27b0',
 };
 
 function formatValue(v: unknown): string {

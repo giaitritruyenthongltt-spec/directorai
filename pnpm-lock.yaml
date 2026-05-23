@@ -65,6 +65,12 @@ importers:
 
   apps/panel:
     dependencies:
+      '@directorai/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@directorai/premiere-adapter':
+        specifier: workspace:*
+        version: link:../../packages/premiere-adapter
       '@directorai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -231,6 +237,9 @@ importers:
       '@directorai/shared':
         specifier: workspace:*
         version: link:../shared
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.6.2

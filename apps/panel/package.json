@@ -9,6 +9,8 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@directorai/core": "workspace:*",
+    "@directorai/premiere-adapter": "workspace:*",
     "@directorai/shared": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

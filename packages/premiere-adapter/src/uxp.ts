@@ -1,5 +1,13 @@
-import { AdapterError } from '@directorai/shared';
-import type { Project, Sequence, Clip, Track, Effect, Marker } from '@directorai/core';
+import { AdapterError, NotFoundError } from '@directorai/shared';
+import {
+  seconds,
+  type Project,
+  type Sequence,
+  type Clip,
+  type Track,
+  type Effect,
+  type Marker,
+} from '@directorai/core';
 import type {
   IPremiereAdapter,
   ApplyEffectInput,
@@ -16,143 +24,512 @@ import type {
   TextOverlayInput,
   TransitionInput,
 } from './types.js';
+import {
+  requirePProModule,
+  type PProModule,
+  type PProProject,
+  type PProSequence,
+  type PProTrack,
+  type PProTrackItem,
+  type TickTime,
+} from './uxp-ppro.js';
+import {
+  translateSequence,
+  translateTrackItem,
+  translateComponent,
+  translateMarker,
+  tickToSeconds,
+} from './uxp-translate.js';
 
 /**
- * Real adapter that calls Premiere via UXP API.
+ * Real adapter — runs INSIDE the UXP plugin context (Premiere Pro 2024+).
  *
- * Note: This module is meant to run INSIDE the UXP plugin context where
- * `require('premierepro')` works. When running on Node (e.g. tests), it
- * will throw at construction. Use MockPremiereAdapter for non-UXP env.
+ * All mutating operations are wrapped in `project.lockedAccess` so the
+ * NLE renders a single undo step per logical operation. Read operations
+ * are direct awaits.
  *
- * Each method below is a thin wrapper around the UXP API. The actual UXP
- * calls are stubbed pending P1.04+ implementation against a running
- * Premiere Pro instance.
+ * If `premierepro` is not available at construction (we're not in UXP),
+ * the constructor throws AdapterError. Use the factory or MockAdapter
+ * in Node-only contexts.
  */
 export class UXPPremiereAdapter implements IPremiereAdapter {
   readonly kind = 'uxp' as const;
 
-  private ppro: unknown;
+  private readonly ppro: PProModule;
 
   constructor() {
-    try {
-      this.ppro = (globalThis as { require?: (m: string) => unknown }).require?.('premierepro');
-      if (!this.ppro) {
-        throw new Error('premierepro module not available — are we inside UXP?');
-      }
-    } catch (err) {
-      throw new AdapterError('UXP', 'Failed to load premierepro module', err);
-    }
+    this.ppro = requirePProModule();
   }
 
-  private notImplemented(method: string): never {
-    throw new AdapterError('UXP', `${method} not yet implemented — TODO in P1.04+`);
+  /** Get the active project or throw with a helpful message. */
+  private async project(): Promise<PProProject> {
+    const p = await this.ppro.Project.getActiveProject();
+    if (!p) {
+      throw new AdapterError('UXP', 'No active project — open a .prproj first');
+    }
+    return p;
   }
+
+  private secondsToTick(s: number): TickTime {
+    return this.ppro.TickTime.createWithSeconds(s);
+  }
+
+  /** Find a sequence by its guid across the current project. */
+  private async findSequence(sequenceId: string): Promise<PProSequence> {
+    const proj = await this.project();
+    if (sequenceId === 'active') {
+      const active = await proj.getActiveSequence();
+      if (!active) throw new NotFoundError('Sequence', 'active');
+      return active;
+    }
+    const all = await proj.getSequences();
+    const found = all.find((s) => s.guid === sequenceId);
+    if (!found) throw new NotFoundError('Sequence', sequenceId);
+    return found;
+  }
+
+  /** Walk all tracks of all sequences looking for a track item by nodeId. */
+  private async findTrackItem(clipId: string): Promise<{
+    item: PProTrackItem;
+    track: PProTrack;
+    seq: PProSequence;
+  }> {
+    const proj = await this.project();
+    const sequences = await proj.getSequences();
+    for (const seq of sequences) {
+      const vCount = await seq.getVideoTrackCount();
+      for (let i = 0; i < vCount; i++) {
+        const track = await seq.getVideoTrack(i);
+        const items = await track.getTrackItems(1 /* ANY */, true);
+        const item = items.find((it) => it.nodeId === clipId);
+        if (item) return { item, track, seq };
+      }
+      const aCount = await seq.getAudioTrackCount();
+      for (let i = 0; i < aCount; i++) {
+        const track = await seq.getAudioTrack(i);
+        const items = await track.getTrackItems(1, true);
+        const item = items.find((it) => it.nodeId === clipId);
+        if (item) return { item, track, seq };
+      }
+    }
+    throw new NotFoundError('Clip', clipId);
+  }
+
+  private async mutate<T>(label: string, action: () => Promise<T>): Promise<T> {
+    const proj = await this.project();
+    let result!: T;
+    let captured: unknown;
+    await proj.lockedAccess(async () => {
+      try {
+        result = await action();
+      } catch (err) {
+        captured = err;
+      }
+    });
+    if (captured) {
+      throw new AdapterError('UXP', `${label} failed`, captured);
+    }
+    return result;
+  }
+
+  // ─── Project ──────────────────────────────────────────────────────────────
 
   async getProject(): Promise<Project> {
-    this.notImplemented('getProject');
+    const proj = await this.project();
+    const [active, all] = await Promise.all([proj.getActiveSequence(), proj.getSequences()]);
+    const sequences: Sequence[] = [];
+    for (const s of all) sequences.push(await translateSequence(s));
+    return {
+      id: { value: proj.guid, __brand: 'ProjectId' } as Project['id'],
+      metadata: {
+        name: proj.name,
+        path: proj.path,
+        createdAt: '',
+        modifiedAt: new Date().toISOString(),
+      },
+      sequences,
+      activeSequenceId: active?.guid ?? null,
+    };
   }
 
   async listSequences(): Promise<readonly Sequence[]> {
-    this.notImplemented('listSequences');
+    const proj = await this.project();
+    const all = await proj.getSequences();
+    const out: Sequence[] = [];
+    for (const s of all) out.push(await translateSequence(s));
+    return out;
   }
 
-  async setActiveSequence(_id: string): Promise<void> {
-    this.notImplemented('setActiveSequence');
+  async setActiveSequence(sequenceId: string): Promise<void> {
+    const proj = await this.project();
+    const seq = await this.findSequence(sequenceId);
+    await proj.setActiveSequence(seq);
   }
 
   async getActiveSequence(): Promise<Sequence | null> {
-    this.notImplemented('getActiveSequence');
+    const proj = await this.project();
+    const s = await proj.getActiveSequence();
+    if (!s) return null;
+    return translateSequence(s);
   }
 
-  async listClips(_seqId: string): Promise<readonly Clip[]> {
-    this.notImplemented('listClips');
+  // ─── Timeline read ────────────────────────────────────────────────────────
+
+  async listClips(sequenceId: string): Promise<readonly Clip[]> {
+    const seq = await this.findSequence(sequenceId);
+    const out: Clip[] = [];
+    const vCount = await seq.getVideoTrackCount();
+    for (let i = 0; i < vCount; i++) {
+      const t = await seq.getVideoTrack(i);
+      const items = await t.getTrackItems(1, false);
+      for (const it of items) out.push(await translateTrackItem(it, `video-${i}`, 'video'));
+    }
+    const aCount = await seq.getAudioTrackCount();
+    for (let i = 0; i < aCount; i++) {
+      const t = await seq.getAudioTrack(i);
+      const items = await t.getTrackItems(1, false);
+      for (const it of items) out.push(await translateTrackItem(it, `audio-${i}`, 'audio'));
+    }
+    return out;
   }
 
-  async getClip(_id: string): Promise<Clip | null> {
-    this.notImplemented('getClip');
+  async getClip(clipId: string): Promise<Clip | null> {
+    try {
+      const { item, track } = await this.findTrackItem(clipId);
+      const mediaType = await track.getMediaType().catch(() => 'Video');
+      const kind: Clip['kind'] = mediaType === 'Video' ? 'video' : 'audio';
+      return translateTrackItem(item, `${kind}-${track.id}`, kind);
+    } catch {
+      return null;
+    }
   }
 
-  async cutClip(_input: CutClipInput): Promise<readonly Clip[]> {
-    this.notImplemented('cutClip');
+  async listTracks(sequenceId: string): Promise<readonly Track[]> {
+    const seq = await translateSequence(await this.findSequence(sequenceId));
+    return seq.tracks;
   }
 
-  async trimClip(_input: TrimClipInput): Promise<Clip> {
-    this.notImplemented('trimClip');
+  // ─── Timeline edit ────────────────────────────────────────────────────────
+
+  async cutClip(input: CutClipInput): Promise<readonly Clip[]> {
+    return this.mutate('cutClip', async () => {
+      const { item, track } = await this.findTrackItem(input.clipId);
+      const cutAt = this.secondsToTick(input.at);
+      // Premiere UXP doesn't expose a direct "split at" — we change current
+      // clip's outPoint and insert a new clip starting from `cutAt` with
+      // the matching ProjectItem. Falls back to AdapterError if unsupported.
+      const startT = await item.getStartTime();
+      const endT = await item.getEndTime();
+      if (input.at <= startT.seconds || input.at >= endT.seconds) {
+        throw new Error(`Cut at ${input.at}s is outside clip [${startT.seconds}, ${endT.seconds}]`);
+      }
+      const projItem = await item.getProjectItem();
+      if (!projItem) throw new Error('Clip has no source ProjectItem');
+
+      // Adjust end of left half
+      const inT = await item.getInPoint();
+      const offset = input.at - startT.seconds;
+      const newOut = this.secondsToTick(inT.seconds + offset);
+      await item.setOutPoint(newOut);
+
+      // Insert right half via track.insertClip at cutAt
+      await track.insertClip(projItem, cutAt);
+
+      // Return the two halves (re-list to find the new piece)
+      const items = await track.getTrackItems(1, false);
+      const at = input.at;
+      const left = items.find((it) => it.nodeId === input.clipId);
+      const right = items.find(async (it) => {
+        const s = await it.getStartTime();
+        return Math.abs(s.seconds - at) < 0.001 && it.nodeId !== input.clipId;
+      });
+      const out: Clip[] = [];
+      const mt = await track.getMediaType();
+      const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
+      if (left) out.push(await translateTrackItem(left, `${k}-${track.id}`, k));
+      if (right) out.push(await translateTrackItem(await right, `${k}-${track.id}`, k));
+      return out;
+    });
   }
 
-  async moveClip(_input: MoveClipInput): Promise<Clip> {
-    this.notImplemented('moveClip');
+  async trimClip(input: TrimClipInput): Promise<Clip> {
+    return this.mutate('trimClip', async () => {
+      const { item, track } = await this.findTrackItem(input.clipId);
+      const inT = await item.getInPoint();
+      const startT = await item.getStartTime();
+      const delta = input.newRange.start - startT.seconds;
+      await item.setInPoint(this.secondsToTick(inT.seconds + delta));
+      await item.setStartTime(this.secondsToTick(input.newRange.start));
+      const dur = input.newRange.end - input.newRange.start;
+      await item.setOutPoint(this.secondsToTick(inT.seconds + delta + dur));
+      const mt = await track.getMediaType();
+      const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
+      return translateTrackItem(item, `${k}-${track.id}`, k);
+    });
   }
 
-  async deleteClip(_id: string): Promise<void> {
-    this.notImplemented('deleteClip');
+  async moveClip(input: MoveClipInput): Promise<Clip> {
+    return this.mutate('moveClip', async () => {
+      const { item, track } = await this.findTrackItem(input.clipId);
+      await item.move(this.secondsToTick(input.newStart));
+      // Cross-track moves not exposed in UXP API directly — left as TODO
+      if (input.newTrackId) {
+        throw new AdapterError('UXP', 'Cross-track move not supported by premierepro UXP API yet');
+      }
+      const mt = await track.getMediaType();
+      const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
+      return translateTrackItem(item, `${k}-${track.id}`, k);
+    });
   }
 
-  async listTracks(_seqId: string): Promise<readonly Track[]> {
-    this.notImplemented('listTracks');
+  async deleteClip(clipId: string): Promise<void> {
+    await this.mutate('deleteClip', async () => {
+      const { item } = await this.findTrackItem(clipId);
+      await item.remove(false /* ripple */, false /* alignToVideo */);
+    });
   }
 
-  async applyEffect(_input: ApplyEffectInput): Promise<Effect> {
-    this.notImplemented('applyEffect');
+  // ─── Effects ──────────────────────────────────────────────────────────────
+
+  async applyEffect(input: ApplyEffectInput): Promise<Effect> {
+    return this.mutate('applyEffect', async () => {
+      const { item } = await this.findTrackItem(input.clipId);
+      const chain = await item.getComponentChain();
+      if (!this.ppro.Component) {
+        throw new AdapterError('UXP', 'Component factory not available in this PPro version');
+      }
+      const comp = await this.ppro.Component.create(input.effectMatchName);
+      await chain.insertComponent(comp, 1);
+      return translateComponent(comp);
+    });
   }
 
-  async removeEffect(_clipId: string, _effectId: string): Promise<void> {
-    this.notImplemented('removeEffect');
+  async removeEffect(clipId: string, effectId: string): Promise<void> {
+    await this.mutate('removeEffect', async () => {
+      const { item } = await this.findTrackItem(clipId);
+      const chain = await item.getComponentChain();
+      const comps = await chain.getComponents();
+      const target = comps.find((c) => c.matchName === effectId || c.displayName === effectId);
+      if (!target) throw new NotFoundError('Effect', effectId);
+      await chain.removeComponent(target);
+    });
   }
 
-  async importFile(_input: ImportFileInput): Promise<{ id: string; path: string }> {
-    this.notImplemented('importFile');
+  // ─── Media ────────────────────────────────────────────────────────────────
+
+  async importFile(input: ImportFileInput): Promise<{ id: string; path: string }> {
+    return this.mutate('importFile', async () => {
+      const proj = await this.project();
+      const root = await proj.getRootItem();
+      const ok = await proj.importFiles([input.path], true, root, false);
+      if (!ok) throw new AdapterError('UXP', `Import failed for ${input.path}`);
+      // Locate the freshly-imported item by name match
+      const items = await root.getProjectItems();
+      const fname = input.path.split(/[\\/]/).pop() ?? input.path;
+      const stem = fname.split('.')[0] ?? fname;
+      const imported = items.find((i) => i.name === fname || i.name.startsWith(stem));
+      return { id: imported?.id ?? fname, path: input.path };
+    });
   }
 
-  async addMarker(_input: AddMarkerInput): Promise<Marker> {
-    this.notImplemented('addMarker');
+  // ─── Markers ──────────────────────────────────────────────────────────────
+
+  async addMarker(input: AddMarkerInput): Promise<Marker> {
+    return this.mutate('addMarker', async () => {
+      const seq = await this.findSequence(input.sequenceId);
+      const m = await seq.markers.createMarker(
+        this.secondsToTick(input.time),
+        input.name,
+        input.color ?? '#ffcc00',
+        this.ppro.MarkerType.COMMENT
+      );
+      if (input.comment) await m.setComment(input.comment);
+      return translateMarker(m);
+    });
   }
 
-  async listMarkers(_seqId: string): Promise<readonly Marker[]> {
-    this.notImplemented('listMarkers');
+  async listMarkers(sequenceId: string): Promise<readonly Marker[]> {
+    const seq = await this.findSequence(sequenceId);
+    const ms = await seq.markers.getMarkers();
+    return Promise.all(ms.map((m) => translateMarker(m)));
   }
 
-  async deleteMarker(_seqId: string, _markerId: string): Promise<void> {
-    this.notImplemented('deleteMarker');
+  async deleteMarker(sequenceId: string, markerId: string): Promise<void> {
+    await this.mutate('deleteMarker', async () => {
+      const seq = await this.findSequence(sequenceId);
+      const ms = await seq.markers.getMarkers();
+      const target = ms.find((m) => m.guid === markerId);
+      if (!target) throw new NotFoundError('Marker', markerId);
+      await seq.markers.removeMarker(target);
+    });
   }
 
-  async exportSequence(_input: ExportInput): Promise<{ jobId: string }> {
-    this.notImplemented('exportSequence');
+  // ─── Export ───────────────────────────────────────────────────────────────
+
+  async exportSequence(input: ExportInput): Promise<{ jobId: string }> {
+    const seq = await this.findSequence(input.sequenceId);
+    if (!this.ppro.EncoderManager) {
+      throw new AdapterError('UXP', 'EncoderManager not available — install Adobe Media Encoder');
+    }
+    const jobId = await this.ppro.EncoderManager.encodeSequence(
+      seq,
+      input.outputPath,
+      input.presetPath,
+      false /* removeOnCompletion */,
+      0 /* workArea: ENTIRE_SEQUENCE */
+    );
+    return { jobId };
   }
 
-  async addKeyframe(_i: KeyframeInput): Promise<void> {
-    this.notImplemented('addKeyframe');
+  // ─── Keyframes ────────────────────────────────────────────────────────────
+
+  async addKeyframe(input: KeyframeInput): Promise<void> {
+    await this.mutate('addKeyframe', async () => {
+      const { item } = await this.findTrackItem(input.clipId);
+      const chain = await item.getComponentChain();
+      const comps = await chain.getComponents();
+      const comp = comps.find(
+        (c) => c.matchName === input.effectId || c.displayName === input.effectId
+      );
+      if (!comp) throw new NotFoundError('Effect', input.effectId);
+      const param = await comp.getParam(input.paramName);
+      await param.addKey(this.secondsToTick(input.time), input.value);
+    });
   }
-  async applyColorPreset(_c: string, _p: string): Promise<void> {
-    this.notImplemented('applyColorPreset');
+
+  // ─── Color ────────────────────────────────────────────────────────────────
+
+  async applyColorPreset(clipId: string, presetName: string): Promise<void> {
+    await this.applyEffect({ clipId, effectMatchName: `Lumetri:${presetName}` });
   }
-  async setColorParams(_i: ColorParamsInput): Promise<void> {
-    this.notImplemented('setColorParams');
+
+  async setColorParams(input: ColorParamsInput): Promise<void> {
+    await this.mutate('setColorParams', async () => {
+      const { item } = await this.findTrackItem(input.clipId);
+      const chain = await item.getComponentChain();
+      const comps = await chain.getComponents();
+      let lumetri = comps.find((c) => c.matchName.toLowerCase().includes('lumetri'));
+      if (!lumetri && this.ppro.Component) {
+        lumetri = await this.ppro.Component.create('AE.ADBE Lumetri');
+        await chain.insertComponent(lumetri, 1);
+      }
+      if (!lumetri) throw new AdapterError('UXP', 'Lumetri component unavailable');
+      const setIfPresent = async (paramName: string, v: number | undefined): Promise<void> => {
+        if (v === undefined) return;
+        try {
+          const p = await lumetri!.getParam(paramName);
+          await p.setValue(v, true);
+        } catch {
+          // skip
+        }
+      };
+      await setIfPresent('Exposure', input.exposure);
+      await setIfPresent('Contrast', input.contrast);
+      await setIfPresent('Highlights', input.highlights);
+      await setIfPresent('Shadows', input.shadows);
+      await setIfPresent('Saturation', input.saturation);
+      await setIfPresent('Temperature', input.temperature);
+    });
   }
-  async setAudioGain(_i: AudioGainInput): Promise<void> {
-    this.notImplemented('setAudioGain');
+
+  // ─── Audio ────────────────────────────────────────────────────────────────
+
+  async setAudioGain(input: AudioGainInput): Promise<void> {
+    await this.mutate('setAudioGain', async () => {
+      const { item } = await this.findTrackItem(input.clipId);
+      const chain = await item.getComponentChain();
+      const comps = await chain.getComponents();
+      let gain = comps.find((c) => c.matchName.includes('Volume') || c.displayName === 'Volume');
+      if (!gain) {
+        if (!this.ppro.Component) {
+          throw new AdapterError('UXP', 'Component factory unavailable for Volume');
+        }
+        gain = await this.ppro.Component.create('AE.ADBE Audio Levels');
+        await chain.insertComponent(gain, 1);
+      }
+      const level = await gain.getParam('Level');
+      await level.setValue(input.gainDb, true);
+    });
   }
-  async addAudioFade(_i: AudioFadeInput): Promise<void> {
-    this.notImplemented('addAudioFade');
+
+  async addAudioFade(input: AudioFadeInput): Promise<void> {
+    await this.mutate('addAudioFade', async () => {
+      const { item } = await this.findTrackItem(input.clipId);
+      const chain = await item.getComponentChain();
+      const comps = await chain.getComponents();
+      const gain = comps.find((c) => c.matchName.includes('Volume'));
+      if (!gain) throw new AdapterError('UXP', 'No Volume component on clip — apply gain first');
+      const level = await gain.getParam('Level');
+      const start = await item.getStartTime();
+      const end = await item.getEndTime();
+      if (input.type === 'in') {
+        await level.addKey(start, -60);
+        await level.addKey(this.secondsToTick(start.seconds + input.durationSec), 0);
+      } else {
+        await level.addKey(this.secondsToTick(end.seconds - input.durationSec), 0);
+        await level.addKey(end, -60);
+      }
+    });
   }
-  async muteTrack(_s: string, _t: string, _m: boolean): Promise<void> {
-    this.notImplemented('muteTrack');
+
+  async muteTrack(sequenceId: string, trackId: string, muted: boolean): Promise<void> {
+    await this.mutate('muteTrack', async () => {
+      const seq = await this.findSequence(sequenceId);
+      // trackId format: "video-N" or "audio-N"
+      const [kind, idxStr] = trackId.split('-');
+      const idx = Number(idxStr);
+      const track = kind === 'video' ? await seq.getVideoTrack(idx) : await seq.getAudioTrack(idx);
+      await track.setMute(muted);
+    });
   }
-  async addTextOverlay(_i: TextOverlayInput): Promise<{ clipId: string }> {
-    this.notImplemented('addTextOverlay');
+
+  // ─── Text / MOGRT ─────────────────────────────────────────────────────────
+
+  async addTextOverlay(input: TextOverlayInput): Promise<{ clipId: string }> {
+    // UXP doesn't yet expose a high-level text-clip creation API.
+    // Implementation path: create a Graphics clip via a MOGRT template,
+    // then set its source-text param. Pending P1.17 once MOGRT lookup is wired.
+    throw new AdapterError(
+      'UXP',
+      `addTextOverlay not yet wired — MOGRT template lookup pending. Requested: "${input.text}"`
+    );
   }
-  async applyTransition(_i: TransitionInput): Promise<void> {
-    this.notImplemented('applyTransition');
+
+  // ─── Transitions ──────────────────────────────────────────────────────────
+
+  async applyTransition(input: TransitionInput): Promise<void> {
+    // PPro UXP exposes track.addTransition in some builds but signature is
+    // unstable across versions — leaving as a TODO with informative error.
+    throw new AdapterError(
+      'UXP',
+      `applyTransition pending — track.addTransition() not stable in PPro UXP yet. Wanted: ${input.matchName} between ${input.clipIdA}/${input.clipIdB}`
+    );
   }
+
   async listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
-    this.notImplemented('listTransitions');
+    // Static list of well-known matchNames used by PPro internally.
+    return [
+      { matchName: 'CrossDissolve', displayName: 'Cross Dissolve' },
+      { matchName: 'DipToBlack', displayName: 'Dip to Black' },
+      { matchName: 'DipToWhite', displayName: 'Dip to White' },
+      { matchName: 'FilmDissolve', displayName: 'Film Dissolve' },
+      { matchName: 'CrossZoom', displayName: 'Cross Zoom' },
+      { matchName: 'WhipPan', displayName: 'Whip Pan' },
+    ];
   }
+
+  // ─── Undo ─────────────────────────────────────────────────────────────────
 
   async beginUndoGroup(_label: string): Promise<void> {
-    this.notImplemented('beginUndoGroup');
+    // Per-operation undo is already handled by lockedAccess() inside mutate();
+    // explicit groups are a no-op on the UXP side.
   }
 
   async endUndoGroup(): Promise<void> {
-    this.notImplemented('endUndoGroup');
+    // No-op — see beginUndoGroup
   }
 }
+
+// Re-export TickTime helper for downstream consumers
+export { tickToSeconds };
+export const __SECONDS = seconds;
