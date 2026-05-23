@@ -13,6 +13,7 @@ import { dispatchRpc } from './rpc-dispatcher.js';
 
 export type NlQueryHandler = (input: { prompt: string; maxTurns?: number }) => Promise<unknown>;
 export type ContextHandler = (method: string, params: unknown) => Promise<unknown>;
+export type StyleHandler = (method: string, params: unknown) => Promise<unknown>;
 
 export interface WsServerOptions {
   host: string;
@@ -24,6 +25,8 @@ export interface WsServerOptions {
   onNlQuery?: NlQueryHandler;
   /** Optional handler for `context.*` RPC methods (Python service). */
   onContext?: ContextHandler;
+  /** Optional handler for `style.*` RPC methods (plan + execute). */
+  onStyle?: StyleHandler;
 }
 
 export interface RunningWsServer {
@@ -87,6 +90,33 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
           error: {
             code: RpcErrorCode.INTERNAL_ERROR,
             message: err instanceof Error ? err.message : 'nl.query failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
+      return;
+    }
+
+    // Special: style.* methods → server-side planner+executor
+    if (req.method.startsWith('style.')) {
+      if (!opts.onStyle) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: { code: RpcErrorCode.METHOD_NOT_FOUND, message: 'style.* router unavailable' },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      try {
+        const result = await opts.onStyle(req.method, req.params);
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        opts.logger.warn({ method: req.method, err }, 'style RPC error');
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message: err instanceof Error ? err.message : 'style call failed',
           },
         } satisfies JsonRpcErrorResponse);
       }

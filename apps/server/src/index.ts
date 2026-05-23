@@ -10,6 +10,7 @@ import { startWebSocketServer } from './ws-server.js';
 import { startMcpServer } from './mcp-server.js';
 import { createNlRouter } from './nl-router.js';
 import { createContextRouter } from './context-router.js';
+import { createStyleRouter } from './style-router.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -32,6 +33,15 @@ async function main(): Promise<void> {
     { baseUrl: config.context.url, methods: contextRouter.listMethods().length },
     'Context router wired'
   );
+
+  const styleRouter = createStyleRouter({
+    logger,
+    adapter: () => {
+      if (!routedAdapterRef.current) throw new Error('Adapter not ready');
+      return routedAdapterRef.current;
+    },
+  });
+  logger.info({ methods: styleRouter.listMethods().length }, 'Style router wired');
 
   const nlRouter = config.llm.apiKey
     ? createNlRouter({
@@ -57,6 +67,7 @@ async function main(): Promise<void> {
         }
       : undefined,
     onContext: (method, params) => contextRouter.dispatch(method, params),
+    onStyle: (method, params) => styleRouter.dispatch(method, params),
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 

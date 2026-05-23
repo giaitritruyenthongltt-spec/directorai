@@ -2,41 +2,40 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow: auto;
+  padding: 8px;
+  gap: 8px;
 }
 
 .sp-mode-row {
   display: flex;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border, #333);
 }
 
 .sp-mode-btn {
   flex: 1;
   background: none;
   border: none;
-  color: var(--text-dim);
+  color: var(--text-dim, #999);
   cursor: pointer;
   font-size: 11px;
   padding: 8px;
 }
 
 .sp-mode-btn.active {
-  color: var(--accent);
-  border-bottom: 2px solid var(--accent);
+  color: var(--accent, #5b9bd5);
+  border-bottom: 2px solid var(--accent, #5b9bd5);
 }
 
 .sp-presets {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
 .sp-preset {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface, #2b2b30);
+  border: 1px solid var(--border, #333);
   border-radius: 4px;
   cursor: pointer;
   padding: 8px 10px;
@@ -44,7 +43,7 @@
 }
 
 .sp-preset.selected {
-  border-color: var(--accent);
+  border-color: var(--accent, #5b9bd5);
   background: rgba(91, 155, 213, 0.1);
 }
 
@@ -53,54 +52,159 @@
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 2px;
+  color: #ddd;
 }
 
 .sp-desc {
   display: block;
   font-size: 10px;
-  color: var(--text-dim);
+  color: var(--text-dim, #999);
 }
 
 .sp-custom {
-  flex: 1;
-  overflow: hidden;
-  padding: 8px;
+  display: flex;
+  flex-direction: column;
 }
 
-.sp-yaml {
+.sp-yaml,
+.sp-ctx-json {
   width: 100%;
-  height: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  min-height: 160px;
+  background: var(--bg, #1f1f23);
+  border: 1px solid var(--border, #333);
   border-radius: 4px;
-  color: var(--text);
+  color: var(--text, #ddd);
   font-family: monospace;
   font-size: 11px;
   outline: none;
   padding: 8px;
-  resize: none;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.sp-ctx {
+  font-size: 11px;
+  color: var(--text-dim, #999);
+}
+
+.sp-ctx summary {
+  cursor: pointer;
+  padding: 4px 0;
 }
 
 .sp-actions {
-  padding: 8px;
-  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
 }
 
-.sp-apply {
-  width: 100%;
-  background: var(--accent);
-  border: none;
+.sp-btn {
+  flex: 1;
+  background: var(--surface, #2b2b30);
+  border: 1px solid var(--border, #444);
   border-radius: 4px;
-  color: #fff;
+  color: #ddd;
+  padding: 8px 10px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 10px;
-  transition: background 0.15s;
+  font-size: 12px;
 }
 
-.sp-apply:hover { background: var(--accent-hover); }
-.sp-apply:disabled {
-  background: var(--border);
+.sp-btn:hover:not(:disabled) {
+  background: #3a3a40;
+  border-color: var(--accent, #5b9bd5);
+}
+
+.sp-btn.primary {
+  background: var(--accent, #5b9bd5);
+  border-color: var(--accent, #5b9bd5);
+  color: #fff;
+  font-weight: 600;
+}
+
+.sp-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
+}
+
+.sp-busy {
+  color: #ffb74d;
+  font-size: 12px;
+}
+
+.sp-error {
+  color: #f44336;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.sp-plan,
+.sp-exec {
+  background: #18181b;
+  border: 1px solid #2a2a2e;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 11px;
+  color: #ddd;
+}
+
+.sp-plan-hd {
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.sp-plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 200px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sp-plan-list li {
+  padding: 2px 0;
+  border-bottom: 1px solid #232327;
+}
+
+.sp-step-tool {
+  color: #5b9bd5;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+.sp-plan-list em {
+  color: #999;
+  font-style: normal;
+}
+
+.sp-plan-more {
+  color: #777;
+  font-style: italic;
+}
+
+.sp-exec-hd {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.sp-exec-hd.ok {
+  color: #4caf50;
+}
+
+.sp-exec-hd.err {
+  color: #f44336;
+}
+
+.sp-exec-report {
+  background: #0e0e10;
+  border: 1px solid #2a2a2e;
+  border-radius: 4px;
+  padding: 6px;
+  font-size: 10px;
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

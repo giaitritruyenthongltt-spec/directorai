@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@directorai/core": "workspace:*",
+    "@directorai/premiere-adapter": "workspace:*",
     "@directorai/shared": "workspace:*",
     "@directorai/style-engine": "workspace:*"
   },

@@ -117,6 +117,9 @@ importers:
       '@directorai/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@directorai/cut-planner':
+        specifier: workspace:*
+        version: link:../../packages/cut-planner
       '@directorai/llm-client':
         specifier: workspace:*
         version: link:../../packages/llm-client
@@ -126,6 +129,9 @@ importers:
       '@directorai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@directorai/style-engine':
+        specifier: workspace:*
+        version: link:../../packages/style-engine
       '@modelcontextprotocol/sdk':
         specifier: ^1.0.4
         version: 1.29.0(zod@3.25.76)
@@ -186,6 +192,9 @@ importers:
       '@directorai/core':
         specifier: workspace:*
         version: link:../core
+      '@directorai/premiere-adapter':
+        specifier: workspace:*
+        version: link:../premiere-adapter
       '@directorai/shared':
         specifier: workspace:*
         version: link:../shared
