@@ -27,32 +27,32 @@ export function App(): React.ReactElement {
   }, []);
 
   const handleCommand = useCallback(async (cmd: string) => {
-    // Basic natural-language → tool routing
-    // Full LLM routing happens on the server; this is a quick shortcut for common commands
-    const lower = cmd.toLowerCase().trim();
+    const trimmed = cmd.trim();
+    if (!trimmed) return;
+    const lower = trimmed.toLowerCase();
+
+    // Quick shortcuts for read-only ops, bypass LLM cost
+    const shortcuts: Record<string, () => Promise<unknown>> = {
+      'get project': () => wsClient.call('project.get'),
+      project: () => wsClient.call('project.get'),
+      'list sequences': () => wsClient.call('project.listSequences'),
+      sequences: () => wsClient.call('project.listSequences'),
+      'list transitions': () => wsClient.call('transition.list'),
+    };
 
     try {
-      if (lower.startsWith('get project') || lower === 'project') {
-        await wsClient.call('project.get');
-      } else if (lower.startsWith('list seq') || lower === 'sequences') {
-        await wsClient.call('project.listSequences');
-      } else if (lower.startsWith('list clips')) {
-        const seq = await wsClient.call<{ id: string }>('project.getActiveSequence');
-        if (seq) await wsClient.call('timeline.listClips', { sequenceId: seq.id });
-      } else if (lower.startsWith('list transitions')) {
-        await wsClient.call('transition.list');
-      } else {
-        // Fall through to server for NL processing (future LLM routing)
-        setLogs((prev) => [
-          {
-            id: String(Date.now()),
-            ts: Date.now(),
-            type: 'info',
-            result: `NL routing not yet wired — type a direct command like "get project", "list sequences", "list clips"`,
-          },
-          ...prev,
-        ]);
+      if (shortcuts[lower]) {
+        await shortcuts[lower]();
+        return;
       }
+      if (lower.startsWith('list clips')) {
+        const seq = await wsClient.call<{ id: string } | null>('project.getActiveSequence');
+        if (seq) await wsClient.call('timeline.listClips', { sequenceId: seq.id });
+        return;
+      }
+
+      // Everything else → LLM-driven natural-language router on the server
+      await wsClient.call('nl.query', { prompt: trimmed });
     } catch (err) {
       setLogs((prev) => [
         {

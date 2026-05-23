@@ -4,12 +4,11 @@
  *
  * Usage: node tools/live-test.mjs
  */
-import { MockPremiereAdapter } from '../packages/premiere-adapter/src/mock.js';
-import { dispatchRpc, listRpcMethods } from '../apps/server/src/rpc-dispatcher.js';
-import { parseStyle, getBuiltinStyle, listBuiltinStyles } from '../packages/style-engine/src/index.js';
-import { planCuts } from '../packages/cut-planner/src/planner.js';
-import { EFFECT_PRESETS } from '../packages/effect-library/src/registry.js';
-import { seconds } from '../packages/core/src/index.js';
+import { MockPremiereAdapter, dispatchRpc, listRpcMethods } from '../packages/premiere-adapter/dist/index.js';
+import { parseStyle, getBuiltinStyle, listBuiltinStyles } from '../packages/style-engine/dist/index.js';
+import { planCuts } from '../packages/cut-planner/dist/planner.js';
+import { EFFECT_PRESETS } from '../packages/effect-library/dist/registry.js';
+import { seconds } from '../packages/core/dist/index.js';
 
 const RESET = '\x1b[0m';
 const GREEN = '\x1b[32m';

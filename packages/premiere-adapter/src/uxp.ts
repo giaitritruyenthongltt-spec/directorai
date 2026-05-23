@@ -486,23 +486,34 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   // ─── Text / MOGRT ─────────────────────────────────────────────────────────
 
   async addTextOverlay(input: TextOverlayInput): Promise<{ clipId: string }> {
-    // UXP doesn't yet expose a high-level text-clip creation API.
-    // Implementation path: create a Graphics clip via a MOGRT template,
-    // then set its source-text param. Pending P1.17 once MOGRT lookup is wired.
+    // KNOWN-LIMITATION (P1.17 deferred):
+    // PPro UXP v2 has no public API to create a basic title from string content.
+    // The supported path is `Project.createMogrtClip(mogrtPath, time, trackIndex)`
+    // which requires a .mogrt template file. We don't ship a default template
+    // yet — when one is bundled (default-caption.mogrt) we can finish this
+    // by:
+    //   1. Finding mogrt path in plugin resources
+    //   2. Calling project.createMogrtClip(...)
+    //   3. Setting the "Source Text" parameter via getParam(...).setValue(text)
     throw new AdapterError(
       'UXP',
-      `addTextOverlay not yet wired — MOGRT template lookup pending. Requested: "${input.text}"`
+      `addTextOverlay not implemented — needs default MOGRT template (P1.17 follow-up). Requested: "${input.text}" at ${input.startTime}s for ${input.duration}s`
     );
   }
 
   // ─── Transitions ──────────────────────────────────────────────────────────
 
   async applyTransition(input: TransitionInput): Promise<void> {
-    // PPro UXP exposes track.addTransition in some builds but signature is
-    // unstable across versions — leaving as a TODO with informative error.
+    // KNOWN-LIMITATION (P1.18 deferred):
+    // PPro UXP v2 only exposes track-item-level transition attachment in some
+    // builds. The API signature for `track.addTransition` is not yet stable
+    // across PPro versions 24-25. Follow-up plan:
+    //   1. Probe ppro.TransitionFactory if present
+    //   2. Else fall back to component-chain insert of a transition matchName
+    //   3. Live-test on PPro 2025 to lock the signature
     throw new AdapterError(
       'UXP',
-      `applyTransition pending — track.addTransition() not stable in PPro UXP yet. Wanted: ${input.matchName} between ${input.clipIdA}/${input.clipIdB}`
+      `applyTransition not implemented — PPro UXP transition API not yet locked across versions (P1.18 follow-up). Wanted ${input.matchName} between ${input.clipIdA}/${input.clipIdB}`
     );
   }
 

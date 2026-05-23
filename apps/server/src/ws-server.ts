@@ -11,12 +11,16 @@ import {
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import { dispatchRpc } from './rpc-dispatcher.js';
 
+export type NlQueryHandler = (input: { prompt: string; maxTurns?: number }) => Promise<unknown>;
+
 export interface WsServerOptions {
   host: string;
   port: number;
   logger: Logger;
   /** Local fallback adapter used when no panel is connected (mock). */
   fallbackAdapter: IPremiereAdapter;
+  /** Optional handler for the `nl.query` RPC method (LLM-driven). */
+  onNlQuery?: NlQueryHandler;
 }
 
 export interface RunningWsServer {
@@ -54,6 +58,35 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       activePanel = ws;
       opts.logger.info({ id: req.id }, 'UXP panel registered');
       send(ws, { jsonrpc: '2.0', id: req.id, result: { ok: true } } satisfies JsonRpcSuccess);
+      return;
+    }
+
+    // Special: LLM-driven natural-language query (handled server-side)
+    if (req.method === 'nl.query') {
+      if (!opts.onNlQuery) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.METHOD_NOT_FOUND,
+            message: 'nl.query disabled — set ANTHROPIC_API_KEY to enable',
+          },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      try {
+        const result = await opts.onNlQuery(req.params as { prompt: string; maxTurns?: number });
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.INTERNAL_ERROR,
+            message: err instanceof Error ? err.message : 'nl.query failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
       return;
     }
 

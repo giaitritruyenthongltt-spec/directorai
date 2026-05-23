@@ -1,10 +1,37 @@
 import { z } from 'zod';
 import type { Seconds } from '@directorai/core';
 import type { IPremiereAdapter } from './types.js';
+import { withRetry } from './retry.js';
 
 interface RpcHandler {
   schema: z.ZodTypeAny;
   run: (params: unknown, adapter: IPremiereAdapter) => Promise<unknown>;
+}
+
+const MUTATING_METHODS = new Set([
+  'project.setActiveSequence',
+  'timeline.cutClip',
+  'timeline.trimClip',
+  'timeline.moveClip',
+  'timeline.deleteClip',
+  'effect.apply',
+  'effect.remove',
+  'media.import',
+  'marker.add',
+  'marker.delete',
+  'export.sequence',
+  'keyframe.add',
+  'color.applyPreset',
+  'color.setParams',
+  'audio.setGain',
+  'audio.addFade',
+  'audio.muteTrack',
+  'text.addOverlay',
+  'transition.apply',
+]);
+
+export function isMutatingMethod(method: string): boolean {
+  return MUTATING_METHODS.has(method);
 }
 
 const Empty = z.object({}).optional();
@@ -274,17 +301,62 @@ const handlers: Record<string, RpcHandler> = {
   'undo.end': { schema: Empty, run: (_p, a) => a.endUndoGroup() },
 };
 
+export interface DispatchOptions {
+  /** Wrap mutating methods in an undo group automatically (default: true). */
+  readonly autoUndoGroup?: boolean;
+  /** Retry transient adapter errors with exponential backoff (default: true). */
+  readonly retry?: boolean;
+}
+
+const inProgressUndoGroups = new WeakSet<IPremiereAdapter>();
+
+async function runWithAutoUndo<T>(
+  method: string,
+  adapter: IPremiereAdapter,
+  fn: () => Promise<T>
+): Promise<T> {
+  // Skip if we're already inside a user-initiated undo group OR if the
+  // method itself manages undo state (undo.begin / undo.end).
+  if (
+    !isMutatingMethod(method) ||
+    inProgressUndoGroups.has(adapter) ||
+    method === 'undo.begin' ||
+    method === 'undo.end'
+  ) {
+    return fn();
+  }
+
+  inProgressUndoGroups.add(adapter);
+  try {
+    await adapter.beginUndoGroup(`DirectorAI: ${method}`);
+    try {
+      return await fn();
+    } finally {
+      await adapter.endUndoGroup();
+    }
+  } finally {
+    inProgressUndoGroups.delete(adapter);
+  }
+}
+
 export async function dispatchRpc(
   method: string,
   params: unknown,
-  adapter: IPremiereAdapter
+  adapter: IPremiereAdapter,
+  options: DispatchOptions = {}
 ): Promise<unknown> {
   const handler = handlers[method];
   if (!handler) {
     throw new Error(`Unknown RPC method: ${method}`);
   }
   const parsed = handler.schema.parse(params ?? {});
-  return handler.run(parsed, adapter);
+  const autoUndo = options.autoUndoGroup ?? true;
+  const useRetry = options.retry ?? true;
+
+  const exec = (): Promise<unknown> => handler.run(parsed, adapter);
+  const undoWrapped = (): Promise<unknown> =>
+    autoUndo ? runWithAutoUndo(method, adapter, exec) : exec();
+  return useRetry ? withRetry(undoWrapped) : undoWrapped();
 }
 
 export function listRpcMethods(): readonly string[] {

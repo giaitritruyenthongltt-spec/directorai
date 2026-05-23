@@ -8,6 +8,7 @@ import {
 } from '@directorai/premiere-adapter';
 import { startWebSocketServer } from './ws-server.js';
 import { startMcpServer } from './mcp-server.js';
+import { createNlRouter } from './nl-router.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -18,18 +19,32 @@ async function main(): Promise<void> {
   // Local mock — used as fallback when no UXP panel is connected
   const mockAdapter = new MockPremiereAdapter();
 
+  // Build the routed adapter eagerly so we can pass it to the WS server
+  // (which needs it to handle `nl.query` calls).
+  const routedAdapterRef: { current: IPremiereAdapter | null } = { current: null };
+
+  const nlRouter = config.llm.apiKey
+    ? createNlRouter({ apiKey: config.llm.apiKey, model: config.llm.model, logger })
+    : null;
+  if (!nlRouter) {
+    logger.warn('ANTHROPIC_API_KEY not set — nl.query disabled');
+  }
+
   const wsServer = await startWebSocketServer({
     host: config.server.host,
     port: config.server.wsPort,
     logger,
     fallbackAdapter: mockAdapter,
+    onNlQuery: nlRouter
+      ? async (input) => {
+          if (!routedAdapterRef.current) throw new Error('Adapter not ready');
+          return nlRouter(input, routedAdapterRef.current);
+        }
+      : undefined,
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 
-  // Adapter exposed to MCP clients (Claude Desktop). Routes to the panel
-  // when one is connected, else falls back to the local mock so dev/CI keeps
-  // working without Premiere open.
-  const routedAdapter: IPremiereAdapter = new RemotePremiereAdapter(
+  routedAdapterRef.current = new RemotePremiereAdapter(
     async <T>(method: string, params?: unknown): Promise<T> => {
       if (wsServer.isPanelConnected()) {
         return wsServer.panelCall<T>(method, params);
@@ -39,7 +54,7 @@ async function main(): Promise<void> {
     }
   );
 
-  const mcpServer = await startMcpServer({ logger, adapter: routedAdapter });
+  const mcpServer = await startMcpServer({ logger, adapter: routedAdapterRef.current });
   logger.info({ tools: mcpServer.toolCount }, 'MCP server ready');
 
   const shutdown = (signal: string): void => {

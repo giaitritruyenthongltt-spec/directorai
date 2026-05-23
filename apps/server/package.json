@@ -19,6 +19,7 @@
   "dependencies": {
     "@directorai/config": "workspace:*",
     "@directorai/core": "workspace:*",
+    "@directorai/llm-client": "workspace:*",
     "@directorai/premiere-adapter": "workspace:*",
     "@directorai/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.4",

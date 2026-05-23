@@ -117,6 +117,9 @@ importers:
       '@directorai/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@directorai/llm-client':
+        specifier: workspace:*
+        version: link:../../packages/llm-client
       '@directorai/premiere-adapter':
         specifier: workspace:*
         version: link:../../packages/premiere-adapter

@@ -4,3 +4,4 @@ export * from './uxp.js';
 export * from './remote.js';
 export * from './factory.js';
 export * from './dispatcher.js';
+export * from './retry.js';

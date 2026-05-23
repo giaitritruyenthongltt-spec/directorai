@@ -1,14 +1,40 @@
 # DirectorAI Roadmap (115 Phases)
 
-| Macro                   | Phases | Status         | Duration |
-| ----------------------- | ------ | -------------- | -------- |
-| **P0 — Foundation**     | 20     | 🟡 In progress | 2 wk     |
-| **P1 — Control MVP**    | 25     | ⏳ Planned     | 4 wk     |
-| **P2 — Context Engine** | 20     | ⏳ Planned     | 6 wk     |
-| **P3 — Style Engine**   | 25     | ⏳ Planned     | 8 wk     |
-| **P4 — Polish & Beta**  | 15     | ⏳ Planned     | 8 wk     |
-| **P5 — Scale & Expand** | 10     | ⏳ Planned     | ongoing  |
+| Macro                   | Phases | Status        | Duration | Tag                      |
+| ----------------------- | ------ | ------------- | -------- | ------------------------ |
+| **P0 — Foundation**     | 20     | ✅ Done       | 2 wk     | `v0.1.0-foundation`      |
+| **P1 — Control MVP**    | 25     | 🟢 LIVE-READY | 4 wk     | `v0.2.1-control-live` \* |
+| **P2 — Context Engine** | 20     | 🟡 Core done  | 6 wk     | `v0.3.0-context`         |
+| **P3 — Style Engine**   | 25     | 🟡 Core done  | 8 wk     | `v0.4.0-style`           |
+| **P4 — Polish & Beta**  | 15     | 🟠 Kickoff    | 8 wk     | —                        |
+| **P5 — Scale & Expand** | 10     | 🔴 Plan only  | ongoing  | —                        |
 
-Each macro-phase ends with a **MILESTONE** — full regression test + tag + ADR.
+\* P1 retag covers the move from mock-only to server↔panel proxy + real UXP adapter.
+Text overlay (P1.17) and transitions (P1.18) are intentionally deferred — see
+`KNOWN-LIMITATION` notes in `packages/premiere-adapter/src/uxp.ts`.
 
-See [`docs/adr/`](../adr/) for accepted architectural decisions.
+## What changed at `v0.2.1-control-live`
+
+- `UXPPremiereAdapter` calls the real `premierepro` UXP module (apiVersion 2)
+  using `project.lockedAccess()` for automatic undo grouping per mutation.
+- `RemotePremiereAdapter` forwards every IPremiereAdapter method to a
+  pluggable send fn, used by the Node server to proxy MCP/Claude Desktop
+  calls into the connected UXP panel.
+- WS server tracks the active panel socket, exposes `panelCall()` and
+  `isPanelConnected()`; falls back to the local mock when no panel is
+  registered so dev/CI keeps working without Premiere open.
+- Panel ws-client sends `_panel.register` handshake on connect, handles
+  inbound RPC via the shared dispatcher, adds exponential-backoff
+  reconnect and 25-second heartbeat.
+- Dispatcher auto-brackets every mutating call in a `beginUndoGroup`/
+  `endUndoGroup` pair and runs each call through an exponential retry
+  on transient errors (timeouts, scene busy, ECONNRESET, …).
+- `nl.query` RPC method runs an Anthropic tool-use agent loop over all
+  29 Premiere tools — the panel's free-text command bar uses it when
+  the input doesn't match a built-in shortcut.
+- 14-test integration suite exercises every tool group through the
+  full dispatcher.
+
+Each macro-phase ends with a **MILESTONE** — full regression test +
+tag + ADR. See [`docs/adr/`](../adr/) for accepted architectural
+decisions.
