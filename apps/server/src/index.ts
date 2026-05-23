@@ -9,6 +9,7 @@ import {
 import { startWebSocketServer } from './ws-server.js';
 import { startMcpServer } from './mcp-server.js';
 import { createNlRouter } from './nl-router.js';
+import { createContextRouter } from './context-router.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -23,8 +24,22 @@ async function main(): Promise<void> {
   // (which needs it to handle `nl.query` calls).
   const routedAdapterRef: { current: IPremiereAdapter | null } = { current: null };
 
+  const contextRouter = createContextRouter({
+    baseUrl: config.context.url,
+    logger,
+  });
+  logger.info(
+    { baseUrl: config.context.url, methods: contextRouter.listMethods().length },
+    'Context router wired'
+  );
+
   const nlRouter = config.llm.apiKey
-    ? createNlRouter({ apiKey: config.llm.apiKey, model: config.llm.model, logger })
+    ? createNlRouter({
+        apiKey: config.llm.apiKey,
+        model: config.llm.model,
+        logger,
+        contextDispatch: (method, params) => contextRouter.dispatch(method, params),
+      })
     : null;
   if (!nlRouter) {
     logger.warn('ANTHROPIC_API_KEY not set — nl.query disabled');
@@ -41,6 +56,7 @@ async function main(): Promise<void> {
           return nlRouter(input, routedAdapterRef.current);
         }
       : undefined,
+    onContext: (method, params) => contextRouter.dispatch(method, params),
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 
@@ -54,7 +70,11 @@ async function main(): Promise<void> {
     }
   );
 
-  const mcpServer = await startMcpServer({ logger, adapter: routedAdapterRef.current });
+  const mcpServer = await startMcpServer({
+    logger,
+    adapter: routedAdapterRef.current,
+    contextDispatch: (method, params) => contextRouter.dispatch(method, params),
+  });
   logger.info({ tools: mcpServer.toolCount }, 'MCP server ready');
 
   const shutdown = (signal: string): void => {

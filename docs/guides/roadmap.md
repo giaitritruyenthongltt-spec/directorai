@@ -1,17 +1,22 @@
 # DirectorAI Roadmap (115 Phases)
 
-| Macro                   | Phases | Status        | Duration | Tag                      |
-| ----------------------- | ------ | ------------- | -------- | ------------------------ |
-| **P0 — Foundation**     | 20     | ✅ Done       | 2 wk     | `v0.1.0-foundation`      |
-| **P1 — Control MVP**    | 25     | 🟢 LIVE-READY | 4 wk     | `v0.2.1-control-live` \* |
-| **P2 — Context Engine** | 20     | 🟡 Core done  | 6 wk     | `v0.3.0-context`         |
-| **P3 — Style Engine**   | 25     | 🟡 Core done  | 8 wk     | `v0.4.0-style`           |
-| **P4 — Polish & Beta**  | 15     | 🟠 Kickoff    | 8 wk     | —                        |
-| **P5 — Scale & Expand** | 10     | 🔴 Plan only  | ongoing  | —                        |
+| Macro                   | Phases | Status        | Duration | Tag                        |
+| ----------------------- | ------ | ------------- | -------- | -------------------------- |
+| **P0 — Foundation**     | 20     | ✅ Done       | 2 wk     | `v0.1.0-foundation`        |
+| **P1 — Control MVP**    | 25     | 🟢 LIVE-READY | 4 wk     | `v0.2.1-control-live` \*   |
+| **P2 — Context Engine** | 20     | 🟢 LIVE-READY | 6 wk     | `v0.3.1-context-live` \*\* |
+| **P3 — Style Engine**   | 25     | 🟡 Core done  | 8 wk     | `v0.4.0-style`             |
+| **P4 — Polish & Beta**  | 15     | 🟠 Kickoff    | 8 wk     | —                          |
+| **P5 — Scale & Expand** | 10     | 🔴 Plan only  | ongoing  | —                          |
 
 \* P1 retag covers the move from mock-only to server↔panel proxy + real UXP adapter.
 Text overlay (P1.17) and transitions (P1.18) are intentionally deferred — see
 `KNOWN-LIMITATION` notes in `packages/premiere-adapter/src/uxp.ts`.
+
+\*\* P2 retag adds embeddings + ChromaDB, the `context.*` RPC namespace, the panel
+Context tab, and 16-test pytest suite covering the ingest pipeline. Job queue
+(P2.14) deliberately deferred — current ingest is sync but cached; revisit when
+batch indexing latency becomes a UX problem.
 
 ## What changed at `v0.2.1-control-live`
 

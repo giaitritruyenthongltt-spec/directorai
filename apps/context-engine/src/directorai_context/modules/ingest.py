@@ -66,5 +66,16 @@ def ingest(req: IngestRequest, use_cache: bool = True) -> IngestResult:
         result.vision = vision.analyze_video(req.media_path)
 
     cpath.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+
+    # Auto-index into vector store so semantic search works post-ingest.
+    try:
+        from directorai_context.modules.embeddings import embed_ingest_result
+
+        indexed = embed_ingest_result(result)
+        log.info("ingest_indexed", key=key, indexed=indexed)
+    except Exception as e:  # noqa: BLE001
+        # Indexing is best-effort — failure shouldn't block ingest result.
+        log.warn("ingest_index_failed", key=key, error=str(e))
+
     log.info("ingest_done", key=key)
     return result

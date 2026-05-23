@@ -10,6 +10,7 @@ import type { Logger } from '@directorai/shared';
 import { AnthropicClient } from '@directorai/llm-client';
 import type { LLMToolDef, LLMAgentResponse } from '@directorai/llm-client';
 import { dispatchRpc, listRpcMethods, type IPremiereAdapter } from '@directorai/premiere-adapter';
+import { CONTEXT_TOOL_DESCRIPTIONS } from './context-router.js';
 
 const SYSTEM_PROMPT = `You are DirectorAI, an AI editing copilot embedded in Adobe Premiere Pro.
 
@@ -25,8 +26,8 @@ const fromToolName = (toolName: string): string => toolName.replace(/_/g, '.');
 
 const ALWAYS_HIDE = new Set(['undo.begin', 'undo.end']);
 
-export function buildToolCatalog(): readonly LLMToolDef[] {
-  return listRpcMethods()
+export function buildToolCatalog(includeContext = true): readonly LLMToolDef[] {
+  const premiereTools = listRpcMethods()
     .filter((m) => !ALWAYS_HIDE.has(m))
     .map((m) => ({
       name: toToolName(m),
@@ -36,6 +37,15 @@ export function buildToolCatalog(): readonly LLMToolDef[] {
       // LLM is allowed to send any JSON. Strong typing remains at dispatch.
       inputSchema: { type: 'object', additionalProperties: true },
     }));
+
+  if (!includeContext) return premiereTools;
+
+  const contextTools = Object.entries(CONTEXT_TOOL_DESCRIPTIONS).map(([name, desc]) => ({
+    name: toToolName(name),
+    description: desc,
+    inputSchema: { type: 'object', additionalProperties: true },
+  }));
+  return [...premiereTools, ...contextTools];
 }
 
 const DESCRIPTIONS: Record<string, string> = {
@@ -76,6 +86,8 @@ export interface NlRouterOptions {
   apiKey: string;
   model?: string;
   logger?: Logger;
+  /** Handler for context.* tool calls (Python service dispatch). */
+  contextDispatch?: (method: string, params: unknown) => Promise<unknown>;
 }
 
 export interface NlQueryInput {
@@ -89,12 +101,13 @@ export interface NlQueryResult extends LLMAgentResponse {
 
 export function createNlRouter(opts: NlRouterOptions) {
   const client = new AnthropicClient({ apiKey: opts.apiKey, model: opts.model });
+  const hasContext = !!opts.contextDispatch;
 
   return async function query(
     input: NlQueryInput,
     adapter: IPremiereAdapter
   ): Promise<NlQueryResult> {
-    const tools = buildToolCatalog();
+    const tools = buildToolCatalog(hasContext);
     opts.logger?.info({ prompt: input.prompt, tools: tools.length }, 'nl.query start');
 
     const result = await client.runAgent({
@@ -105,7 +118,15 @@ export function createNlRouter(opts: NlRouterOptions) {
       execute: async (call) => {
         const rpcMethod = fromToolName(call.name);
         opts.logger?.debug({ tool: rpcMethod, input: call.input }, 'tool executing');
-        const value = await dispatchRpc(rpcMethod, call.input, adapter);
+        let value: unknown;
+        if (rpcMethod.startsWith('context.')) {
+          if (!opts.contextDispatch) {
+            throw new Error('context.* requested but no context dispatcher available');
+          }
+          value = await opts.contextDispatch(rpcMethod, call.input);
+        } else {
+          value = await dispatchRpc(rpcMethod, call.input, adapter);
+        }
         return JSON.stringify(value ?? null);
       },
     });

@@ -4,6 +4,7 @@ import { ChatLog } from './components/ChatLog.js';
 import { CommandBar } from './components/CommandBar.js';
 import { StatusBar } from './components/StatusBar.js';
 import { StylePicker } from './components/StylePicker.js';
+import { ContextTab } from './components/ContextTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import './App.css';
 
@@ -83,12 +84,7 @@ export function App(): React.ReactElement {
       <main className="main-content">
         {activeTab === 'chat' && <ChatLog entries={logs} />}
         {activeTab === 'style' && <StylePicker />}
-        {activeTab === 'context' && (
-          <div className="placeholder">
-            <p>Context Engine</p>
-            <small>Connect a video and run /ingest to analyze</small>
-          </div>
-        )}
+        {activeTab === 'context' && <ContextTab />}
       </main>
       <CommandBar onSubmit={handleCommand} disabled={connState !== 'connected'} />
       <StatusBar connState={connState} />

@@ -119,3 +119,57 @@ class IngestResult(BaseModel):
     scenes: SceneResult | None = None
     beats: BeatResult | None = None
     vision: VisionResult | None = None
+
+
+# ─── Embeddings / Search ───────────────────────────────────────────────────
+
+
+class EmbedRequest(BaseModel):
+    """Request to embed an already-computed IngestResult."""
+
+    ingest: IngestResult
+
+
+class EmbedResult(BaseModel):
+    """Embedding indexing result."""
+
+    media_path: str
+    indexed_count: int
+
+
+class SearchRequest(BaseModel):
+    """Top-K semantic search over the indexed corpus."""
+
+    query: str
+    top_k: int = Field(10, ge=1, le=100)
+    media_path: str | None = None
+    kind: str | None = Field(None, description="transcript | vision | scene")
+
+
+class SearchHit(BaseModel):
+    """One result row from a search."""
+
+    id: str
+    text: str
+    media_path: str
+    kind: str
+    start: float
+    end: float
+    score: float
+
+
+class SearchResult(BaseModel):
+    """Search response."""
+
+    query: str
+    hits: list[SearchHit]
+
+
+class ProjectContext(BaseModel):
+    """Aggregated metadata for a Premiere project — written to disk."""
+
+    project_id: str
+    project_name: str
+    media: dict[str, IngestResult] = Field(default_factory=dict)
+    embeddings_count: int = 0
+    updated_at: str = ""

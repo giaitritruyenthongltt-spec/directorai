@@ -12,6 +12,7 @@ import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import { dispatchRpc } from './rpc-dispatcher.js';
 
 export type NlQueryHandler = (input: { prompt: string; maxTurns?: number }) => Promise<unknown>;
+export type ContextHandler = (method: string, params: unknown) => Promise<unknown>;
 
 export interface WsServerOptions {
   host: string;
@@ -21,6 +22,8 @@ export interface WsServerOptions {
   fallbackAdapter: IPremiereAdapter;
   /** Optional handler for the `nl.query` RPC method (LLM-driven). */
   onNlQuery?: NlQueryHandler;
+  /** Optional handler for `context.*` RPC methods (Python service). */
+  onContext?: ContextHandler;
 }
 
 export interface RunningWsServer {
@@ -84,6 +87,36 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
           error: {
             code: RpcErrorCode.INTERNAL_ERROR,
             message: err instanceof Error ? err.message : 'nl.query failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
+      return;
+    }
+
+    // Special: context.* methods → Python context-engine
+    if (req.method.startsWith('context.')) {
+      if (!opts.onContext) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.METHOD_NOT_FOUND,
+            message: `${req.method} requires context-engine — start it via tools/start-context.ps1`,
+          },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      try {
+        const result = await opts.onContext(req.method, req.params);
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        opts.logger.warn({ method: req.method, err }, 'context RPC error');
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message: err instanceof Error ? err.message : 'context call failed',
           },
         } satisfies JsonRpcErrorResponse);
       }

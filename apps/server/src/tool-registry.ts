@@ -1,6 +1,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import { dispatchRpc, listRpcMethods } from './rpc-dispatcher.js';
+import { CONTEXT_TOOL_DESCRIPTIONS } from './context-router.js';
 
 export interface McpToolDef {
   readonly name: string;
@@ -47,3 +48,21 @@ export const mcpTools: McpToolDef[] = listRpcMethods().map((name) => ({
   inputSchema: { type: 'object' as const },
   run: (args, adapter) => dispatchRpc(name, args, adapter),
 }));
+
+/**
+ * Build the MCP tool catalog with the context.* methods spliced in.
+ * Context tools don't go through the Premiere adapter — they need the
+ * server-side context router supplied at runtime.
+ */
+export function buildMcpToolsWithContext(
+  contextDispatch: (method: string, params: unknown) => Promise<unknown>
+): McpToolDef[] {
+  const contextNames = Object.keys(CONTEXT_TOOL_DESCRIPTIONS);
+  const contextTools: McpToolDef[] = contextNames.map((name) => ({
+    name: name.replace('.', '_'),
+    description: CONTEXT_TOOL_DESCRIPTIONS[name] ?? `Context method: ${name}`,
+    inputSchema: { type: 'object' as const },
+    run: (args) => contextDispatch(name, args),
+  }));
+  return [...mcpTools, ...contextTools];
+}

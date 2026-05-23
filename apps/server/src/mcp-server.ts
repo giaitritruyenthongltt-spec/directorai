@@ -8,11 +8,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { Logger } from '@directorai/shared';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
-import { mcpTools } from './tool-registry.js';
+import { mcpTools, buildMcpToolsWithContext, type McpToolDef } from './tool-registry.js';
 
 export interface McpServerOptions {
   logger: Logger;
   adapter: IPremiereAdapter;
+  /** When provided, context.* tools are exposed alongside the Premiere ones. */
+  contextDispatch?: (method: string, params: unknown) => Promise<unknown>;
   startStdio?: boolean;
 }
 
@@ -23,11 +25,15 @@ export interface RunningMcpServer {
 
 export async function startMcpServer(opts: McpServerOptions): Promise<RunningMcpServer> {
   const server = new Server(
-    { name: 'directorai', version: '0.2.0-control' },
+    { name: 'directorai', version: '0.3.1-context-live' },
     { capabilities: { tools: {} } }
   );
 
-  const tools: Tool[] = mcpTools.map((t) => ({
+  const allTools: McpToolDef[] = opts.contextDispatch
+    ? buildMcpToolsWithContext(opts.contextDispatch)
+    : mcpTools;
+
+  const tools: Tool[] = allTools.map((t) => ({
     name: t.name,
     description: t.description,
     inputSchema: t.inputSchema,
@@ -36,7 +42,7 @@ export async function startMcpServer(opts: McpServerOptions): Promise<RunningMcp
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req): Promise<CallToolResult> => {
-    const tool = mcpTools.find((t) => t.name === req.params.name);
+    const tool = allTools.find((t) => t.name === req.params.name);
     if (!tool) {
       return {
         isError: true,

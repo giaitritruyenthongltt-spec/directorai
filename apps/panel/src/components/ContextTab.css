@@ -1,0 +1,114 @@
+.context-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  font-size: 12px;
+  color: #ddd;
+}
+
+.ctx-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ctx-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ctx-health {
+  font-size: 11px;
+  color: #999;
+}
+
+.ctx-health.ok {
+  color: #4caf50;
+}
+
+.ctx-health.err {
+  color: #f44336;
+}
+
+.ctx-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ctx-row label {
+  font-size: 11px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ctx-row input {
+  background: #1f1f23;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #fff;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.ctx-row input:focus {
+  outline: none;
+  border-color: #5b9bd5;
+}
+
+.ctx-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ctx-actions button,
+.ctx-row button {
+  background: #2b2b30;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ddd;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.ctx-actions button:hover:not(:disabled),
+.ctx-row button:hover:not(:disabled) {
+  background: #3a3a40;
+  border-color: #5b9bd5;
+}
+
+.ctx-actions button:disabled,
+.ctx-row button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ctx-busy {
+  color: #ffb74d;
+  font-size: 12px;
+}
+
+.ctx-error {
+  color: #f44336;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.ctx-result {
+  background: #18181b;
+  border: 1px solid #2a2a2e;
+  border-radius: 4px;
+  padding: 8px;
+  font-size: 11px;
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
