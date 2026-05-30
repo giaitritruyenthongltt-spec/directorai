@@ -5,6 +5,8 @@ import { CommandBar } from './components/CommandBar.js';
 import { StatusBar } from './components/StatusBar.js';
 import { ProgressBar } from './components/ProgressBar.js';
 import { ConsentDialog } from './components/ConsentDialog.js';
+import { FirstRunWizard } from './components/FirstRunWizard.js';
+import { OnboardingTour } from './components/OnboardingTour.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import './App.css';
 
@@ -150,7 +152,9 @@ export function App(): React.ReactElement {
       <ProgressBar />
       <CommandBar onSubmit={handleCommand} disabled={connState !== 'connected'} />
       <StatusBar connState={connState} />
+      <FirstRunWizard />
       <ConsentDialog />
+      <OnboardingTour />
     </div>
   );
 }

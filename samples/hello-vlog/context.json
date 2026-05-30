@@ -1,0 +1,48 @@
+{
+  "mediaPath": "samples/hello-vlog/media/intro.mp4",
+  "durationSec": 30,
+  "segments": [
+    { "start": 0.0, "end": 2.0, "text": "Hey everyone, welcome back." },
+    { "start": 2.0, "end": 2.6, "text": "um", "isFiller": true },
+    {
+      "start": 2.6,
+      "end": 6.5,
+      "text": "Today I want to show you a Premiere plugin that uses AI to cut your footage."
+    },
+    { "start": 6.5, "end": 7.2, "text": "", "isSilence": true },
+    {
+      "start": 7.2,
+      "end": 12.0,
+      "text": "I've been using it for about a week and the workflow is unbelievable."
+    },
+    {
+      "start": 12.0,
+      "end": 17.0,
+      "text": "We're going to walk through the timeline and see the AI plugin in action."
+    },
+    {
+      "start": 17.0,
+      "end": 22.5,
+      "text": "It picks up keywords, jumps on the beat, and removes the boring bits."
+    },
+    {
+      "start": 22.5,
+      "end": 26.0,
+      "text": "Honestly it's the kind of tool I wish I had two years ago."
+    },
+    {
+      "start": 26.0,
+      "end": 30.0,
+      "text": "If you want to try it, the link is below. Thanks for watching."
+    }
+  ],
+  "scenes": [
+    { "start": 0, "end": 12.0 },
+    { "start": 12.0, "end": 22.5 },
+    { "start": 22.5, "end": 30.0 }
+  ],
+  "beats": [
+    1.0, 2.5, 4.0, 5.5, 7.0, 8.5, 10.0, 11.5, 13.0, 14.5, 16.0, 17.5, 19.0, 20.5, 22.0, 23.5, 25.0,
+    26.5, 28.0
+  ]
+}

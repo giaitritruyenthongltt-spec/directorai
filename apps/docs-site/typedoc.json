@@ -1,0 +1,27 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPointStrategy": "expand",
+  "entryPoints": [
+    "../../packages/core/src/index.ts",
+    "../../packages/shared/src/index.ts",
+    "../../packages/config/src/index.ts",
+    "../../packages/effect-library/src/index.ts",
+    "../../packages/cut-planner/src/index.ts",
+    "../../packages/style-engine/src/index.ts",
+    "../../packages/premiere-adapter/src/index.ts",
+    "../../packages/llm-client/src/index.ts",
+    "../../packages/telemetry/src/index.ts",
+    "../../packages/license/src/index.ts",
+    "../../packages/updater/src/index.ts"
+  ],
+  "tsconfig": "./tsconfig.typedoc.json",
+  "out": "./dist/api",
+  "name": "DirectorAI API Reference",
+  "includeVersion": true,
+  "skipErrorChecking": true,
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "readme": "none",
+  "disableSources": true
+}

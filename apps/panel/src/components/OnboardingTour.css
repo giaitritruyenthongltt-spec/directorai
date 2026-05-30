@@ -1,0 +1,86 @@
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 105;
+}
+
+.tour-ring {
+  position: absolute;
+  border: 2px solid #4c8bf5;
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transition:
+    top 200ms,
+    left 200ms,
+    width 200ms,
+    height 200ms;
+}
+
+.tour-popover {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  max-width: 280px;
+  color: var(--text);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.tour-popover h4 {
+  margin: 4px 0 6px;
+  font-size: 13px;
+}
+
+.tour-popover p {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.tour-step-count {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.tour-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.tour-btn {
+  padding: 4px 12px;
+  border-radius: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  background: #4c8bf5;
+  color: white;
+  border: 1px solid #4c8bf5;
+}
+
+.tour-btn.tour-secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.tour-btn-link {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.tour-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

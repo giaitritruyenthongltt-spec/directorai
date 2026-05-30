@@ -1,0 +1,16 @@
+{
+  "id": "hello-vlog",
+  "title": "Hello — vlog sample",
+  "description": "30s talking-head clip with hand-curated transcript, scenes, beats. Drives the vlog style end-to-end.",
+  "durationSec": 30,
+  "media": {
+    "intro.mp4": {
+      "size": 4194304,
+      "sha256": "PLACEHOLDER — replaced when samples.directorai.app is live",
+      "downloadUrl": "https://samples.directorai.app/hello-vlog/intro.mp4"
+    }
+  },
+  "style": "styles/vlog.yaml",
+  "context": "context.json",
+  "version": "1"
+}

@@ -1,0 +1,3 @@
+Placeholder — the real intro.mp4 (~4MB) is downloaded by the first-run
+wizard from samples.directorai.app once the marketing site (P4.39) is
+live. Keep this file in git so the directory exists.

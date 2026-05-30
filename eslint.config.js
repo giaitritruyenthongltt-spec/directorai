@@ -7,6 +7,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      '**/dist-ts/**',
       '**/build/**',
       '**/node_modules/**',
       '**/.turbo/**',

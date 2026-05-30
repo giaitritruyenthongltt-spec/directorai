@@ -15,6 +15,7 @@ import { createCheckpointRouter } from './checkpoint-router.js';
 import { CheckpointStore } from './checkpoint-store.js';
 import { initSentry } from './sentry.js';
 import { createTelemetryRouter } from './telemetry-router.js';
+import { createFirstRunRouter } from './first-run-router.js';
 import { ConsentStore, InMemorySink, TelemetryClient } from '@directorai/telemetry';
 
 async function main(): Promise<void> {
@@ -69,6 +70,9 @@ async function main(): Promise<void> {
     'Telemetry router wired'
   );
 
+  const firstRunRouter = createFirstRunRouter({ logger });
+  logger.info({ methods: firstRunRouter.listMethods().length }, 'First-run router wired');
+
   const styleRouter = createStyleRouter({
     logger,
     adapter: () => {
@@ -116,6 +120,7 @@ async function main(): Promise<void> {
     onStyle: (method, params) => styleRouter.dispatch(method, params),
     onCheckpoint: (method, params) => checkpointRouter.dispatch(method, params),
     onTelemetry: (method, params) => telemetryRouter.dispatch(method, params),
+    onFirstRun: (method, params) => firstRunRouter.dispatch(method, params),
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 

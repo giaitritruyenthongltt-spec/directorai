@@ -23,6 +23,7 @@
     "bench:perf": "tsx tools/perf-bench.ts",
     "bench:memory": "tsx --expose-gc tools/memory-soak.ts",
     "bundle:ccx": "tsx tools/bundle-ccx.ts",
+    "bundle:sample": "tsx tools/bundle-sample.ts",
     "prepare": "husky"
   },
   "devDependencies": {

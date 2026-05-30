@@ -1,0 +1,36 @@
+name: hello-vlog
+description: Starter vlog style — gentle hook, talky body, soft outro.
+version: "1.0"
+
+pacing:
+  hook:
+    durationSec: 3
+    cutsPerSec: 1.5
+  body:
+    cutsPerSec: 0.8
+    beatSync: true
+  outro:
+    durationSec: 3
+    cutsPerSec: 1.0
+
+effects:
+  - on: keyword
+    keywords: ["Premiere", "AI", "plugin"]
+    action: zoom_punch
+    durationSec: 0.35
+  - on: scene_change
+    action: cross_dissolve
+
+color:
+  preset: WarmVlog
+
+audio:
+  musicGainDb: -18
+  duckingDb: -8
+  fadeInSec: 0.5
+  fadeOutSec: 1.5
+
+removeFillers: true
+removeSilence: true
+silenceThresholdDb: -38
+minSilenceSec: 0.4

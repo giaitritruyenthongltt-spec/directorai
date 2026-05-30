@@ -1,0 +1,96 @@
+.wiz-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 110;
+}
+
+.wiz-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px 22px;
+  max-width: 460px;
+  color: var(--text);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+
+.wiz-card h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.wiz-card p {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.wiz-pre {
+  background: var(--border);
+  padding: 6px 10px;
+  border-radius: 3px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  margin: 0 0 12px;
+}
+
+.wiz-input {
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.wiz-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.wiz-btn {
+  padding: 5px 14px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #4c8bf5;
+  color: white;
+  border: 1px solid #4c8bf5;
+}
+
+.wiz-btn.wiz-secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.wiz-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wiz-step-dots {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.wiz-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.wiz-dot.on {
+  background: #4c8bf5;
+}

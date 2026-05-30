@@ -14,7 +14,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const portal = await startPortal({ port, publicKeyPem });
-  console.log(`Portal up on http://127.0.0.1:${portal.port}`);
+  console.info(`Portal up on http://127.0.0.1:${portal.port}`);
 }
 
 void main();
