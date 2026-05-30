@@ -24,6 +24,8 @@
     "bench:memory": "tsx --expose-gc tools/memory-soak.ts",
     "bundle:ccx": "tsx tools/bundle-ccx.ts",
     "bundle:sample": "tsx tools/bundle-sample.ts",
+    "survey:send": "tsx tools/survey-schedule.ts send",
+    "survey:next": "tsx tools/survey-schedule.ts next",
     "prepare": "husky"
   },
   "devDependencies": {

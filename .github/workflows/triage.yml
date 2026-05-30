@@ -1,0 +1,52 @@
+name: Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply area + severity labels from issue body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+
+            // Severity comes from the bug template dropdown.
+            const sevMatch = body.match(/### Severity\s+([^\n]+)/);
+            const sevLabel = (() => {
+              if (!sevMatch) return null;
+              const v = sevMatch[1].trim();
+              if (v.startsWith('P0')) return 'severity/p0';
+              if (v.startsWith('P1')) return 'severity/p1';
+              if (v.startsWith('P2')) return 'severity/p2';
+              if (v.startsWith('P3')) return 'severity/p3';
+              return null;
+            })();
+
+            // Area comes from the area dropdown (same on both templates).
+            const areaMatch = body.match(/### Area\s+([^\n]+)/);
+            const areaLabel = areaMatch ? `area/${areaMatch[1].trim()}` : null;
+
+            const toAdd = [sevLabel, areaLabel].filter(Boolean);
+            if (toAdd.length) {
+              await github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: context.payload.issue.number,
+                labels: toAdd,
+              });
+            }
+
+            // P0 issues get a comment + assignment to oncall.
+            if (sevLabel === 'severity/p0') {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.payload.issue.number,
+                body: '⚠️ Marked **P0**. SLA: first response within 4 working hours, fix targeted for the same business day. Pinging oncall.',
+              });
+            }

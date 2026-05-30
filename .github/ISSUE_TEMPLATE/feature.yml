@@ -1,0 +1,51 @@
+name: ✨ Feature request
+description: Suggest a new capability or improvement.
+title: "[feature] "
+labels: ["feature", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can't you do today, and why does it matter?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Your proposed solution
+      description: |
+        Sketch a UX or API surface. Bullet points are fine. We'll
+        refine in the triage call.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - panel-ui
+        - server
+        - context-engine
+        - style-engine
+        - cut-planner
+        - premiere-adapter
+        - license
+        - installer
+        - docs
+        - new-area
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing feature requests
+          required: true

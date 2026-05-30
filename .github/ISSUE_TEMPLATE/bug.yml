@@ -1,0 +1,104 @@
+name: 🐛 Bug report
+description: Something is broken or misbehaving.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug! A clear repro saves both of us hours.
+        Before submitting please check [the open bugs](https://github.com/directorai/directorai/issues?q=is%3Aissue+label%3Abug) to avoid duplicates.
+
+  - type: input
+    id: version
+    attributes:
+      label: DirectorAI version
+      description: From the status bar or `pnpm -F @directorai/server start --version`
+      placeholder: v0.9.0-beta
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: |
+        - **P0** — data loss, panel won't open, nothing works.
+        - **P1** — feature broken, no workaround.
+        - **P2** — annoying but workaround exists.
+        - **P3** — cosmetic / nice-to-have.
+      options:
+        - P0 — blocker
+        - P1 — major
+        - P2 — minor
+        - P3 — cosmetic
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - panel-ui
+        - server
+        - context-engine
+        - style-engine
+        - cut-planner
+        - premiere-adapter
+        - license
+        - installer
+        - docs
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the panel
+        2. Click ...
+        3. Watch ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste the chat log entries from the panel, or a server log snippet. Drag-drop screenshots.
+      render: shell
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / Premiere version
+      placeholder: Windows 11 23H2, Premiere Pro 25.0
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: ack
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues
+          required: true
+        - label: I included a repro and at least one log line
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discord — community help
+    url: https://discord.gg/directorai
+    about: Faster than an issue for "how do I…" questions.
+  - name: 📚 Docs
+    url: https://docs.directorai.app
+    about: Guides, ADRs, API reference.
