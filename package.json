@@ -26,6 +26,7 @@
     "bundle:sample": "tsx tools/bundle-sample.ts",
     "survey:send": "tsx tools/survey-schedule.ts send",
     "survey:next": "tsx tools/survey-schedule.ts next",
+    "sdk:surface": "tsx tools/sdk-surface-diff.ts",
     "prepare": "husky"
   },
   "devDependencies": {

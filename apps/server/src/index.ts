@@ -16,6 +16,8 @@ import { CheckpointStore } from './checkpoint-store.js';
 import { initSentry } from './sentry.js';
 import { createTelemetryRouter } from './telemetry-router.js';
 import { createFirstRunRouter } from './first-run-router.js';
+import { loadAllPlugins, deactivateAll } from './plugin-loader.js';
+import path from 'node:path';
 import { ConsentStore, InMemorySink, TelemetryClient } from '@directorai/telemetry';
 
 async function main(): Promise<void> {
@@ -141,9 +143,33 @@ async function main(): Promise<void> {
   });
   logger.info({ tools: mcpServer.toolCount }, 'MCP server ready');
 
+  // P5.01d — discover + activate plugins under plugins/<id>/
+  const pluginsDir = process.env.DIRECTORAI_PLUGINS_DIR ?? path.resolve(process.cwd(), 'plugins');
+  const loadedPlugins = await loadAllPlugins({
+    pluginsDir,
+    adapter: routedAdapterRef.current,
+    logger,
+    hooks: {
+      onStyleRegistered: (id) => logger.info({ plugin: id }, 'plugin registered a style'),
+      onEffectRegistered: (id) => logger.info({ plugin: id }, 'plugin registered an effect'),
+      onToolRegistered: (id, def) =>
+        logger.info({ plugin: id, tool: def.name }, 'plugin registered a tool'),
+      onTelemetryEmit: (id, event) => {
+        try {
+          telemetryClient.emit(event);
+        } catch {
+          logger.warn({ plugin: id }, 'plugin telemetry event dropped');
+        }
+      },
+    },
+  });
+  logger.info({ count: loadedPlugins.length }, 'plugins ready');
+
   const shutdown = (signal: string): void => {
     logger.info({ signal }, 'Shutting down');
-    void wsServer.close().then(() => process.exit(0));
+    void deactivateAll(loadedPlugins)
+      .then(() => wsServer.close())
+      .then(() => process.exit(0));
   };
 
   process.on('SIGINT', () => shutdown('SIGINT'));

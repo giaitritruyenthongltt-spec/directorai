@@ -232,6 +232,9 @@ importers:
       '@directorai/premiere-adapter':
         specifier: workspace:*
         version: link:../../packages/premiere-adapter
+      '@directorai/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@directorai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -389,6 +392,40 @@ importers:
         version: link:../shared
       zod:
         specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.2
+        version: 2.1.9(@types/node@22.19.19)(terser@5.47.1)
+
+  packages/sdk:
+    dependencies:
+      '@directorai/core':
+        specifier: workspace:*
+        version: link:../core
+      '@directorai/cut-planner':
+        specifier: workspace:*
+        version: link:../cut-planner
+      '@directorai/effect-library':
+        specifier: workspace:*
+        version: link:../effect-library
+      '@directorai/llm-client':
+        specifier: workspace:*
+        version: link:../llm-client
+      '@directorai/premiere-adapter':
+        specifier: workspace:*
+        version: link:../premiere-adapter
+      '@directorai/style-engine':
+        specifier: workspace:*
+        version: link:../style-engine
+      '@directorai/telemetry':
+        specifier: workspace:*
+        version: link:../telemetry
+      zod:
+        specifier: ^3.23.0
         version: 3.25.76
     devDependencies:
       typescript:

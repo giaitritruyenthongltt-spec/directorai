@@ -44,6 +44,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: SDK surface diff (P5.01e)
+        run: pnpm sdk:surface
+
   python-checks:
     name: Python checks
     runs-on: ubuntu-latest
