@@ -25,6 +25,7 @@
     "@directorai/shared": "workspace:*",
     "@directorai/style-engine": "workspace:*",
     "@directorai/telemetry": "workspace:*",
+    "@directorai/license": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "@sentry/node": "^8.42.0",
     "ws": "^8.18.0",

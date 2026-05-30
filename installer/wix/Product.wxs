@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  P4.24 — Windows MSI source.
+
+  Bundles:
+    - apps/server/dist/**                 (Node bootstrap entrypoint)
+    - apps/portal/dist/**                 (local license inspector)
+    - dist/installer/DirectorAI-*.ccx     (UXP panel package)
+    - apps/context-engine/**              (Python sidecar — optional)
+    - tools/check-python.ps1              (P4.25 — Python 3.11 bootstrap)
+
+  Build:
+    pwsh ./installer/build-msi.ps1
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="DirectorAI"
+           Manufacturer="DirectorAI Inc"
+           Version="0.7.0"
+           UpgradeCode="0b5a3dee-43e8-49bd-92c2-7c1b5b3a5d11"
+           InstallerVersion="500"
+           Scope="perUser">
+
+    <MajorUpgrade
+        AllowDowngrades="no"
+        DowngradeErrorMessage="A newer DirectorAI is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Roughly: PROGRAMFILES\DirectorAI\... — actual root chosen at build time. -->
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLDIR" Name="DirectorAI">
+        <Directory Id="ServerDir" Name="server" />
+        <Directory Id="PortalDir" Name="portal" />
+        <Directory Id="CcxDir" Name="ccx" />
+        <Directory Id="ContextDir" Name="context-engine" />
+        <Directory Id="ToolsDir" Name="tools" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Component groups are wired in by harvest steps in build-msi.ps1. -->
+    <Feature Id="MainFeature" Title="DirectorAI" Level="1">
+      <ComponentGroupRef Id="ServerComponents" />
+      <ComponentGroupRef Id="PortalComponents" />
+      <ComponentGroupRef Id="CcxComponents" />
+      <ComponentGroupRef Id="ContextComponents" />
+      <ComponentGroupRef Id="ToolsComponents" />
+    </Feature>
+
+    <!-- P4.25 — run the Python detector AFTER files are laid down -->
+    <CustomAction Id="DetectPython"
+                  Directory="ToolsDir"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="check"
+                  ExeCommand="powershell.exe -ExecutionPolicy Bypass -File &quot;[ToolsDir]check-python.ps1&quot;" />
+    <InstallExecuteSequence>
+      <Custom Action="DetectPython" After="InstallFiles" Condition="NOT Installed" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>
