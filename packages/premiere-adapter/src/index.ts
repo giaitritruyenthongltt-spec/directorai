@@ -5,3 +5,4 @@ export * from './remote.js';
 export * from './factory.js';
 export * from './dispatcher.js';
 export * from './retry.js';
+export * from './cache.js';

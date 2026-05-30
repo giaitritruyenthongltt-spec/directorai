@@ -1,0 +1,67 @@
+.consent-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.consent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 18px 20px;
+  max-width: 420px;
+  color: var(--text);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.consent-card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.consent-card p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+.consent-link {
+  font-style: italic;
+  font-size: 11px;
+}
+
+.consent-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.consent-btn {
+  padding: 5px 14px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+
+.consent-primary {
+  background: #4c8bf5;
+  color: white;
+  border-color: #4c8bf5;
+}
+
+.consent-secondary {
+  background: transparent;
+  color: var(--text);
+}
+
+.consent-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

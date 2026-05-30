@@ -19,6 +19,7 @@ export type NlQueryHandler = (input: { prompt: string; maxTurns?: number }) => P
 export type ContextHandler = (method: string, params: unknown) => Promise<unknown>;
 export type StyleHandler = (method: string, params: unknown) => Promise<unknown>;
 export type CheckpointHandler = (method: string, params: unknown) => Promise<unknown>;
+export type TelemetryHandler = (method: string, params: unknown) => Promise<unknown>;
 
 export interface WsServerOptions {
   host: string;
@@ -34,6 +35,8 @@ export interface WsServerOptions {
   onStyle?: StyleHandler;
   /** Optional handler for `checkpoint.*` RPC methods (snapshot store, P4.06). */
   onCheckpoint?: CheckpointHandler;
+  /** Optional handler for `telemetry.*` RPC methods (consent + GDPR, P4.13). */
+  onTelemetry?: TelemetryHandler;
 }
 
 export interface RunningWsServer {
@@ -153,6 +156,32 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
           error: {
             code: RpcErrorCode.ADAPTER_ERROR,
             message: err instanceof Error ? err.message : 'style call failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
+      return;
+    }
+
+    // Special: telemetry.* methods → consent + GDPR (P4.13)
+    if (req.method.startsWith('telemetry.')) {
+      if (!opts.onTelemetry) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: { code: RpcErrorCode.METHOD_NOT_FOUND, message: 'telemetry router unavailable' },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      try {
+        const result = await opts.onTelemetry(req.method, req.params);
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message: err instanceof Error ? err.message : 'telemetry call failed',
           },
         } satisfies JsonRpcErrorResponse);
       }

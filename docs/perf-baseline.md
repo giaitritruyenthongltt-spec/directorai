@@ -9,12 +9,12 @@ those land in Section C.
 
 | Metric                    | Value   | Budget    | Status |
 | ------------------------- | ------- | --------- | ------ |
-| `bundle.raw`              | 439.6KB | —         | ➖     |
-| `bundle.gzip`             | 98.8KB  | —         | ➖     |
-| `bundle.modules`          | 38      | —         | ➖     |
-| `module.coldLoad`         | 183.6ms | —         | ➖     |
-| `ttft.connect`            | 12.2ms  | ≤ 200.0ms | ✅     |
-| `ttft.connectToFirstTool` | 13.6ms  | ≤ 500.0ms | ✅     |
+| `bundle.raw`              | 451.2KB | —         | ➖     |
+| `bundle.gzip`             | 102.5KB | —         | ➖     |
+| `bundle.modules`          | 61      | —         | ➖     |
+| `module.coldLoad`         | 121.6ms | —         | ➖     |
+| `ttft.connect`            | 7.9ms   | ≤ 200.0ms | ✅     |
+| `ttft.connectToFirstTool` | 10.6ms  | ≤ 500.0ms | ✅     |
 
 ## How to read
 

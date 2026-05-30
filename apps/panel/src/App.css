@@ -30,6 +30,13 @@
   border-bottom-color: var(--accent);
 }
 
+.tab-loading {
+  padding: 16px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
 .main-content {
   flex: 1;
   overflow: hidden;

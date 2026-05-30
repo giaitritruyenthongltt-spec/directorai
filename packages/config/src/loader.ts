@@ -35,6 +35,17 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     premiere: {
       version: process.env.PREMIERE_VERSION,
     },
+    sentry: {
+      dsn: process.env.SENTRY_DSN,
+      tracesSampleRate: process.env.SENTRY_TRACES_SAMPLE_RATE
+        ? Number(process.env.SENTRY_TRACES_SAMPLE_RATE)
+        : undefined,
+      release: process.env.SENTRY_RELEASE,
+    },
+    telemetry: {
+      enabled: process.env.TELEMETRY_ENABLED === 'true' || undefined,
+      storePath: process.env.TELEMETRY_STORE_PATH,
+    },
     ...options.overrides,
   };
 

@@ -13,12 +13,25 @@ import { createContextRouter } from './context-router.js';
 import { createStyleRouter } from './style-router.js';
 import { createCheckpointRouter } from './checkpoint-router.js';
 import { CheckpointStore } from './checkpoint-store.js';
+import { initSentry } from './sentry.js';
+import { createTelemetryRouter } from './telemetry-router.js';
+import { ConsentStore, InMemorySink, TelemetryClient } from '@directorai/telemetry';
 
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger({ name: 'directorai-server', level: config.logLevel });
 
   logger.info({ env: config.env, server: config.server }, 'DirectorAI server starting');
+
+  const sentry = await initSentry(config.sentry, logger);
+  process.on('uncaughtException', (err) => {
+    sentry.captureException(err, { scope: 'uncaughtException' });
+    logger.fatal({ err }, 'uncaughtException');
+  });
+  process.on('unhandledRejection', (reason) => {
+    sentry.captureException(reason, { scope: 'unhandledRejection' });
+    logger.fatal({ reason }, 'unhandledRejection');
+  });
 
   // Local mock — used as fallback when no UXP panel is connected
   const mockAdapter = new MockPremiereAdapter();
@@ -37,6 +50,24 @@ async function main(): Promise<void> {
   );
 
   const checkpointStore = new CheckpointStore();
+
+  const telemetrySink = new InMemorySink();
+  const consentStore = new ConsentStore();
+  const initialConsent = await consentStore.read();
+  const telemetryClient = new TelemetryClient({
+    sink: telemetrySink,
+    isEnabled: () => initialConsent.consented === true,
+  });
+  const telemetryRouter = createTelemetryRouter({
+    logger,
+    client: telemetryClient,
+    sink: telemetrySink,
+    consent: consentStore,
+  });
+  logger.info(
+    { methods: telemetryRouter.listMethods().length, consented: initialConsent.consented },
+    'Telemetry router wired'
+  );
 
   const styleRouter = createStyleRouter({
     logger,
@@ -84,6 +115,7 @@ async function main(): Promise<void> {
     onContext: (method, params) => contextRouter.dispatch(method, params),
     onStyle: (method, params) => styleRouter.dispatch(method, params),
     onCheckpoint: (method, params) => checkpointRouter.dispatch(method, params),
+    onTelemetry: (method, params) => telemetryRouter.dispatch(method, params),
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 

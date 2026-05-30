@@ -27,6 +27,20 @@ export const PremiereConfigSchema = z.object({
   panelId: z.string().default('com.directorai.panel'),
 });
 
+export const SentryConfigSchema = z.object({
+  /** Empty string = disabled. Production builds set this via env. */
+  dsn: z.string().default(''),
+  /** 0..1, fraction of requests to send as traces. */
+  tracesSampleRate: z.number().min(0).max(1).default(0),
+  release: z.string().default(''),
+});
+
+export const TelemetryConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** Path to the local persistent consent + install-id store. */
+  storePath: z.string().default(''),
+});
+
 export const AppConfigSchema = z.object({
   env: z.enum(['development', 'production', 'test']).default('development'),
   logLevel: LogLevelSchema.default('info'),
@@ -34,6 +48,8 @@ export const AppConfigSchema = z.object({
   llm: LLMConfigSchema.default({}),
   context: ContextEngineConfigSchema.default({}),
   premiere: PremiereConfigSchema.default({}),
+  sentry: SentryConfigSchema.default({}),
+  telemetry: TelemetryConfigSchema.default({}),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
@@ -41,3 +57,5 @@ export type ServerConfig = z.infer<typeof ServerConfigSchema>;
 export type LLMConfig = z.infer<typeof LLMConfigSchema>;
 export type ContextEngineConfig = z.infer<typeof ContextEngineConfigSchema>;
 export type PremiereConfig = z.infer<typeof PremiereConfigSchema>;
+export type SentryConfig = z.infer<typeof SentryConfigSchema>;
+export type TelemetryConfig = z.infer<typeof TelemetryConfigSchema>;

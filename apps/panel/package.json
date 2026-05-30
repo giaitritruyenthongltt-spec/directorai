@@ -13,6 +13,8 @@
     "@directorai/core": "workspace:*",
     "@directorai/premiere-adapter": "workspace:*",
     "@directorai/shared": "workspace:*",
+    "@directorai/telemetry": "workspace:*",
+    "@sentry/browser": "^8.42.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

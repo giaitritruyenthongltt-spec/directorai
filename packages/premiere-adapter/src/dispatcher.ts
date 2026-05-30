@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Seconds } from '@directorai/core';
 import type { IPremiereAdapter } from './types.js';
 import { withRetry, AbortError } from './retry.js';
+import { CACHEABLE_METHODS, INVALIDATIONS, type ReadCache } from './cache.js';
 
 interface RpcHandler {
   schema: z.ZodTypeAny;
@@ -314,6 +315,12 @@ export interface DispatchOptions {
    * retry sleep returns immediately.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Optional read cache (P4.15). When provided, methods in
+   * `CACHEABLE_METHODS` go through it; mutating methods invalidate
+   * matching entries on success.
+   */
+  readonly cache?: ReadCache;
 }
 
 const inProgressUndoGroups = new WeakSet<IPremiereAdapter>();
@@ -365,11 +372,27 @@ export async function dispatchRpc(
   const autoUndo = options.autoUndoGroup ?? true;
   const useRetry = options.retry ?? true;
   const signal = options.signal;
+  const cache = options.cache;
 
   const exec = (): Promise<unknown> => handler.run(parsed, adapter);
   const undoWrapped = (): Promise<unknown> =>
     autoUndo ? runWithAutoUndo(method, adapter, exec) : exec();
-  return useRetry ? withRetry(undoWrapped, { signal }) : undoWrapped();
+  const withRetryWrap = (): Promise<unknown> =>
+    useRetry ? withRetry(undoWrapped, { signal }) : undoWrapped();
+
+  // Cache hot path — read methods only, miss falls through to withRetry.
+  if (cache && CACHEABLE_METHODS.has(method)) {
+    return cache.getOrCompute(method, params, withRetryWrap);
+  }
+
+  // Mutating methods invalidate cache entries after they succeed.
+  if (cache && INVALIDATIONS[method]) {
+    const result = await withRetryWrap();
+    cache.invalidate(INVALIDATIONS[method]);
+    return result;
+  }
+
+  return withRetryWrap();
 }
 
 export function listRpcMethods(): readonly string[] {

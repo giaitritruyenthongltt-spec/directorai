@@ -1,13 +1,26 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Suspense, lazy } from 'react';
 import { Header } from './components/Header.js';
 import { ChatLog } from './components/ChatLog.js';
 import { CommandBar } from './components/CommandBar.js';
 import { StatusBar } from './components/StatusBar.js';
-import { StylePicker } from './components/StylePicker.js';
-import { ContextTab } from './components/ContextTab.js';
 import { ProgressBar } from './components/ProgressBar.js';
+import { ConsentDialog } from './components/ConsentDialog.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import './App.css';
+
+// P4.14 — code-split the heavy tabs so the first paint is the chat panel
+// only. StylePicker pulls cut-planner + style-engine; ContextTab pulls
+// the context client wiring. Both stay off the critical path.
+const StylePicker = lazy(() =>
+  import('./components/StylePicker.js').then((m) => ({ default: m.StylePicker }))
+);
+const ContextTab = lazy(() =>
+  import('./components/ContextTab.js').then((m) => ({ default: m.ContextTab }))
+);
+
+function TabLoading(): React.ReactElement {
+  return <div className="tab-loading">Loading…</div>;
+}
 
 export type ActiveTab = 'chat' | 'style' | 'context';
 
@@ -123,12 +136,21 @@ export function App(): React.ReactElement {
       </nav>
       <main className="main-content">
         {activeTab === 'chat' && <ChatLog entries={logs} />}
-        {activeTab === 'style' && <StylePicker />}
-        {activeTab === 'context' && <ContextTab />}
+        {activeTab === 'style' && (
+          <Suspense fallback={<TabLoading />}>
+            <StylePicker />
+          </Suspense>
+        )}
+        {activeTab === 'context' && (
+          <Suspense fallback={<TabLoading />}>
+            <ContextTab />
+          </Suspense>
+        )}
       </main>
       <ProgressBar />
       <CommandBar onSubmit={handleCommand} disabled={connState !== 'connected'} />
       <StatusBar connState={connState} />
+      <ConsentDialog />
     </div>
   );
 }
