@@ -17,9 +17,14 @@ import {
   isRequest,
   isResponse,
   RpcErrorCode,
+  PROGRESS_NOTIFICATION_METHOD,
+  PROGRESS_CANCEL_METHOD,
+  isProgressEvent,
+  type ProgressEvent,
 } from '@directorai/shared';
 import { dispatchRpc } from '@directorai/premiere-adapter';
 import { getPanelAdapter, adapterKind } from './panel-adapter.js';
+import { ReconnectMachine, DEFAULT_RECONNECT_CONFIG } from './reconnect-machine.js';
 
 interface RpcHandler {
   resolve: (result: unknown) => void;
@@ -30,6 +35,7 @@ export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'err
 
 type StateListener = (state: ConnectionState) => void;
 type LogListener = (entry: LogEntry) => void;
+type ProgressListener = (evt: ProgressEvent) => void;
 
 export interface LogEntry {
   id: string;
@@ -42,18 +48,19 @@ export interface LogEntry {
 
 let _idSeq = 1;
 
-const INITIAL_BACKOFF_MS = 1_000;
-const MAX_BACKOFF_MS = 30_000;
-const HEARTBEAT_INTERVAL_MS = 25_000;
+const HEARTBEAT_INTERVAL_MS = DEFAULT_RECONNECT_CONFIG.pingIntervalMs;
+const PONG_WATCHDOG_MS = DEFAULT_RECONNECT_CONFIG.pongTimeoutMs;
 
 class WsClient {
   private ws: WebSocket | null = null;
   private pending = new Map<number, RpcHandler>();
   private stateListeners: StateListener[] = [];
   private logListeners: LogListener[] = [];
+  private progressListeners: ProgressListener[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private backoff = INITIAL_BACKOFF_MS;
+  private pongWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private machine = new ReconnectMachine();
   private _state: ConnectionState = 'disconnected';
   private url: string;
 
@@ -72,18 +79,20 @@ class WsClient {
 
   connect(): void {
     if (this._state === 'connected' || this._state === 'connecting') return;
+    this.machine.beginConnect();
     this.setState('connecting');
     try {
       this.ws = new WebSocket(this.url);
     } catch {
       this.setState('error');
+      this.machine.onClose();
       this.scheduleReconnect();
       return;
     }
 
     this.ws.onopen = () => {
+      this.machine.onOpen();
       this.setState('connected');
-      this.backoff = INITIAL_BACKOFF_MS;
       this.emit({
         id: String(_idSeq++),
         ts: Date.now(),
@@ -98,7 +107,8 @@ class WsClient {
       this.setState('disconnected');
       this.stopHeartbeat();
       this.failAllPending('WebSocket closed');
-      this.scheduleReconnect();
+      this.machine.onClose();
+      if (this.machine.shouldReconnect()) this.scheduleReconnect();
     };
 
     this.ws.onerror = () => {
@@ -106,10 +116,25 @@ class WsClient {
     };
 
     this.ws.onmessage = (ev) => {
+      this.machine.onMessage();
+      this.resetPongWatchdog();
       let msg: unknown;
       try {
         msg = JSON.parse(ev.data as string);
       } catch {
+        return;
+      }
+      // Progress notification (no id) — route to progress listeners
+      if (
+        typeof msg === 'object' &&
+        msg !== null &&
+        !('id' in msg) &&
+        (msg as { method?: string }).method === PROGRESS_NOTIFICATION_METHOD
+      ) {
+        const params = (msg as { params?: unknown }).params;
+        if (isProgressEvent(params)) {
+          this.progressListeners.forEach((l) => l(params));
+        }
         return;
       }
       if (isRequest(msg)) {
@@ -118,6 +143,11 @@ class WsClient {
         this.handleResponse(msg);
       }
     };
+  }
+
+  /** Send a cancel request for a server-tracked op. */
+  cancelOp(opId: string): Promise<{ ok: boolean }> {
+    return this.call<{ ok: boolean }>(PROGRESS_CANCEL_METHOD, { opId });
   }
 
   private async handleInbound(req: JsonRpcRequest): Promise<void> {
@@ -214,14 +244,46 @@ class WsClient {
         // No-op JSON-RPC notification; some WS implementations strip
         // protocol pings, so we send a tiny message.
         this.sendRaw({ jsonrpc: '2.0', method: '_panel.ping' });
+        this.armPongWatchdog();
       }
     }, HEARTBEAT_INTERVAL_MS);
+    this.resetPongWatchdog();
   }
 
   private stopHeartbeat(): void {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
+    }
+    this.clearPongWatchdog();
+  }
+
+  private armPongWatchdog(): void {
+    this.clearPongWatchdog();
+    this.pongWatchdogTimer = setTimeout(() => {
+      // No inbound traffic since we sent a ping — assume the link is dead.
+      this.emit({
+        id: String(_idSeq++),
+        ts: Date.now(),
+        type: 'info',
+        result: 'Heartbeat unanswered — forcing reconnect',
+      });
+      try {
+        this.ws?.close();
+      } catch {
+        // ignore — onclose will run the reconnect path
+      }
+    }, PONG_WATCHDOG_MS);
+  }
+
+  private resetPongWatchdog(): void {
+    this.clearPongWatchdog();
+  }
+
+  private clearPongWatchdog(): void {
+    if (this.pongWatchdogTimer) {
+      clearTimeout(this.pongWatchdogTimer);
+      this.pongWatchdogTimer = null;
     }
   }
 
@@ -232,8 +294,7 @@ class WsClient {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
-    const delay = this.backoff;
-    this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS);
+    const delay = this.machine.nextDelay();
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.connect();
@@ -274,6 +335,13 @@ class WsClient {
     this.logListeners.push(l);
     return () => {
       this.logListeners = this.logListeners.filter((x) => x !== l);
+    };
+  }
+
+  onProgress(l: ProgressListener): () => void {
+    this.progressListeners.push(l);
+    return () => {
+      this.progressListeners = this.progressListeners.filter((x) => x !== l);
     };
   }
 }

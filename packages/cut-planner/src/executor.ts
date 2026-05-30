@@ -14,12 +14,12 @@
  * dispatcher but never on a specific adapter implementation.
  */
 
-import { dispatchRpc, type IPremiereAdapter } from '@directorai/premiere-adapter';
+import { dispatchRpc, isAbortError, type IPremiereAdapter } from '@directorai/premiere-adapter';
 import type { Plan, PlanStep } from './types.js';
 
 export interface ExecutionStepResult {
   readonly step: PlanStep;
-  readonly status: 'ok' | 'error' | 'skipped' | 'dry-run';
+  readonly status: 'ok' | 'error' | 'skipped' | 'dry-run' | 'cancelled';
   readonly result?: unknown;
   readonly error?: string;
   readonly durationMs: number;
@@ -31,6 +31,7 @@ export interface ExecutionResult {
   readonly totalMs: number;
   readonly ok: number;
   readonly errors: number;
+  readonly cancelled: boolean;
   readonly dryRun: boolean;
 }
 
@@ -43,6 +44,12 @@ export interface ExecuteOptions {
   readonly onStep?: (result: ExecutionStepResult, index: number, total: number) => void;
   /** Label for the wrapping undo group. Default: `"DirectorAI: ${plan.style}"`. */
   readonly undoLabel?: string;
+  /**
+   * Cancellation signal (P4.03). When aborted, the current step is
+   * marked `cancelled`, remaining steps `skipped`, the undo group is
+   * closed (committed) so the user can single-Ctrl-Z to revert.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -69,20 +76,47 @@ export async function executePlan(
   const dryRun = options.dryRun ?? false;
   const stopOnError = options.stopOnError ?? false;
   const label = options.undoLabel ?? `DirectorAI: ${plan.style}`;
+  const signal = options.signal;
   const t0 = Date.now();
 
   const results: ExecutionStepResult[] = [];
   let ok = 0;
   let errors = 0;
+  let cancelled = false;
 
   if (!dryRun) {
     await adapter.beginUndoGroup(label);
   }
 
+  const markRemainingSkipped = (fromIndex: number): void => {
+    for (let j = fromIndex; j < plan.steps.length; j++) {
+      const skipped: ExecutionStepResult = {
+        step: plan.steps[j]!,
+        status: 'skipped',
+        durationMs: 0,
+      };
+      results.push(skipped);
+      options.onStep?.(skipped, j, plan.steps.length);
+    }
+  };
+
   try {
     for (let i = 0; i < plan.steps.length; i++) {
       const step = plan.steps[i]!;
       const stepStart = Date.now();
+
+      if (signal?.aborted) {
+        cancelled = true;
+        const sr: ExecutionStepResult = {
+          step,
+          status: 'cancelled',
+          durationMs: 0,
+        };
+        results.push(sr);
+        options.onStep?.(sr, i, plan.steps.length);
+        markRemainingSkipped(i + 1);
+        break;
+      }
 
       if (dryRun) {
         const sr: ExecutionStepResult = {
@@ -101,6 +135,7 @@ export async function executePlan(
           // The executor opens its own undo group above, so disable the
           // dispatcher's per-call bracketing to avoid nested groups.
           autoUndoGroup: false,
+          signal,
         });
         const sr: ExecutionStepResult = {
           step,
@@ -112,6 +147,18 @@ export async function executePlan(
         ok++;
         options.onStep?.(sr, i, plan.steps.length);
       } catch (err) {
+        if (isAbortError(err)) {
+          cancelled = true;
+          const sr: ExecutionStepResult = {
+            step,
+            status: 'cancelled',
+            durationMs: Date.now() - stepStart,
+          };
+          results.push(sr);
+          options.onStep?.(sr, i, plan.steps.length);
+          markRemainingSkipped(i + 1);
+          break;
+        }
         const message = err instanceof Error ? err.message : String(err);
         const sr: ExecutionStepResult = {
           step,
@@ -123,16 +170,7 @@ export async function executePlan(
         errors++;
         options.onStep?.(sr, i, plan.steps.length);
         if (stopOnError) {
-          // Mark remaining as skipped
-          for (let j = i + 1; j < plan.steps.length; j++) {
-            const skipped: ExecutionStepResult = {
-              step: plan.steps[j]!,
-              status: 'skipped',
-              durationMs: 0,
-            };
-            results.push(skipped);
-            options.onStep?.(skipped, j, plan.steps.length);
-          }
+          markRemainingSkipped(i + 1);
           break;
         }
       }
@@ -153,24 +191,34 @@ export async function executePlan(
     totalMs: Date.now() - t0,
     ok,
     errors,
+    cancelled,
     dryRun,
   };
 }
 
 /** Build a human-readable execution report. */
 export function formatExecutionReport(result: ExecutionResult): string {
+  const flag = result.cancelled ? ' (cancelled)' : result.dryRun ? ' (dry-run)' : '';
   const head =
     `Plan "${result.plan.style}" — ${result.steps.length} steps` +
     `, ${result.ok} ok, ${result.errors} errors` +
-    `, ${result.totalMs}ms${result.dryRun ? ' (dry-run)' : ''}\n`;
+    `, ${result.totalMs}ms${flag}\n`;
   const body = result.steps
     .map((s, i) => {
       const tag =
-        s.status === 'ok' ? '✓' : s.status === 'error' ? '✗' : s.status === 'skipped' ? '—' : '·';
+        s.status === 'ok'
+          ? '✓'
+          : s.status === 'error'
+            ? '✗'
+            : s.status === 'skipped'
+              ? '—'
+              : s.status === 'cancelled'
+                ? '⊘'
+                : '·';
       const tail =
         s.status === 'error'
           ? `: ${s.error}`
-          : s.status === 'dry-run'
+          : s.status === 'dry-run' || s.status === 'skipped' || s.status === 'cancelled'
             ? ''
             : ` (${s.durationMs}ms)`;
       return `${tag} [${i + 1}/${result.steps.length}] ${s.step.tool} — ${s.step.reason}${tail}`;

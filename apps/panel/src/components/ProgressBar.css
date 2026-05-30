@@ -1,0 +1,80 @@
+.progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.progress-meta {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  min-width: 0;
+  flex: 0 0 auto;
+  color: var(--text-dim);
+}
+
+.progress-method {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.progress-label {
+  opacity: 0.8;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-pct {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+  flex: 1 1 auto;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4c8bf5, #5d9cf5);
+  transition: width 120ms ease-out;
+}
+
+.progress-fill.indeterminate {
+  width: 35%;
+  animation: progress-march 1.4s linear infinite;
+}
+
+@keyframes progress-march {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(286%); }
+}
+
+.progress-cancel {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  font-size: 11px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.progress-cancel:hover:not(:disabled) {
+  background: var(--border);
+}
+
+.progress-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

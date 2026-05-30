@@ -7,13 +7,18 @@ import {
   type JsonRpcRequest,
   type JsonRpcSuccess,
   type JsonRpcErrorResponse,
+  PROGRESS_NOTIFICATION_METHOD,
+  PROGRESS_CANCEL_METHOD,
+  type ProgressCancelParams,
 } from '@directorai/shared';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import { dispatchRpc } from './rpc-dispatcher.js';
+import { ProgressBus } from './progress-bus.js';
 
 export type NlQueryHandler = (input: { prompt: string; maxTurns?: number }) => Promise<unknown>;
 export type ContextHandler = (method: string, params: unknown) => Promise<unknown>;
 export type StyleHandler = (method: string, params: unknown) => Promise<unknown>;
+export type CheckpointHandler = (method: string, params: unknown) => Promise<unknown>;
 
 export interface WsServerOptions {
   host: string;
@@ -27,6 +32,8 @@ export interface WsServerOptions {
   onContext?: ContextHandler;
   /** Optional handler for `style.*` RPC methods (plan + execute). */
   onStyle?: StyleHandler;
+  /** Optional handler for `checkpoint.*` RPC methods (snapshot store, P4.06). */
+  onCheckpoint?: CheckpointHandler;
 }
 
 export interface RunningWsServer {
@@ -34,6 +41,8 @@ export interface RunningWsServer {
   isPanelConnected(): boolean;
   /** Send a JSON-RPC request to the connected panel and await its response. */
   panelCall<T = unknown>(method: string, params?: unknown, timeoutMs?: number): Promise<T>;
+  /** Server-wide progress bus (P4.02). Read-only access for tests + observability. */
+  readonly progress: ProgressBus;
 }
 
 interface PendingResponse {
@@ -52,6 +61,25 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
   const pending = new Map<number, PendingResponse>();
   let outboundIdSeq = 1_000_000; // separate from inbound id space
 
+  // P4.02 — progress bus + per-op originating-socket map. We need the
+  // map so an event tied to an opId is forwarded only to the socket that
+  // initiated the work, not broadcast.
+  const progress = new ProgressBus();
+  const opOrigin = new Map<string, WebSocket>();
+  progress.onEvent((evt) => {
+    const origin = opOrigin.get(evt.opId);
+    if (!origin) return;
+    if (origin.readyState !== origin.OPEN) return;
+    origin.send(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        method: PROGRESS_NOTIFICATION_METHOD,
+        params: evt,
+      })
+    );
+    if (evt.kind === 'end') opOrigin.delete(evt.opId);
+  });
+
   const send = (ws: WebSocket, msg: unknown): void => {
     if (ws.readyState === ws.OPEN) {
       ws.send(JSON.stringify(msg));
@@ -64,6 +92,14 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       activePanel = ws;
       opts.logger.info({ id: req.id }, 'UXP panel registered');
       send(ws, { jsonrpc: '2.0', id: req.id, result: { ok: true } } satisfies JsonRpcSuccess);
+      return;
+    }
+
+    // Special: progress.cancel — flip the abort signal for the op
+    if (req.method === PROGRESS_CANCEL_METHOD) {
+      const { opId } = (req.params ?? {}) as ProgressCancelParams;
+      const ok = opId ? progress.cancel(opId) : false;
+      send(ws, { jsonrpc: '2.0', id: req.id, result: { ok } } satisfies JsonRpcSuccess);
       return;
     }
 
@@ -123,6 +159,33 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       return;
     }
 
+    // Special: checkpoint.* methods → on-disk snapshot store (P4.06)
+    if (req.method.startsWith('checkpoint.')) {
+      if (!opts.onCheckpoint) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: { code: RpcErrorCode.METHOD_NOT_FOUND, message: 'checkpoint router unavailable' },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      try {
+        const result = await opts.onCheckpoint(req.method, req.params);
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        opts.logger.warn({ method: req.method, err }, 'checkpoint RPC error');
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message: err instanceof Error ? err.message : 'checkpoint call failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
+      return;
+    }
+
     // Special: context.* methods → Python context-engine
     if (req.method.startsWith('context.')) {
       if (!opts.onContext) {
@@ -172,17 +235,32 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       return;
     }
 
-    // No panel: dispatch locally on the mock fallback
+    // No panel: dispatch locally on the mock fallback, with progress tracking.
+    const { opId, signal } = progress.start(req.method);
+    opOrigin.set(opId, ws);
     try {
-      const result = await dispatchRpc(req.method, req.params, opts.fallbackAdapter);
+      const result = await dispatchRpc(req.method, req.params, opts.fallbackAdapter, {
+        signal,
+      });
+      progress.end(opId, 'completed');
       send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
     } catch (err) {
+      const cancelled =
+        signal.aborted ||
+        (typeof err === 'object' &&
+          err !== null &&
+          (err as { name?: string }).name === 'AbortError');
+      progress.end(
+        opId,
+        cancelled ? 'cancelled' : 'error',
+        err instanceof Error ? err.message : String(err)
+      );
       opts.logger.warn({ method: req.method, err }, 'Local RPC error');
       send(ws, {
         jsonrpc: '2.0',
         id: req.id,
         error: {
-          code: RpcErrorCode.INTERNAL_ERROR,
+          code: cancelled ? RpcErrorCode.CANCELLED : RpcErrorCode.INTERNAL_ERROR,
           message: err instanceof Error ? err.message : 'Internal error',
         },
       } satisfies JsonRpcErrorResponse);
@@ -269,6 +347,7 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       }),
     isPanelConnected: () => activePanel !== null && activePanel.readyState === activePanel.OPEN,
     panelCall: callPanel,
+    progress,
   };
 }
 

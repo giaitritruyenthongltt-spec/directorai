@@ -25,6 +25,7 @@ import {
   type MediaContext,
 } from '@directorai/cut-planner';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
+import type { CheckpointStore } from './checkpoint-store.js';
 
 const ContextSchema = z.object({
   mediaPath: z.string(),
@@ -87,6 +88,12 @@ export interface CreateStyleRouterOptions {
   logger?: Logger;
   /** Resolves the adapter to execute against (routed/mock). */
   adapter: () => IPremiereAdapter;
+  /**
+   * Optional checkpoint store (P4.06+P4.07). When provided, style.apply
+   * snapshots the current sequence right before executing the plan so
+   * the panel can recover state after a crash.
+   */
+  checkpoints?: CheckpointStore;
 }
 
 export function createStyleRouter(opts: CreateStyleRouterOptions) {
@@ -132,11 +139,23 @@ export function createStyleRouter(opts: CreateStyleRouterOptions) {
         const input = p as z.infer<typeof ApplyInputSchema>;
         const style = resolveStyle(input.style);
         const plan = planCuts({ style, context: toMediaContext(input.context) });
-        const result = await executePlan(plan, opts.adapter(), {
+        const adapter = opts.adapter();
+
+        let checkpointId: string | undefined;
+        if (opts.checkpoints && !input.dryRun) {
+          try {
+            const meta = await opts.checkpoints.snapshot(adapter, `style-${style.name}`);
+            checkpointId = meta.id;
+          } catch (err) {
+            opts.logger?.warn({ err }, 'checkpoint snapshot failed — continuing');
+          }
+        }
+
+        const result = await executePlan(plan, adapter, {
           dryRun: input.dryRun,
           stopOnError: input.stopOnError,
         });
-        return { ...result, report: formatExecutionReport(result) };
+        return { ...result, report: formatExecutionReport(result), checkpointId };
       },
     },
   };

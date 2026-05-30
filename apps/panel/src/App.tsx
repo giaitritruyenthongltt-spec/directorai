@@ -5,10 +5,22 @@ import { CommandBar } from './components/CommandBar.js';
 import { StatusBar } from './components/StatusBar.js';
 import { StylePicker } from './components/StylePicker.js';
 import { ContextTab } from './components/ContextTab.js';
+import { ProgressBar } from './components/ProgressBar.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import './App.css';
 
 export type ActiveTab = 'chat' | 'style' | 'context';
+
+/** Restore a checkpoint into the chat log if it was created recently (< 5 min). */
+const RECENT_CHECKPOINT_MS = 5 * 60_000;
+
+interface CheckpointPayload {
+  id: string;
+  label: string;
+  createdAt: number;
+  project?: { metadata?: { name?: string } };
+  activeSequence?: { id: string; name?: string } | null;
+}
 
 export function App(): React.ReactElement {
   const [connState, setConnState] = useState<ConnectionState>('disconnected');
@@ -16,7 +28,35 @@ export function App(): React.ReactElement {
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
 
   useEffect(() => {
-    const unsubState = wsClient.onStateChange(setConnState);
+    const unsubState = wsClient.onStateChange((s) => {
+      setConnState(s);
+      if (s === 'connected') {
+        // P4.07 — ask the server for the most recent checkpoint and, if it
+        // looks like a session that was cut short (< 5 min ago), surface a
+        // recovery hint instead of starting blank.
+        void wsClient
+          .call<CheckpointPayload | null>('checkpoint.latest')
+          .then((ckpt) => {
+            if (!ckpt) return;
+            const age = Date.now() - ckpt.createdAt;
+            if (age > RECENT_CHECKPOINT_MS) return;
+            const seqName = ckpt.activeSequence?.name ?? '(no active sequence)';
+            const projName = ckpt.project?.metadata?.name ?? 'project';
+            setLogs((prev) => [
+              {
+                id: `recovery_${ckpt.id}`,
+                ts: Date.now(),
+                type: 'info',
+                result: `Recovered from checkpoint "${ckpt.label}" — ${projName} / ${seqName} (${Math.round(age / 1000)}s ago)`,
+              },
+              ...prev,
+            ]);
+          })
+          .catch(() => {
+            // No checkpoint router or no snapshots — silent.
+          });
+      }
+    });
     const unsubLog = wsClient.onLog((entry) => {
       setLogs((prev) => [entry, ...prev].slice(0, 500)); // keep last 500 entries
     });
@@ -86,6 +126,7 @@ export function App(): React.ReactElement {
         {activeTab === 'style' && <StylePicker />}
         {activeTab === 'context' && <ContextTab />}
       </main>
+      <ProgressBar />
       <CommandBar onSubmit={handleCommand} disabled={connState !== 'connected'} />
       <StatusBar connState={connState} />
     </div>

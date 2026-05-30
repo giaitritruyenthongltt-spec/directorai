@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Seconds } from '@directorai/core';
 import type { IPremiereAdapter } from './types.js';
-import { withRetry } from './retry.js';
+import { withRetry, AbortError } from './retry.js';
 
 interface RpcHandler {
   schema: z.ZodTypeAny;
@@ -306,6 +306,14 @@ export interface DispatchOptions {
   readonly autoUndoGroup?: boolean;
   /** Retry transient adapter errors with exponential backoff (default: true). */
   readonly retry?: boolean;
+  /**
+   * Optional cancellation signal (P4.03). When aborted before the call
+   * starts, the dispatcher throws `AbortError` and never touches the
+   * adapter. Aborts mid-flight are surfaced by the work itself if it
+   * honours the signal — for our adapters, the practical effect is the
+   * retry sleep returns immediately.
+   */
+  readonly signal?: AbortSignal;
 }
 
 const inProgressUndoGroups = new WeakSet<IPremiereAdapter>();
@@ -349,14 +357,19 @@ export async function dispatchRpc(
   if (!handler) {
     throw new Error(`Unknown RPC method: ${method}`);
   }
+  // Early-out if the caller already cancelled — don't even validate.
+  if (options.signal?.aborted) {
+    throw new AbortError(options.signal.reason);
+  }
   const parsed = handler.schema.parse(params ?? {});
   const autoUndo = options.autoUndoGroup ?? true;
   const useRetry = options.retry ?? true;
+  const signal = options.signal;
 
   const exec = (): Promise<unknown> => handler.run(parsed, adapter);
   const undoWrapped = (): Promise<unknown> =>
     autoUndo ? runWithAutoUndo(method, adapter, exec) : exec();
-  return useRetry ? withRetry(undoWrapped) : undoWrapped();
+  return useRetry ? withRetry(undoWrapped, { signal }) : undoWrapped();
 }
 
 export function listRpcMethods(): readonly string[] {

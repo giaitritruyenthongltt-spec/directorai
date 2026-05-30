@@ -8,6 +8,7 @@ export default defineConfig({
       '**/src/**/*.{test,spec}.{ts,tsx}',
       '**/__tests__/**/*.{test,spec}.{ts,tsx}',
       'tests/integration/**/*.{test,spec}.{ts,tsx}',
+      'tests/chaos/**/*.{test,spec}.{ts,tsx}',
     ],
     exclude: ['node_modules', 'dist', '.turbo', '**/build/**'],
     coverage: {
