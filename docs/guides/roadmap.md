@@ -7,7 +7,7 @@
 | **P2 — Context Engine** | 20     | 🟢 LIVE-READY  | 6 wk     | `v0.3.1-context-live` \*\*                                                                                         |
 | **P3 — Style Engine**   | 25     | 🟢 LIVE-READY  | 8 wk     | `v0.4.1-style-live` \*\*\*                                                                                         |
 | **P4 — Polish & Beta**  | 42     | ✅ Done        | 8 wk     | `v0.5.0-reliable` + `v0.6.0-observable` + `v0.7.0-installable` + `v0.8.0-onboarded` + `v0.9.0-beta` + **`v1.0.0`** |
-| **P5 — Scale & Expand** | 35     | 🟠 In progress | ongoing  | `v1.1.0-sdk` + `v1.x.0-*` + **`v2.0.0`** GA                                                                        |
+| **P5 — Scale & Expand** | 35     | 🟠 In progress | ongoing  | `v1.1.0-sdk` + `v1.3.0-davinci` + `v1.4.0-multi-llm` + `v1.9.0-analytics` + **`v2.0.0`** GA                        |
 
 \* P1 retag covers the move from mock-only to server↔panel proxy + real UXP adapter.
 Text overlay (P1.17) and transitions (P1.18) are intentionally deferred — see

@@ -95,8 +95,25 @@ export interface TransitionInput {
   durationSec: Seconds;
 }
 
-export interface IPremiereAdapter {
-  readonly kind: 'mock' | 'uxp';
+/**
+ * The unified NLE adapter interface. Implemented by:
+ *   - `MockPremiereAdapter` (kind 'mock')
+ *   - `UXPPremiereAdapter`  (kind 'uxp')
+ *   - `RemotePremiereAdapter` (kind 'mock' or 'uxp' transparently)
+ *   - `MockDaVinciAdapter`  (kind 'davinci', P5.03b)
+ *   - `DaVinciAdapter`      (kind 'davinci', P5.03c+)
+ *
+ * The interface is host-agnostic — every method maps cleanly to both
+ * Premiere's UXP API and DaVinci's Python scripting API. Host-specific
+ * concerns (e.g. UXP lockedAccess, DaVinci Python IPC) live inside
+ * the implementations.
+ *
+ * The `kind` discriminator lets callers branch on host when the
+ * surface really differs (e.g. transition naming conventions); 99%
+ * of code stays host-agnostic.
+ */
+export interface INLEAdapter {
+  readonly kind: 'mock' | 'uxp' | 'davinci';
 
   getProject(): Promise<Project>;
   listSequences(): Promise<readonly Sequence[]>;
@@ -140,3 +157,17 @@ export interface IPremiereAdapter {
   beginUndoGroup(label: string): Promise<void>;
   endUndoGroup(): Promise<void>;
 }
+
+/**
+ * @deprecated since 1.3.0 — use `INLEAdapter` instead.
+ *
+ * Kept as an alias so the existing v1.x callers (panel, server, cut
+ * planner, dispatcher, plugins) keep compiling without a sweep. Will
+ * be removed in v2.0.0 (2-minor-version deprecation, per
+ * `docs/guides/sdk-versioning.md`).
+ *
+ * The alias is intentionally a `type` not a re-export so its
+ * `.kind` field is still the broader `'mock' | 'uxp' | 'davinci'`
+ * union — callers can keep narrowing as before.
+ */
+export type IPremiereAdapter = INLEAdapter;
