@@ -73,9 +73,12 @@ module.exports = (env, argv) => ({
     ...(argv.mode === 'production' ? [maybeSentryPlugin()].filter(Boolean) : []),
   ],
   externals: {
-    // UXP runtime injects these — do NOT bundle
-    premierepro: 'premierepro',
-    uxp: 'uxp',
+    // UXP runtime injects these via require() — do NOT bundle.
+    // externalsType must be 'commonjs2' so webpack emits a real runtime
+    // require('premierepro') call instead of a global-var lookup (which is
+    // the default for target:'web' and silently returns undefined in UXP).
+    premierepro: 'commonjs2 premierepro',
+    uxp: 'commonjs2 uxp',
   },
   // P4.11 — production builds emit a sibling .map file Sentry can pick up.
   // Dev mode keeps inline source maps for fast UXP DevTool inspection.

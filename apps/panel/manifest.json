@@ -40,12 +40,17 @@
   "requiredPermissions": {
     "allowCodeGenerationFromStrings": false,
     "network": {
-      "domains": ["ws://127.0.0.1", "http://127.0.0.1"]
+      "domains": [
+        "ws://127.0.0.1:7778",
+        "http://127.0.0.1:7777",
+        "ws://localhost:7778",
+        "http://localhost:7777"
+      ]
     },
     "localFileSystem": "request",
     "webScripting": {
       "enabled": true,
-      "allow": ["127.0.0.1"]
+      "allow": ["127.0.0.1", "localhost"]
     }
   }
 }
