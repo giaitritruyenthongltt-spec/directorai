@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 from directorai_context import __version__
 from directorai_context.config import get_settings
+from directorai_context.jobs import JobNotFound, get_queue
 from directorai_context.logger import log
 from directorai_context.modules.hardware import probe as probe_hardware
 from directorai_context.storage import init_db
@@ -56,6 +57,59 @@ def create_app() -> FastAPI:
     async def storage_stats() -> dict[str, int]:
         """Sprint A.3 — row counts for clips / analyses / plans / styles."""
         return store.stats()
+
+    @app.get("/jobs")
+    async def jobs_list() -> list[dict[str, object]]:
+        """Sprint A.4 — list all known jobs."""
+        return [j.to_dict() for j in get_queue().list()]
+
+    @app.get("/jobs/{job_id}")
+    async def job_get(job_id: str) -> dict[str, object]:
+        try:
+            return get_queue().get(job_id).to_dict()
+        except JobNotFound as e:
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}") from e
+
+    @app.post("/jobs/{job_id}/cancel")
+    async def job_cancel(job_id: str) -> dict[str, object]:
+        try:
+            ok = get_queue().cancel(job_id)
+            return {"job_id": job_id, "cancelled": ok}
+        except JobNotFound as e:
+            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}") from e
+
+    @app.post("/jobs/demo")
+    async def job_demo(seconds: int = 5) -> dict[str, str]:
+        """Submit a sleep job for end-to-end smoke testing."""
+        import time as _t
+
+        def _sleep(ctx, total: int) -> dict[str, int]:  # type: ignore[no-untyped-def]
+            for i in range(total * 10):
+                if ctx.cancelled:
+                    return {"cancelled_at_decis": i}
+                ctx.set_progress(
+                    (i + 1) / (total * 10),
+                    message=f"tick {i + 1}/{total * 10}",
+                )
+                _t.sleep(0.1)
+            return {"slept_for_seconds": total}
+
+        job_id = get_queue().submit(_sleep, args=(seconds,), label="demo-sleep")
+        return {"job_id": job_id}
+
+    @app.websocket("/jobs/{job_id}/events")
+    async def job_events(ws: WebSocket, job_id: str) -> None:
+        """Sprint A.4 — stream job progress over WS until terminal."""
+        await ws.accept()
+        try:
+            async for evt in get_queue().events(job_id):
+                await ws.send_text(json.dumps(evt))
+        except JobNotFound:
+            await ws.send_text(
+                json.dumps({"error": {"code": 404, "message": f"job not found: {job_id}"}})
+            )
+        except WebSocketDisconnect:
+            pass
 
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket) -> None:
