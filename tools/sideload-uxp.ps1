@@ -12,7 +12,9 @@
 $ErrorActionPreference = 'Stop'
 
 $ROOT = Resolve-Path (Join-Path $PSScriptRoot '..')
-$CCX  = Join-Path $ROOT 'dist\installer\DirectorAI-0.2.0.ccx'
+$MANIFEST_TEMP = Join-Path $ROOT 'apps\panel\manifest.json'
+$VERSION = (Get-Content $MANIFEST_TEMP -Raw | ConvertFrom-Json).version
+$CCX  = Join-Path $ROOT "dist\installer\DirectorAI-$VERSION.ccx"
 $MANIFEST = Join-Path $ROOT 'apps\panel\manifest.json'
 
 if (-not (Test-Path $CCX)) {
