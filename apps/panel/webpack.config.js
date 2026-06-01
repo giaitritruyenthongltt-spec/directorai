@@ -30,6 +30,11 @@ module.exports = (env, argv) => ({
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'bundle.js',
+    // Without this, code-split chunks are emitted as "bundle.js[id].bundle.js"
+    // (note the "bundle.js" prefix) because webpack derives chunkFilename from
+    // filename by default. UXP then 404s on the malformed URL and the entire
+    // React tree crashes with ChunkLoadError → WS never initialises.
+    chunkFilename: '[id].chunk.js',
     clean: true,
   },
   resolve: {
