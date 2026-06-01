@@ -1,0 +1,222 @@
+.director-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 16px;
+  color: var(--ui-text, #d4d4d4);
+  font-size: 13px;
+}
+
+.director-header h2 {
+  font-size: 17px;
+  margin: 0 0 4px;
+  color: var(--ui-text, #d4d4d4);
+}
+
+.director-sub {
+  margin: 0;
+  color: var(--ui-text-secondary, #969696);
+  font-size: 12px;
+}
+
+.director-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.director-section label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 11px;
+  color: var(--ui-text-secondary, #969696);
+}
+
+.director-section select,
+.director-section textarea {
+  background: var(--ui-bg-secondary, #2d2d2d);
+  border: 1px solid var(--ui-border, #3e3e3e);
+  border-radius: 4px;
+  color: var(--ui-text, #d4d4d4);
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.director-section select:disabled,
+.director-section textarea:disabled {
+  opacity: 0.5;
+}
+
+.director-custom-goal {
+  resize: vertical;
+  min-height: 40px;
+}
+
+.director-tip {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-text-secondary, #969696);
+  font-style: italic;
+}
+
+.director-primary {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+  transition: opacity 120ms ease;
+}
+
+.director-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.director-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.director-secondary {
+  background: transparent;
+  border: 1px solid var(--ui-border, #3e3e3e);
+  color: var(--ui-text, #d4d4d4);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.director-secondary:hover {
+  background: var(--ui-bg-hover, #383838);
+}
+
+.director-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.director-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--ui-border, #3e3e3e);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--ui-bg-secondary, #2d2d2d);
+}
+
+.director-plan h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.director-plan-meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ui-text-secondary, #969696);
+}
+
+.director-plan-note {
+  margin: 4px 0;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.director-steps {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.director-step {
+  display: grid;
+  grid-template-columns: 24px auto 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.director-step:hover {
+  background: var(--ui-bg-hover, #383838);
+}
+
+.director-step.checkpoint {
+  background: rgba(99, 102, 241, 0.08);
+  border-left: 2px solid #6366f1;
+}
+
+.director-step-id {
+  color: var(--ui-text-secondary, #969696);
+  font-variant-numeric: tabular-nums;
+}
+
+.director-step-tool {
+  color: #93c5fd;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+}
+
+.director-step-why {
+  color: var(--ui-text, #d4d4d4);
+}
+
+.director-step-cp {
+  color: #c4b5fd;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.director-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--ui-border, #3e3e3e);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.director-progress-bar {
+  height: 6px;
+  background: var(--ui-bg-tertiary, #1e1e1e);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.director-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  transition: width 250ms ease;
+}
+
+.director-progress-fill.status-done {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.director-progress-fill.status-error {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+.director-progress-fill.status-cancelled {
+  background: var(--ui-border, #6b7280);
+}
+
+.director-progress-meta {
+  font-size: 11px;
+  color: var(--ui-text-secondary, #969696);
+}

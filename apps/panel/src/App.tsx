@@ -19,12 +19,15 @@ const StylePicker = lazy(() =>
 const ContextTab = lazy(() =>
   import('./components/ContextTab.js').then((m) => ({ default: m.ContextTab }))
 );
+const DirectorTab = lazy(() =>
+  import('./components/DirectorTab.js').then((m) => ({ default: m.DirectorTab }))
+);
 
 function TabLoading(): React.ReactElement {
   return <div className="tab-loading">Loading…</div>;
 }
 
-export type ActiveTab = 'chat' | 'style' | 'context';
+export type ActiveTab = 'director' | 'chat' | 'style' | 'context';
 
 /** Restore a checkpoint into the chat log if it was created recently (< 5 min). */
 const RECENT_CHECKPOINT_MS = 5 * 60_000;
@@ -40,7 +43,7 @@ interface CheckpointPayload {
 export function App(): React.ReactElement {
   const [connState, setConnState] = useState<ConnectionState>('disconnected');
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('director');
 
   useEffect(() => {
     const unsubState = wsClient.onStateChange((s) => {
@@ -126,7 +129,7 @@ export function App(): React.ReactElement {
     <div className="app">
       <Header connState={connState} onReconnect={() => wsClient.connect()} />
       <nav className="tabs">
-        {(['chat', 'style', 'context'] as ActiveTab[]).map((tab) => (
+        {(['director', 'chat', 'style', 'context'] as ActiveTab[]).map((tab) => (
           <button
             key={tab}
             className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
@@ -137,6 +140,11 @@ export function App(): React.ReactElement {
         ))}
       </nav>
       <main className="main-content">
+        {activeTab === 'director' && (
+          <Suspense fallback={<TabLoading />}>
+            <DirectorTab />
+          </Suspense>
+        )}
         {activeTab === 'chat' && <ChatLog entries={logs} />}
         {activeTab === 'style' && (
           <Suspense fallback={<TabLoading />}>
