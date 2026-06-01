@@ -18,6 +18,6 @@ export function getPanelAdapter(): IPremiereAdapter {
   return cached;
 }
 
-export function adapterKind(): 'mock' | 'uxp' {
+export function adapterKind(): 'mock' | 'uxp' | 'davinci' {
   return getPanelAdapter().kind;
 }

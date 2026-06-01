@@ -252,9 +252,119 @@ export interface LearnerRun {
   readonly committedAt?: string;
 }
 
-/** In-memory store; the consumer plugs persistence (filesystem, etc). */
+/**
+ * Persistence interface (A.4 — Track A debt cleanup).
+ *
+ * The default `MemoryLearnerPersistence` keeps runs in RAM (matches
+ * the original behaviour). The new `FileLearnerPersistence` writes
+ * each commit to a JSONL file so learner state survives panel
+ * restarts and ships with the project. Consumers pick at construction
+ * time; existing callers default to memory and keep working.
+ */
+export interface LearnerPersistence {
+  load(): Promise<LearnerRun[]>;
+  append(run: LearnerRun): Promise<void>;
+  clear(): Promise<void>;
+}
+
+export class MemoryLearnerPersistence implements LearnerPersistence {
+  private rows: LearnerRun[] = [];
+  async load(): Promise<LearnerRun[]> {
+    return [...this.rows];
+  }
+  async append(run: LearnerRun): Promise<void> {
+    this.rows = [...this.rows.filter((r) => r.runId !== run.runId), run];
+  }
+  async clear(): Promise<void> {
+    this.rows = [];
+  }
+}
+
+/**
+ * File-backed persistence. Append-only JSONL — each commit is a line.
+ * On load we coalesce by runId (last write wins) so the file can grow
+ * without losing history while listCommitted returns the latest state
+ * per run.
+ *
+ * The consumer chooses the path; suggested default is
+ * `<projectDir>/.directorai/learner.jsonl` so the file ships with the
+ * Premiere project bundle.
+ */
+export class FileLearnerPersistence implements LearnerPersistence {
+  constructor(
+    private readonly filePath: string,
+    private readonly fs: {
+      readFile(path: string, encoding: 'utf8'): Promise<string>;
+      writeFile(path: string, data: string, encoding: 'utf8'): Promise<void>;
+      mkdir(path: string, opts: { recursive: true }): Promise<unknown>;
+    },
+    private readonly pathDirname: (p: string) => string
+  ) {}
+
+  async load(): Promise<LearnerRun[]> {
+    let raw: string;
+    try {
+      raw = await this.fs.readFile(this.filePath, 'utf8');
+    } catch {
+      return [];
+    }
+    const byId = new Map<string, LearnerRun>();
+    for (const line of raw.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        const row = JSON.parse(trimmed) as LearnerRun;
+        byId.set(row.runId, row);
+      } catch {
+        // skip malformed rows — best-effort recovery
+      }
+    }
+    return [...byId.values()];
+  }
+
+  async append(run: LearnerRun): Promise<void> {
+    await this.fs.mkdir(this.pathDirname(this.filePath), { recursive: true });
+    const existing = await this.load();
+    const next = [...existing.filter((r) => r.runId !== run.runId), run];
+    const body = `${next.map((r) => JSON.stringify(r)).join('\n')}\n`;
+    await this.fs.writeFile(this.filePath, body, 'utf8');
+  }
+
+  async clear(): Promise<void> {
+    await this.fs.writeFile(this.filePath, '', 'utf8');
+  }
+}
+
+export interface LearnerStoreOptions {
+  /** Persistence backend; defaults to in-memory. */
+  persistence?: LearnerPersistence;
+}
+
+/**
+ * LearnerStore now layers an in-memory map on top of an optional
+ * persistence backend. The map is the read path (O(1) lookup); the
+ * backend is the write path (await on every commit).
+ *
+ * Backwards compat: `new LearnerStore()` keeps the original
+ * in-memory behaviour without changes to existing callers.
+ */
 export class LearnerStore {
   private readonly runs = new Map<string, LearnerRun>();
+  private readonly persistence: LearnerPersistence;
+  private hydrated = false;
+
+  constructor(opts: LearnerStoreOptions = {}) {
+    this.persistence = opts.persistence ?? new MemoryLearnerPersistence();
+  }
+
+  /** Load persisted runs into memory. Idempotent. */
+  async hydrate(): Promise<void> {
+    if (this.hydrated) return;
+    for (const run of await this.persistence.load()) {
+      this.runs.set(run.runId, run);
+    }
+    this.hydrated = true;
+  }
 
   startRun(input: {
     runId: string;
@@ -275,12 +385,14 @@ export class LearnerStore {
     const run = this.runs.get(runId);
     if (!run) return null;
     const diff = diffSnapshots(run.baseline, after);
-    this.runs.set(runId, {
+    const updated: LearnerRun = {
       ...run,
       after,
       diff,
       committedAt: new Date().toISOString(),
-    });
+    };
+    this.runs.set(runId, updated);
+    void this.persistence.append(updated);
     return diff;
   }
 

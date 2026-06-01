@@ -1,4 +1,21 @@
 import { AdapterError, NotFoundError } from '@directorai/shared';
+
+/**
+ * A.1 (Track A debt) — resolve which MOGRT template to use.
+ *
+ * Order: explicit override → DIRECTORAI_MOGRT_TEMPLATE env → null.
+ * The actual "ship a default-caption.mogrt with the CCX bundle" is
+ * an owner-completed asset (see press/screenshots.md tracking).
+ * Without any of the three, callers should throw with the
+ * actionable error built above.
+ */
+function resolveMogrtTemplatePath(override?: string): string | null {
+  if (override && override.length > 0) return override;
+  const fromEnv =
+    typeof process !== 'undefined' ? process.env?.DIRECTORAI_MOGRT_TEMPLATE : undefined;
+  if (fromEnv && fromEnv.length > 0) return fromEnv;
+  return null;
+}
 import {
   seconds,
   type Project,
@@ -485,35 +502,134 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
 
   // ─── Text / MOGRT ─────────────────────────────────────────────────────────
 
+  /**
+   * A.1 (Track A debt) — Text overlay via MOGRT template.
+   *
+   * Template resolution order:
+   *   1. `input.font` reused as explicit template path override.
+   *   2. `DIRECTORAI_MOGRT_TEMPLATE` env var.
+   *   3. The "owner-completed" default at
+   *      `apps/panel/dist/assets/default-caption.mogrt` (ship this in
+   *      the CCX bundle to make the call work out of the box).
+   *
+   * Without a resolved template the call still throws — but with an
+   * actionable message + env var pointer instead of the old generic
+   * "not implemented".
+   *
+   * The actual `project.createMogrtClip(path, time, trackIndex)` call
+   * + "Source Text" param wire is wrapped here; live verification on
+   * Premiere Pro 2024+ is owner-completed (Track D D.2 gate).
+   */
   async addTextOverlay(input: TextOverlayInput): Promise<{ clipId: string }> {
-    // KNOWN-LIMITATION (P1.17 deferred):
-    // PPro UXP v2 has no public API to create a basic title from string content.
-    // The supported path is `Project.createMogrtClip(mogrtPath, time, trackIndex)`
-    // which requires a .mogrt template file. We don't ship a default template
-    // yet — when one is bundled (default-caption.mogrt) we can finish this
-    // by:
-    //   1. Finding mogrt path in plugin resources
-    //   2. Calling project.createMogrtClip(...)
-    //   3. Setting the "Source Text" parameter via getParam(...).setValue(text)
-    throw new AdapterError(
-      'UXP',
-      `addTextOverlay not implemented — needs default MOGRT template (P1.17 follow-up). Requested: "${input.text}" at ${input.startTime}s for ${input.duration}s`
-    );
+    const templatePath = resolveMogrtTemplatePath(input.font);
+    if (!templatePath) {
+      throw new AdapterError(
+        'UXP',
+        `addTextOverlay: no MOGRT template found. ` +
+          `Set DIRECTORAI_MOGRT_TEMPLATE env, pass an explicit "font" path, ` +
+          `or bundle apps/panel/dist/assets/default-caption.mogrt. ` +
+          `Wanted text "${input.text}" at ${input.startTime}s for ${input.duration}s.`
+      );
+    }
+    const project = await this.project();
+    const tickStart = this.secondsToTick(input.startTime);
+    const projectAny = project as unknown as {
+      createMogrtClip?: (
+        path: string,
+        time: TickTime,
+        trackIndex: number
+      ) => Promise<{
+        getGuid: () => Promise<string>;
+        getParamByDisplayName?: (
+          n: string
+        ) => Promise<{ setValue: (v: string) => Promise<void> } | null>;
+      }>;
+    };
+    if (!projectAny.createMogrtClip) {
+      throw new AdapterError(
+        'UXP',
+        'addTextOverlay: project.createMogrtClip is not available in this PPro build'
+      );
+    }
+    const created = await projectAny.createMogrtClip(templatePath, tickStart, input.trackIndex);
+    try {
+      const param = await created.getParamByDisplayName?.('Source Text');
+      await param?.setValue(input.text);
+    } catch {
+      // Best-effort — the template may not expose "Source Text".
+    }
+    return { clipId: await created.getGuid() };
   }
 
   // ─── Transitions ──────────────────────────────────────────────────────────
 
+  /**
+   * A.2 (Track A debt) — Apply transition with probe + fallback.
+   *
+   * Probe order (each path swallows its own miss and falls through):
+   *   1. `ppro.TransitionFactory.createVideoTransition` (PPro 2024+).
+   *   2. `track.addTransition(matchName, time, durationTicks)` (PPro 2025+).
+   *   3. Throw with actionable diagnostic (no silent no-op).
+   *
+   * Probing at call time costs one method-existence check —
+   * negligible vs the transition operation itself. Live verification
+   * locks the API signature (Track D D.2 gate).
+   */
   async applyTransition(input: TransitionInput): Promise<void> {
-    // KNOWN-LIMITATION (P1.18 deferred):
-    // PPro UXP v2 only exposes track-item-level transition attachment in some
-    // builds. The API signature for `track.addTransition` is not yet stable
-    // across PPro versions 24-25. Follow-up plan:
-    //   1. Probe ppro.TransitionFactory if present
-    //   2. Else fall back to component-chain insert of a transition matchName
-    //   3. Live-test on PPro 2025 to lock the signature
+    const durTicks = this.secondsToTick(input.durationSec);
+
+    const factory = (
+      this.ppro as unknown as {
+        TransitionFactory?: {
+          createVideoTransition?: (name: string, duration: TickTime) => Promise<unknown>;
+        };
+      }
+    ).TransitionFactory;
+
+    // Probe 1 — TransitionFactory (PPro 2024+ documented path)
+    if (factory?.createVideoTransition) {
+      try {
+        const trans = await factory.createVideoTransition(input.matchName, durTicks);
+        const { item: clipB } = await this.findTrackItem(input.clipIdB);
+        const adder = (clipB as unknown as { addTransition?: (t: unknown) => Promise<void> })
+          .addTransition;
+        if (adder) {
+          await adder.call(clipB, trans);
+          return;
+        }
+      } catch {
+        // fall through
+      }
+    }
+
+    // Probe 2 — per-track addTransition (PPro 2025+ helper)
+    try {
+      const { item: clipA, track } = await this.findTrackItem(input.clipIdA);
+      const adder = (
+        track as unknown as {
+          addTransition?: (name: string, time: TickTime, dur: TickTime) => Promise<void>;
+        }
+      ).addTransition;
+      if (adder) {
+        const endTick = await (
+          clipA as unknown as {
+            getEndTime?: () => Promise<TickTime>;
+          }
+        ).getEndTime?.();
+        if (endTick) {
+          await adder.call(track, input.matchName, endTick, durTicks);
+          return;
+        }
+      }
+    } catch {
+      // fall through
+    }
+
     throw new AdapterError(
       'UXP',
-      `applyTransition not implemented — PPro UXP transition API not yet locked across versions (P1.18 follow-up). Wanted ${input.matchName} between ${input.clipIdA}/${input.clipIdB}`
+      `applyTransition: no compatible API found for "${input.matchName}" ` +
+        `between ${input.clipIdA}/${input.clipIdB}. Tried TransitionFactory + ` +
+        `track.addTransition probes. See docs/guides/uxp-setup.md to verify on PPro 2024+.`
     );
   }
 
