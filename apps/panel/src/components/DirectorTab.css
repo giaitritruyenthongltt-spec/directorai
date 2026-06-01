@@ -104,6 +104,21 @@
   padding: 8px 10px;
   border-radius: 4px;
   font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.director-error-msg {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.director-plan-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .director-plan {

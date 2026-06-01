@@ -85,6 +85,36 @@ async function safeAsync<T>(call: () => T | Promise<T>, fallback: () => T): Prom
   }
 }
 
+/**
+ * Resolve a stable clip ID from a Premiere TrackItem.
+ *
+ * Premiere 2026 v26.0.0 exposes `nodeId` inconsistently — sometimes the
+ * property is undefined, sometimes the API exposes a `getNodeId()` method,
+ * and sometimes neither. We try every known shape and finally synthesize
+ * an ID from track + start-tick + name, which is stable within a single
+ * sequence and survives round-trips to `findTrackItem`.
+ */
+function resolveTrackItemId(
+  item: PProTrackItem,
+  trackId: string,
+  startTick: string,
+  name: string
+): string {
+  const direct = (item as { nodeId?: unknown }).nodeId;
+  if (typeof direct === 'string' && direct.length > 0) return direct;
+  const maybeFn = (item as { getNodeId?: () => string }).getNodeId;
+  if (typeof maybeFn === 'function') {
+    try {
+      const id = maybeFn.call(item);
+      if (typeof id === 'string' && id.length > 0) return id;
+    } catch {
+      // fall through
+    }
+  }
+  // Synthetic — stable for the lifetime of the listing, unique within a track.
+  return `${trackId}:${startTick}:${name}`;
+}
+
 export async function translateTrackItem(
   item: PProTrackItem,
   trackId: string,
@@ -126,8 +156,13 @@ export async function translateTrackItem(
 
   const kind: Clip['kind'] = mediaType === VIDEO_MEDIA ? 'video' : 'audio';
 
+  // Premiere 2026 sometimes returns undefined for `nodeId` on the readonly
+  // property — try alternate accessors and finally fall back to a synthetic
+  // ID that's stable for the lifetime of this listing.
+  const id = resolveTrackItemId(item, trackId, String(startT.ticks ?? ''), name);
+
   return {
-    id: item.nodeId,
+    id,
     name,
     kind,
     trackId,

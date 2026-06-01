@@ -109,7 +109,12 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     return found;
   }
 
-  /** Walk all tracks of all sequences looking for a track item by nodeId. */
+  /**
+   * Walk all tracks of all sequences looking for a track item by nodeId
+   * OR by synthetic ID (trackId:startTick:name) used as fallback when
+   * Premiere 2026 returns undefined nodeId. See resolveTrackItemId in
+   * uxp-translate.ts.
+   */
   private async findTrackItem(clipId: string): Promise<{
     item: PProTrackItem;
     track: PProTrack;
@@ -117,19 +122,42 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   }> {
     const proj = await this.project();
     const sequences = await proj.getSequences();
+    const matchItem = async (
+      items: PProTrackItem[],
+      trackKind: 'video' | 'audio',
+      trackIndex: number
+    ): Promise<PProTrackItem | undefined> => {
+      // Fast path — direct nodeId match.
+      let hit = items.find((it) => it.nodeId === clipId);
+      if (hit) return hit;
+      // Synthetic path — try matching against the same scheme used by
+      // resolveTrackItemId.
+      const trackId = `${trackKind}-${trackIndex}`;
+      if (!clipId.startsWith(`${trackId}:`)) return undefined;
+      for (const it of items) {
+        const startT = await it.getStartTime().catch(() => null);
+        const name = await it.getName().catch(() => it.name ?? 'Untitled');
+        const synthetic = `${trackId}:${String(startT?.ticks ?? '')}:${name}`;
+        if (synthetic === clipId) {
+          hit = it;
+          break;
+        }
+      }
+      return hit;
+    };
     for (const seq of sequences) {
       const vCount = await seq.getVideoTrackCount();
       for (let i = 0; i < vCount; i++) {
         const track = await seq.getVideoTrack(i);
         const items = await track.getTrackItems(1 /* ANY */, true);
-        const item = items.find((it) => it.nodeId === clipId);
+        const item = await matchItem(items, 'video', i);
         if (item) return { item, track, seq };
       }
       const aCount = await seq.getAudioTrackCount();
       for (let i = 0; i < aCount; i++) {
         const track = await seq.getAudioTrack(i);
         const items = await track.getTrackItems(1, true);
-        const item = items.find((it) => it.nodeId === clipId);
+        const item = await matchItem(items, 'audio', i);
         if (item) return { item, track, seq };
       }
     }

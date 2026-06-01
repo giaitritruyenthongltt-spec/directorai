@@ -156,15 +156,36 @@ export function DirectorTab(): React.ReactElement {
 
   const pct = progress ? Math.round((100 * progress.currentStep) / progress.totalSteps) : 0;
 
+  // Planning progress feedback — Gemini takes 15-45s, show elapsed time.
+  const [planningElapsed, setPlanningElapsed] = useState<number>(0);
+  useEffect(() => {
+    if (!busy || plan || progress) {
+      setPlanningElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    const t = setInterval(
+      () => setPlanningElapsed(Math.round((Date.now() - started) / 1000)),
+      1000
+    );
+    return () => clearInterval(t);
+  }, [busy, plan, progress]);
+
+  const reset = (): void => {
+    setPlan(null);
+    setProgress(null);
+    setError(null);
+  };
+
   return (
     <div className="director-tab">
       <header className="director-header">
         <h2>🎬 Director</h2>
-        <p className="director-sub">Tell me the look you want and I&apos;ll plan the rough cut.</p>
+        <p className="director-sub">Mô tả video bạn muốn — AI sẽ tạo plan rồi dựng giúp bạn.</p>
       </header>
 
       <section className="director-section">
-        <label htmlFor="goal-select">Goal</label>
+        <label htmlFor="goal-select">Mục tiêu</label>
         <select
           id="goal-select"
           value={goalId}
@@ -190,7 +211,7 @@ export function DirectorTab(): React.ReactElement {
       </section>
 
       <section className="director-section">
-        <label htmlFor="persona-select">Persona</label>
+        <label htmlFor="persona-select">Phong cách</label>
         <select
           id="persona-select"
           value={persona}
@@ -208,16 +229,23 @@ export function DirectorTab(): React.ReactElement {
 
       <section className="director-section">
         <button className="director-primary" onClick={() => void generate()} disabled={busy}>
-          {busy && !plan ? 'Planning…' : '✨ Generate plan'}
+          {busy && !plan ? `⏳ Đang sinh plan… ${planningElapsed}s (≈ 15-45s)` : '✨ Sinh plan'}
         </button>
-        {error && <div className="director-error">{error}</div>}
+        {error && (
+          <div className="director-error">
+            <div className="director-error-msg">{error}</div>
+            <button className="director-secondary" onClick={reset}>
+              Thử lại
+            </button>
+          </div>
+        )}
       </section>
 
       {plan && (
         <section className="director-plan">
           <h3>{plan.title}</h3>
           <p className="director-plan-meta">
-            ~{plan.estimatedMinutes} min · {plan.steps.length} steps · {plan.persona}
+            ~{plan.estimatedMinutes} phút · {plan.steps.length} bước · {plan.persona}
           </p>
           {plan.note && <p className="director-plan-note">{plan.note}</p>}
           <ol className="director-steps">
@@ -226,14 +254,19 @@ export function DirectorTab(): React.ReactElement {
                 <span className="director-step-id">{s.id}</span>
                 <span className="director-step-tool">{s.tool}</span>
                 <span className="director-step-why">{s.why}</span>
-                {s.checkpoint && <span className="director-step-cp">⏸ checkpoint</span>}
+                {s.checkpoint && <span className="director-step-cp">⏸ điểm dừng</span>}
               </li>
             ))}
           </ol>
           {!progress && (
-            <button className="director-primary" onClick={() => void execute()} disabled={busy}>
-              ▶ Execute plan
-            </button>
+            <div className="director-plan-actions">
+              <button className="director-primary" onClick={() => void execute()} disabled={busy}>
+                ▶ Chạy plan
+              </button>
+              <button className="director-secondary" onClick={reset}>
+                Hủy
+              </button>
+            </div>
           )}
         </section>
       )}
@@ -247,15 +280,39 @@ export function DirectorTab(): React.ReactElement {
             />
           </div>
           <div className="director-progress-meta">
-            Step {progress.currentStep}/{progress.totalSteps} · {progress.status}
+            Bước {progress.currentStep}/{progress.totalSteps} · {progressLabel(progress.status)}
           </div>
           {progress.status === 'running' && (
             <button className="director-secondary" onClick={() => void cancel()}>
-              Cancel
+              Dừng
+            </button>
+          )}
+          {(progress.status === 'done' ||
+            progress.status === 'error' ||
+            progress.status === 'cancelled') && (
+            <button className="director-secondary" onClick={reset}>
+              Plan mới
             </button>
           )}
         </section>
       )}
     </div>
   );
+}
+
+function progressLabel(status: PlanStatus): string {
+  switch (status) {
+    case 'draft':
+      return 'nháp';
+    case 'running':
+      return 'đang chạy';
+    case 'paused':
+      return 'tạm dừng';
+    case 'done':
+      return 'hoàn thành';
+    case 'cancelled':
+      return 'đã hủy';
+    case 'error':
+      return 'lỗi';
+  }
 }

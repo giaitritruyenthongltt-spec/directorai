@@ -178,4 +178,104 @@ describe('PlanExecutor', () => {
     expect(final.finishedAt).toBeDefined();
     expect(final.startedAt).toBeDefined();
   });
+
+  it('resolves $context.* placeholders before dispatch', async () => {
+    const planWithPlaceholder: Plan = {
+      ...validPlan,
+      steps: [
+        {
+          id: 1,
+          tool: 'timeline.listClips',
+          params: { sequenceId: '$context.activeSequence.id' },
+          why: 'list',
+          checkpoint: false,
+        },
+      ],
+    };
+    let observedSequenceId: unknown;
+    const exec = new PlanExecutor(planWithPlaceholder, async (step) => {
+      observedSequenceId = (step.params as { sequenceId: string }).sequenceId;
+      return [];
+    }).withContext({ activeSequence: { id: 'real-seq-id', name: 'test' } });
+    await exec.run();
+    expect(observedSequenceId).toBe('real-seq-id');
+  });
+
+  it('auto-promotes project.getActiveSequence result into context', async () => {
+    const planTwoStep: Plan = {
+      ...validPlan,
+      steps: [
+        { id: 1, tool: 'project.getActiveSequence', params: {}, why: 'get', checkpoint: false },
+        {
+          id: 2,
+          tool: 'timeline.listClips',
+          params: { sequenceId: '$context.activeSequence.id' },
+          why: 'list',
+          checkpoint: false,
+        },
+      ],
+    };
+    const observedParams: unknown[] = [];
+    const exec = new PlanExecutor(planTwoStep, async (step) => {
+      observedParams.push(step.params);
+      if (step.tool === 'project.getActiveSequence') return { id: 'seq-123', name: 'tap 11' };
+      return [];
+    });
+    const final = await exec.run();
+    expect(final.status).toBe('done');
+    expect((observedParams[1] as { sequenceId: string }).sequenceId).toBe('seq-123');
+  });
+
+  it('resolves $prev.result.* against the last successful step', async () => {
+    const planChain: Plan = {
+      ...validPlan,
+      steps: [
+        {
+          id: 1,
+          tool: 'context.detectBeats',
+          params: { audioPath: '/x.wav' },
+          why: 'beats',
+          checkpoint: false,
+        },
+        {
+          id: 2,
+          tool: 'timeline.cutOnBeats',
+          params: { beats: '$prev.result.beats_sec' },
+          why: 'cut',
+          checkpoint: false,
+        },
+      ],
+    };
+    const observed: unknown[] = [];
+    const exec = new PlanExecutor(planChain, async (step) => {
+      observed.push(step.params);
+      if (step.tool === 'context.detectBeats')
+        return { tempo_bpm: 120, beats_sec: [0.5, 1.0, 1.5] };
+      return null;
+    });
+    await exec.run();
+    expect((observed[1] as { beats: number[] }).beats).toEqual([0.5, 1.0, 1.5]);
+  });
+
+  it('leaves unresolvable placeholders as-is', async () => {
+    const plan: Plan = {
+      ...validPlan,
+      steps: [
+        {
+          id: 1,
+          tool: 'effect.apply',
+          params: { clipId: '$forEachClip' },
+          why: 'fan',
+          checkpoint: false,
+        },
+      ],
+    };
+    let observed: unknown;
+    const exec = new PlanExecutor(plan, async (step) => {
+      observed = (step.params as { clipId: string }).clipId;
+      return null;
+    });
+    await exec.run();
+    expect(observed).toBe('$forEachClip');
+  });
 });
