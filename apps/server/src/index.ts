@@ -182,6 +182,7 @@ async function main(): Promise<void> {
   compositeTools.current = new CompositeTools({
     adapter: routedAdapterRef.current,
     logger,
+    checkpoints: checkpointStore,
   });
   logger.info({ methods: compositeTools.current.listMethods().length }, 'Composite tools wired');
 

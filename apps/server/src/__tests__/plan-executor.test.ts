@@ -233,3 +233,94 @@ describe('safe.applyPlan — cổng duyệt', () => {
     expect(clip?.enabled).toBe(true);
   });
 });
+
+describe('safe.applyPlan — SAFE-2 checkpoint + report', () => {
+  it('checkpoint tự động NGAY TRƯỚC khi ghi thật', async () => {
+    const adapter = new MockPremiereAdapter();
+    const seq = await adapter.getActiveSequence();
+    await adapter.importFile({ path: 'E:\\T11\\6.mp4' });
+    const clips = await adapter.listClips(seq!.id);
+    const snaps: string[] = [];
+    const checkpoints = {
+      snapshot: async (_a: unknown, label: string) => {
+        snaps.push(label);
+        return { id: 'cp-1', label, createdAt: 0, path: '/x' };
+      },
+    } as unknown as Parameters<typeof CompositeTools>[0]['checkpoints'];
+    const tools = new CompositeTools({ adapter, logger, checkpoints });
+    const plan = planWith([
+      {
+        order: 1,
+        action: 'disable',
+        target_path: clips[0]!.source.path,
+        params: {},
+        reason: 'r',
+        reversible: true,
+      },
+    ]);
+    const res = await tools.applyPlan({
+      sequenceId: seq!.id,
+      editPlan: plan,
+      dryRun: false,
+      approved: true,
+    });
+    expect(snaps.length).toBe(1); // đã snapshot
+    expect(res.checkpointId).toBe('cp-1');
+    expect(res.applied).toBe(1);
+  });
+
+  it('checkpoint thất bại → HUỶ ghi (an toàn)', async () => {
+    const adapter = new MockPremiereAdapter();
+    const seq = await adapter.getActiveSequence();
+    await adapter.importFile({ path: 'E:\\T11\\6.mp4' });
+    const clips = await adapter.listClips(seq!.id);
+    const checkpoints = {
+      snapshot: async () => {
+        throw new Error('disk full');
+      },
+    } as unknown as Parameters<typeof CompositeTools>[0]['checkpoints'];
+    const tools = new CompositeTools({ adapter, logger, checkpoints });
+    const plan = planWith([
+      {
+        order: 1,
+        action: 'disable',
+        target_path: clips[0]!.source.path,
+        params: {},
+        reason: 'r',
+        reversible: true,
+      },
+    ]);
+    await expect(
+      tools.applyPlan({ sequenceId: seq!.id, editPlan: plan, dryRun: false, approved: true })
+    ).rejects.toThrow(/checkpoint/i);
+    // clip KHÔNG bị tắt (đã huỷ ghi)
+    expect((await adapter.getClip(clips[0]!.id))?.enabled).toBe(true);
+  });
+
+  it('reportOnly → xuất file báo cáo, KHÔNG ghi', async () => {
+    const adapter = new MockPremiereAdapter();
+    const seq = await adapter.getActiveSequence();
+    await adapter.importFile({ path: 'E:\\T11\\6.mp4' });
+    const clips = await adapter.listClips(seq!.id);
+    const tools = new CompositeTools({ adapter, logger });
+    const plan = planWith([
+      {
+        order: 1,
+        action: 'disable',
+        target_path: clips[0]!.source.path,
+        params: {},
+        reason: 'r',
+        reversible: true,
+      },
+    ]);
+    const res = await tools.applyPlan({
+      sequenceId: seq!.id,
+      editPlan: plan,
+      reportOnly: true,
+    });
+    expect(res.dryRun).toBe(true); // reportOnly ép dry-run
+    expect(res.applied).toBe(0);
+    expect(res.reportPath).toBeTruthy();
+    expect((await adapter.getClip(clips[0]!.id))?.enabled).toBe(true);
+  });
+});

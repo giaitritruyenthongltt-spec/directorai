@@ -13,12 +13,16 @@
  *   context.scanClips      → listClips + persist metadata to SQLite
  */
 
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { Logger } from '@directorai/shared';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import type { Clip } from '@directorai/core';
 import { EFFECT_PRESETS, pickColorPresetForMood } from '@directorai/effect-library';
 import { resolvePlan, type PlanPreview } from './plan-resolver.js';
 import { applyResolvedPlan, type ApplyResult } from './plan-executor.js';
+import type { CheckpointStore } from './checkpoint-store.js';
 
 const SIDECAR_URL = process.env.CONTEXT_ENGINE_URL ?? 'http://127.0.0.1:8000';
 
@@ -100,6 +104,9 @@ async function sidecarPost<T>(path: string, payload: object): Promise<T> {
 export interface CompositeToolDeps {
   readonly adapter: IPremiereAdapter;
   readonly logger: Logger;
+  /** SAFE-2 — kho checkpoint (P4.06). Nếu có, applyPlan tự snapshot trước
+   *  khi ghi thật để hoàn tác/khôi phục. */
+  readonly checkpoints?: CheckpointStore;
 }
 
 export class CompositeTools {
@@ -152,6 +159,7 @@ export class CompositeTools {
             frames?: number;
             dryRun?: boolean;
             approved?: boolean;
+            reportOnly?: boolean;
           }
         );
       case 'timeline.cutOnBeats':
@@ -385,14 +393,15 @@ export class CompositeTools {
   // ─── safe.applyPlan (SAFE-1c — GHI THẬT có kiểm soát) ──────────────────
 
   /**
-   * SAFE-1c — Áp dụng kế hoạch lên timeline thật, có cổng duyệt.
+   * SAFE-1c/SAFE-2 — Áp dụng kế hoạch lên timeline thật, có cổng duyệt +
+   * checkpoint tự động + chế độ báo-cáo.
    *
-   * Quy trình: dựng preview (SAFE-1a) → CỔNG DUYỆT (ghi thật cần
-   * approved=true) → executor ghi từng bước qua Track A.
+   * Quy trình: preview (SAFE-1a) → CỔNG DUYỆT (ghi thật cần approved=true)
+   * → CHECKPOINT tự động (SAFE-2, trước khi ghi) → executor ghi qua Track A.
    *
-   * - `dryRun: true` → chỉ mô phỏng, KHÔNG ghi (mặc định khi chưa duyệt).
-   * - Ghi thật yêu cầu `approved: true` — nếu không sẽ tự hạ về dry-run +
-   *   báo cần duyệt. Đây là chốt an toàn cuối: không bao giờ ghi lén.
+   * - `dryRun: true` → mô phỏng, KHÔNG ghi (mặc định khi chưa duyệt).
+   * - `reportOnly: true` → ép dry-run + xuất kế hoạch ra file báo cáo.
+   * - Ghi thật cần `approved: true`; nếu không sẽ tự hạ dry-run + báo.
    */
   async applyPlan(params: {
     sequenceId?: string;
@@ -402,7 +411,16 @@ export class CompositeTools {
     frames?: number;
     dryRun?: boolean;
     approved?: boolean;
-  }): Promise<ApplyResult & { plan: EditPlan; requiredApproval: boolean; approvalNote?: string }> {
+    reportOnly?: boolean;
+  }): Promise<
+    ApplyResult & {
+      plan: EditPlan;
+      requiredApproval: boolean;
+      approvalNote?: string;
+      checkpointId?: string;
+      reportPath?: string;
+    }
+  > {
     const preview = await this.previewPlan({
       sequenceId: params.sequenceId,
       editPlan: params.editPlan,
@@ -411,8 +429,8 @@ export class CompositeTools {
       frames: params.frames,
     });
 
-    // CỔNG DUYỆT: ghi thật chỉ khi dryRun=false VÀ approved=true.
-    const wantWrite = params.dryRun === false;
+    // CỔNG DUYỆT: ghi thật chỉ khi dryRun=false, approved=true, KHÔNG reportOnly.
+    const wantWrite = params.dryRun === false && params.reportOnly !== true;
     const approved = params.approved === true;
     const effectiveDryRun = !(wantWrite && approved);
     const approvalNote =
@@ -420,10 +438,36 @@ export class CompositeTools {
         ? 'Cần approved=true để ghi thật — đã tự hạ về dry-run để bạn xem trước.'
         : undefined;
 
+    // SAFE-2 — CHECKPOINT tự động NGAY TRƯỚC khi ghi thật (để khôi phục/undo).
+    let checkpointId: string | undefined;
+    if (!effectiveDryRun && this.deps.checkpoints) {
+      try {
+        const cp = await this.deps.checkpoints.snapshot(
+          this.deps.adapter,
+          `safe.applyPlan ${preview.plan.goal_understanding?.slice(0, 40) ?? ''}`.trim()
+        );
+        checkpointId = cp.id;
+        this.deps.logger.info({ checkpointId, label: cp.label }, 'safe.applyPlan checkpoint taken');
+      } catch (e) {
+        // Không ghi nếu checkpoint thất bại — an toàn là trên hết.
+        const msg = e instanceof Error ? e.message : String(e);
+        this.deps.logger.warn({ err: msg }, 'safe.applyPlan checkpoint failed — abort write');
+        throw new Error(`Không tạo được checkpoint trước khi ghi → huỷ để an toàn: ${msg}`, {
+          cause: e,
+        });
+      }
+    }
+
     const result = await applyResolvedPlan(this.deps.adapter, preview, {
       dryRun: effectiveDryRun,
       logger: this.deps.logger,
     });
+
+    // SAFE-2 — Chế độ báo-cáo: xuất kế hoạch + preview ra file.
+    let reportPath: string | undefined;
+    if (params.reportOnly === true) {
+      reportPath = await this.writePlanReport(preview, result);
+    }
 
     this.deps.logger.info(
       {
@@ -433,6 +477,8 @@ export class CompositeTools {
         failed: result.failed,
         deferred: result.deferred,
         skipped: result.skipped,
+        checkpointId,
+        reportPath,
       },
       'safe.applyPlan done'
     );
@@ -442,7 +488,42 @@ export class CompositeTools {
       plan: preview.plan,
       requiredApproval: wantWrite,
       approvalNote,
+      checkpointId,
+      reportPath,
     };
+  }
+
+  /** SAFE-2 — Ghi báo cáo kế hoạch (JSON) ra ~/.directorai/reports/. */
+  private async writePlanReport(
+    preview: PlanPreview & { plan: EditPlan },
+    result: ApplyResult
+  ): Promise<string> {
+    const dir = path.join(os.homedir(), '.directorai', 'reports');
+    await fs.mkdir(dir, { recursive: true });
+    // Tên file ổn định theo nội dung (không dùng Date.now để dễ test/diff).
+    const safe = (preview.plan.goal_understanding ?? 'plan')
+      .replace(/[^\p{L}\p{N}]+/gu, '-')
+      .slice(0, 40)
+      .replace(/^-+|-+$/g, '');
+    const file = path.join(dir, `report-${safe || 'plan'}.json`);
+    const report = {
+      sequenceId: preview.sequenceId,
+      goal_understanding: preview.plan.goal_understanding,
+      strategy: preview.plan.strategy,
+      counts: {
+        total: result.total,
+        applied: result.applied,
+        deferred: result.deferred,
+        skipped: result.skipped,
+        failed: result.failed,
+        dryRun: result.dryRunCount,
+      },
+      steps: result.results,
+      out_of_scope: preview.plan.out_of_scope,
+    };
+    await fs.writeFile(file, JSON.stringify(report, null, 2), 'utf-8');
+    this.deps.logger.info({ reportPath: file }, 'safe.applyPlan report written');
+    return file;
   }
 
   // ─── context.classifyScene ────────────────────────────────────────────
