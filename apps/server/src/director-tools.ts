@@ -43,6 +43,45 @@ interface SidecarBeats {
   beats_sec: number[];
 }
 
+/** Thao tác đã verify ghi được trên Premiere 26 (Track A). Kế hoạch edit
+ *  (AI-3) chỉ được chứa các action này — guard phía server ép buộc. */
+export const SAFE_PLAN_ACTIONS = ['disable', 'trim', 'move', 'rename', 'transition'] as const;
+export type SafePlanAction = (typeof SAFE_PLAN_ACTIONS)[number];
+
+export interface EditPlanStep {
+  order: number;
+  action: SafePlanAction;
+  target_path: string;
+  params: Record<string, unknown>;
+  reason: string;
+  reversible: boolean;
+}
+
+export interface EditPlanOutOfScope {
+  want: string;
+  needs: string;
+  why: string;
+}
+
+export interface EditPlan {
+  goal_understanding: string;
+  strategy: string;
+  steps: EditPlanStep[];
+  out_of_scope: EditPlanOutOfScope[];
+  estimated_impact: string;
+  requires_preview: boolean;
+  rejected_unsafe_steps?: number;
+  confidence: number;
+}
+
+export interface EditPlanResult {
+  edit_plan: EditPlan;
+  video_map: unknown;
+  clips_understood: number;
+  clips_failed: number;
+  errors: { clip_path: string; error: string }[];
+}
+
 async function sidecarPost<T>(path: string, payload: object): Promise<T> {
   const res = await fetch(`${SIDECAR_URL}${path}`, {
     method: 'POST',
@@ -89,6 +128,8 @@ export class CompositeTools {
         return this.buildVideoMap(
           params as { clipPaths: string[]; goal?: string; frames?: number }
         );
+      case 'context.buildEditPlan':
+        return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
       case 'color.applyLookByScene':
@@ -111,6 +152,7 @@ export class CompositeTools {
       'context.classifyScene',
       'context.understandClip',
       'context.buildVideoMap',
+      'context.buildEditPlan',
       'timeline.cutOnBeats',
       'color.applyLookByScene',
     ];
@@ -191,6 +233,65 @@ export class CompositeTools {
       goal: params.goal,
       sample_interval_sec: interval,
     });
+  }
+
+  // ─── context.buildEditPlan (AI-3 — Tầng 4) ────────────────────────────
+
+  /**
+   * AI-3 — Lập kế hoạch edit có lý do từ clip + mục tiêu. Pipeline đầy đủ:
+   * hiểu clip (cache) → bản đồ video → kế hoạch. Kế hoạch CHỈ chứa thao
+   * tác đã verify ghi được; double-guard phía server loại mọi bước lọt
+   * lưới dùng op chưa ghi được. KHÔNG tự chạy — đi vào Tầng an toàn.
+   */
+  async buildEditPlan(params: {
+    clipPaths: string[];
+    goal: string;
+    frames?: number;
+  }): Promise<EditPlanResult> {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    if (!params.goal?.trim()) throw new Error('goal required');
+    const interval = params.frames ? 1.0 / params.frames : 0.33;
+    const res = await sidecarPost<EditPlanResult>('/vision/build_edit_plan', {
+      clip_paths: params.clipPaths,
+      goal: params.goal,
+      sample_interval_sec: interval,
+    });
+    return this.guardEditPlan(res);
+  }
+
+  /**
+   * Double-guard: loại mọi step dùng thao tác CHƯA verify ghi được
+   * (split/speed/insert/marker…), kể cả khi sidecar bỏ sót. Step bị loại
+   * chuyển sang out_of_scope. Đây là lằn ranh an toàn cuối cùng trước khi
+   * kế hoạch chạm tới timeline.
+   */
+  private guardEditPlan(res: EditPlanResult): EditPlanResult {
+    const plan = res?.edit_plan;
+    if (!plan || !Array.isArray(plan.steps)) return res;
+    const kept: EditPlanStep[] = [];
+    let rejected = 0;
+    for (const s of plan.steps) {
+      const action = String(s?.action ?? '').toLowerCase();
+      if ((SAFE_PLAN_ACTIONS as readonly string[]).includes(action)) {
+        kept.push({ ...s, action: action as EditPlanStep['action'], reversible: true });
+      } else {
+        rejected += 1;
+        plan.out_of_scope = plan.out_of_scope ?? [];
+        plan.out_of_scope.push({
+          want: `${s?.action} trên ${s?.target_path ?? '?'}`,
+          needs: 'FCPXML (Premiere 26 chưa cho plugin ghi)',
+          why: s?.reason ?? '',
+        });
+        this.deps.logger.warn(
+          { action: s?.action, target: s?.target_path },
+          'editPlan.guard rejected unsafe step'
+        );
+      }
+    }
+    plan.steps = kept;
+    plan.requires_preview = true;
+    plan.rejected_unsafe_steps = (plan.rejected_unsafe_steps ?? 0) + rejected;
+    return res;
   }
 
   // ─── context.classifyScene ────────────────────────────────────────────

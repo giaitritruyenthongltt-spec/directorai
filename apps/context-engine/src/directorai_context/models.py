@@ -93,6 +93,14 @@ class VideoMapRequest(BaseModel):
     sample_interval_sec: float | None = None
 
 
+class EditPlanRequest(BaseModel):
+    """AI-3 — Request lập kế hoạch edit từ clip + mục tiêu (Tầng 4)."""
+
+    clip_paths: list[str]
+    goal: str
+    sample_interval_sec: float | None = None
+
+
 class VisionTag(BaseModel):
     """A single frame analysis result."""
 

@@ -32,10 +32,14 @@ qua hiểu biết của AI + bạn duyệt + hoàn tác được.
 | Giao diện tiếng Việt + nút hướng dẫn + sơ đồ         | ✅ Live                         |
 | Ops log + panel telemetry + auto-reload-verify       | ✅ Công cụ debug                |
 | **Tầng 2 — AI XEM + HIỂU clip** (Gemini Vision)      | ✅ **VERIFIED** (7/7 Nerf thật) |
+| **Tầng 3 — Bản đồ video tổng** (gộp LLM)             | ✅ **VERIFIED** (8 clip Nerf)   |
+| **Tầng 4 — Kế hoạch edit có lý do** (AI-3)           | ✅ **VERIFIED** (24 bước safe)  |
 
-**Mảnh còn THIẾU cốt lõi**: Tầng 3 — gộp hiểu-biết-từng-clip thành **bản đồ
-video tổng** (cốt truyện, cao trào, clip trùng). Tầng 2 đã chứng minh AI mô
-tả đúng "cú trúng đạn" + phân biệt action-blur vs lỗi-thật.
+**TẦNG TRÍ TUỆ ĐÃ THÔNG SUỐT** (CV → Vision → Video map → Edit plan), tất cả
+verify trên clip Nerf thật. **Mảnh còn THIẾU cốt lõi**: **SAFE-1 (Tầng an
+toàn)** — nối kế hoạch AI-3 vào: checkpoint tự động → **preview bắt buộc**
+(map media_path → clipId thật trên timeline) → bạn duyệt → ghi không phá huỷ
+→ undo. Đây là cầu cuối từ "kế hoạch" → "chạm timeline" một cách an toàn.
 
 ---
 
@@ -177,8 +181,8 @@ Tab tự render từ registry. Không sửa UI, không sửa server.
 | **Track A** | Nền ghi                    | executeTransaction + Action model                                       | ✅ XONG                                                         |
 | **AI-1**    | Vision pipeline (Tầng 2)   | sample keyframe → Gemini Vision → "clip understanding"                  | ✅ **VERIFIED** (7/7 clip Nerf thật, 3.9s/clip)                 |
 | **AI-2**    | Video map (Tầng 3)         | gộp understanding → bản đồ video                                        | ✅ **VERIFIED** (8 clip → cốt truyện+4 đoạn+6 key; cache 41→8s) |
-| **AI-3**    | Editorial planner (Tầng 4) | bản đồ + mục tiêu → kế hoạch có lý do                                   | ⬜ TIẾP THEO                                                    |
-| **SAFE-1**  | Tầng an toàn               | checkpoint tự động + preview bắt buộc + chế độ báo-cáo                  | ⬜                                                              |
+| **AI-3**    | Editorial planner (Tầng 4) | bản đồ + mục tiêu → kế hoạch có lý do                                   | ✅ **VERIFIED** (24 bước safe-only, 0 op cấm; tự nêu giới hạn)  |
+| **SAFE-1**  | Tầng an toàn               | checkpoint tự động + preview bắt buộc + chế độ báo-cáo                  | ⬜ TIẾP THEO                                                    |
 | **MOD-1**   | Khung module               | package modules: types+registry+pipeline                                | ⬜                                                              |
 | **MOD-2**   | Tab Tự động                | checklist + params + Run + UnderstandingView                            | ⬜                                                              |
 | **MOD-3**   | 6 module Tầng 1            | lọc/cắt-lặng/tỉa/xếp/đổi-tên/transition (mỗi cái signals+judge+execute) | ⬜                                                              |

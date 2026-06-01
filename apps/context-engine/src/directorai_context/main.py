@@ -17,6 +17,7 @@ from directorai_context.storage import repositories as store
 from directorai_context.models import (
     BeatRequest,
     BeatResult,
+    EditPlanRequest,
     EmbedRequest,
     EmbedResult,
     IngestRequest,
@@ -318,6 +319,59 @@ def create_app() -> FastAPI:
             "errors": errors,
             "clips_understood": len(understandings),
             "clips_failed": len(errors),
+        }
+
+    @app.post("/vision/build_edit_plan")
+    async def post_build_edit_plan(req: EditPlanRequest) -> dict[str, object]:
+        """AI-3 — Lập kế hoạch edit có lý do (Tầng 4).
+
+        Pipeline: understand_clip (cache) → build_video_map → build_edit_plan.
+        Kế hoạch CHỈ chứa thao tác đã verify ghi được; KHÔNG tự chạy — đi
+        vào Tầng an toàn (preview → duyệt → ghi).
+        """
+        from directorai_context.modules.editorial_planner import build_edit_plan
+        from directorai_context.modules.video_map import build_video_map
+        from directorai_context.modules.vision_understand import understand_clip
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        if not req.goal or not req.goal.strip():
+            raise HTTPException(status_code=400, detail="goal rỗng")
+
+        frames = None
+        try:
+            if req.sample_interval_sec and req.sample_interval_sec > 0:
+                frames = max(1, min(8, round(1.0 / req.sample_interval_sec)))
+        except (TypeError, ValueError):
+            frames = None
+
+        understandings: list[dict[str, object]] = []
+        errors: list[dict[str, str]] = []
+        for path in req.clip_paths:
+            try:
+                understandings.append(understand_clip(path, frames=frames))
+            except Exception as e:  # noqa: BLE001
+                log.error("edit_plan_clip_failed", media=path, error=str(e))
+                errors.append({"clip_path": path, "error": str(e)})
+
+        if not understandings:
+            raise HTTPException(
+                status_code=500, detail=f"Không hiểu được clip nào ({len(errors)} lỗi)"
+            )
+
+        try:
+            video_map = build_video_map(understandings, goal=req.goal)
+            edit_plan = build_edit_plan(video_map, goal=req.goal)
+        except Exception as e:  # noqa: BLE001
+            log.error("build_edit_plan_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+        return {
+            "edit_plan": edit_plan,
+            "video_map": video_map,
+            "clips_understood": len(understandings),
+            "clips_failed": len(errors),
+            "errors": errors,
         }
 
     @app.post("/scenes/classify")
