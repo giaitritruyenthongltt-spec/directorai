@@ -1,5 +1,7 @@
 # Kiến trúc Module System — DirectorAI v3
 
+> 📌 Đây là PHỤ LỤC. Lộ trình tổng canonical: **MASTER-ROADMAP.md**
+
 > Thiết kế "module checklist + Run": người dùng tích các chức năng muốn
 > chạy, mỗi tích = 1 module độc lập đã test, nhấn Chạy → plugin gom thành
 > pipeline và thực thi tuần tự. Khoa học, mở rộng dễ, không phụ thuộc LLM.

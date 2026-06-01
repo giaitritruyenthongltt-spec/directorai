@@ -1,5 +1,7 @@
 # Kiến trúc AI hiểu toàn diện — DirectorAI
 
+> 📌 Đây là PHỤ LỤC. Lộ trình tổng canonical: **MASTER-ROADMAP.md**
+
 > Nguyên tắc cốt lõi (người dùng chỉ ra 2026-06-01):
 > "Phân tích cứng rất dễ hỏng nội dung. Cần AI hiểu TỔNG TOÀN BỘ nội dung
 > video, file thô, quy trình dựng, kế hoạch edit — như người edit thật."

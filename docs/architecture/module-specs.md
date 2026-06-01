@@ -1,5 +1,7 @@
 # Spec chi tiết từng Module — DirectorAI
 
+> 📌 Đây là PHỤ LỤC. Lộ trình tổng canonical: **MASTER-ROADMAP.md**
+
 > Tài liệu để DUYỆT trước khi code. Mỗi module ghi rõ: mục đích, tham số
 > (kèm mặc định + khoảng), thuật toán 2 pha (phân tích → ghi), công cụ
 > dùng, giới hạn. Trạng thái: ✅ ghi thẳng · ⚠️ beta · 📄 chỉ FCPXML.
