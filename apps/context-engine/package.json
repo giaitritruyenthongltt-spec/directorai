@@ -1,0 +1,13 @@
+{
+  "name": "@directorai/context-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DirectorAI Python ML sidecar — pnpm wrapper for uv-managed Python service",
+  "scripts": {
+    "sidecar:start": "uv run uvicorn directorai_context.main:app --host 127.0.0.1 --port 8000",
+    "sidecar:dev": "uv run uvicorn directorai_context.main:app --host 127.0.0.1 --port 8000 --reload",
+    "sidecar:test": "uv run pytest -v",
+    "sidecar:lint": "uv run ruff check && uv run mypy src",
+    "sidecar:sync": "uv sync --extra dev"
+  }
+}

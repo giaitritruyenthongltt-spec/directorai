@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException
+import asyncio
+import json
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 from directorai_context import __version__
 from directorai_context.config import get_settings
 from directorai_context.logger import log
+from directorai_context.modules.hardware import probe as probe_hardware
 from directorai_context.models import (
     BeatRequest,
     BeatResult,
@@ -37,6 +41,71 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
+
+    @app.get("/hardware")
+    async def hardware() -> dict[str, object]:
+        """Sprint A.5 — hardware report for the Node server to pick model variants."""
+        return probe_hardware().to_dict()
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(ws: WebSocket) -> None:
+        """Sprint A.2 — WS bridge for the Node server to stream commands / progress.
+
+        Protocol: JSON-RPC 2.0 style messages.
+            request:  { "id": <int>, "method": "ping", "params": {...} }
+            response: { "id": <int>, "result": ... }  or  { "id": <int>, "error": {...} }
+            event:    { "event": "progress", "params": { "op": "...", "pct": 0.42 } }
+        """
+        await ws.accept()
+        log.info("ws_client_connected")
+        try:
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
+                    await ws.send_text(
+                        json.dumps({"error": {"code": -32700, "message": "Parse error"}})
+                    )
+                    continue
+
+                msg_id = msg.get("id")
+                method = msg.get("method", "")
+                params = msg.get("params") or {}
+
+                try:
+                    if method == "ping":
+                        result: object = {"pong": True, "version": __version__}
+                    elif method == "hardware":
+                        result = probe_hardware().to_dict()
+                    elif method == "health":
+                        result = {"status": "ok", "version": __version__}
+                    else:
+                        await ws.send_text(
+                            json.dumps(
+                                {
+                                    "id": msg_id,
+                                    "error": {
+                                        "code": -32601,
+                                        "message": f"Method not found: {method}",
+                                    },
+                                }
+                            )
+                        )
+                        continue
+                    await ws.send_text(json.dumps({"id": msg_id, "result": result}))
+                except Exception as e:  # noqa: BLE001
+                    log.error("ws_handler_error", method=method, error=str(e))
+                    await ws.send_text(
+                        json.dumps(
+                            {"id": msg_id, "error": {"code": -32603, "message": str(e)}}
+                        )
+                    )
+        except WebSocketDisconnect:
+            log.info("ws_client_disconnected")
+        except asyncio.CancelledError:
+            log.info("ws_handler_cancelled")
+            raise
 
     @app.post("/transcribe", response_model=TranscribeResult)
     async def post_transcribe(req: TranscribeRequest) -> TranscribeResult:
