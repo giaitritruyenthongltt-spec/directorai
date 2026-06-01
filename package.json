@@ -29,6 +29,10 @@
     "sdk:surface": "tsx tools/sdk-surface-diff.ts",
     "license:keygen": "tsx tools/generate-license-keys.ts",
     "verify": "tsx tools/verify-precheck.ts",
+    "smoke:uxp": "tsx tools/smoke-uxp.ts",
+    "smoke:sentry": "tsx tools/smoke-sentry.ts",
+    "smoke:stripe": "tsx tools/smoke-stripe.ts",
+    "smoke:dns": "tsx tools/smoke-dns.ts",
     "prepare": "husky"
   },
   "devDependencies": {
