@@ -73,6 +73,9 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   deleteClip(clipId: string): Promise<void> {
     return this.send<void>('timeline.deleteClip', { clipId });
   }
+  setClipDisabled(clipId: string, disabled: boolean): Promise<void> {
+    return this.send<void>('timeline.setClipDisabled', { clipId, disabled });
+  }
 
   // Effects
   applyEffect(input: ApplyEffectInput): Promise<Effect> {

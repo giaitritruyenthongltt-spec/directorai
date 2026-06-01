@@ -24,6 +24,7 @@ import {
 } from '@directorai/shared';
 import { dispatchRpc } from '@directorai/premiere-adapter';
 import { getPanelAdapter, adapterKind } from './panel-adapter.js';
+import { introspectPremiereApi } from './uxp-api.js';
 import { ReconnectMachine, DEFAULT_RECONNECT_CONFIG } from './reconnect-machine.js';
 
 interface RpcHandler {
@@ -175,11 +176,19 @@ class WsClient {
       result: req.params,
     });
     try {
-      const result = await dispatchRpc(req.method, req.params, getPanelAdapter());
+      // A1 — đặc biệt: dump API surface thật của Premiere 26 để khám phá
+      // action factories. Không qua dispatchRpc.
+      const result =
+        req.method === '_debug.introspect'
+          ? await introspectPremiereApi()
+          : await dispatchRpc(req.method, req.params, getPanelAdapter());
+      // A4 — JSON-RPC success PHẢI có field `result`. Method trả void
+      // sẽ cho `undefined`, và JSON.stringify bỏ key undefined → response
+      // không có result → server không nhận ra → treo. Ép null.
       this.sendRaw({
         jsonrpc: '2.0',
         id: req.id,
-        result,
+        result: result === undefined ? null : result,
       } satisfies JsonRpcSuccess);
     } catch (err) {
       this.sendRaw({

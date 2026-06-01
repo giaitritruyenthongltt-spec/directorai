@@ -15,6 +15,7 @@ const MUTATING_METHODS = new Set([
   'timeline.trimClip',
   'timeline.moveClip',
   'timeline.deleteClip',
+  'timeline.setClipDisabled',
   'effect.apply',
   'effect.remove',
   'media.import',
@@ -95,6 +96,13 @@ const handlers: Record<string, RpcHandler> = {
   'timeline.deleteClip': {
     schema: ClipId,
     run: (p, a) => a.deleteClip((p as { clipId: string }).clipId),
+  },
+  'timeline.setClipDisabled': {
+    schema: z.object({ clipId: z.string(), disabled: z.boolean() }),
+    run: (p, a) => {
+      const params = p as { clipId: string; disabled: boolean };
+      return a.setClipDisabled(params.clipId, params.disabled);
+    },
   },
 
   'effect.apply': {

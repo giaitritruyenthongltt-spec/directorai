@@ -49,6 +49,7 @@ import {
   type PProSequence,
   type PProTrack,
   type PProTrackItem,
+  type PProCompoundAction,
   type TickTime,
 } from './uxp-ppro.js';
 import {
@@ -144,68 +145,90 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
       if (hit) return hit;
     }
 
-    // Slow path — walk + index. Build the cache as we go so subsequent
-    // lookups are O(1) for any clip in any track.
+    // Slow path. Mỗi getStartTime/getName là 1 IPC ~40ms; trên project
+    // 413 clip, quét đủ = ~30s (đúng bằng timeout đã thấy). Tối ưu:
+    //  (a) Nếu clipId là synthetic "video-0:tick:name" → CHỈ quét đúng
+    //      track đó (bỏ qua track khác).
+    //  (b) THOÁT NGAY khi tìm thấy (không index hết).
     const proj = await this.project();
     const sequences = await proj.getSequences();
     const cache = new Map<string, { item: PProTrackItem; track: PProTrack; seq: PProSequence }>();
     let found: { item: PProTrackItem; track: PProTrack; seq: PProSequence } | undefined;
 
+    // Parse target trackId prefix (vd "video-0") nếu clipId là synthetic.
+    const synMatch = /^((?:video|audio)-(\d+)):/.exec(clipId);
+    const targetTrackId = synMatch?.[1] ?? null;
+    const targetKind = targetTrackId
+      ? targetTrackId.startsWith('video')
+        ? 'video'
+        : 'audio'
+      : null;
+    const targetIndex = synMatch?.[2] !== undefined ? Number(synMatch[2]) : null;
+
+    /** Trả về true nếu đã tìm thấy (để caller dừng). */
     const indexItems = async (
       items: PProTrackItem[],
       track: PProTrack,
       seq: PProSequence,
       trackKind: 'video' | 'audio',
       trackIndex: number
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       const trackId = `${trackKind}-${trackIndex}`;
       for (const it of items) {
-        // 1) Try direct nodeId — cheap.
+        if (!it) continue;
         const nid = (it as { nodeId?: unknown }).nodeId;
         if (typeof nid === 'string' && nid.length > 0) {
           cache.set(nid, { item: it, track, seq });
-          if (nid === clipId) found = { item: it, track, seq };
+          if (nid === clipId) {
+            found = { item: it, track, seq };
+            return true; // (b) thoát ngay
+          }
           continue;
         }
-        // 2) Synthetic — compute once + index. Each iteration costs
-        // 2 UXP RPCs (getStartTime + getName) but only happens during
-        // the one-time index build; later lookups are O(1).
         const startT = await it.getStartTime().catch(() => null);
         const name = await it.getName().catch(() => it.name ?? 'Untitled');
         const synthetic = `${trackId}:${String(startT?.ticks ?? '')}:${name}`;
         cache.set(synthetic, { item: it, track, seq });
-        if (synthetic === clipId) found = { item: it, track, seq };
+        if (synthetic === clipId) {
+          found = { item: it, track, seq };
+          return true; // (b) thoát ngay
+        }
       }
+      return false;
     };
 
     for (const seq of sequences) {
       const vCount = await seq.getVideoTrackCount();
       for (let i = 0; i < vCount; i++) {
+        // (a) bỏ qua track không khớp prefix nếu biết target.
+        if (targetTrackId && !(targetKind === 'video' && targetIndex === i)) continue;
         const track = await seq.getVideoTrack(i);
         const items = await track.getTrackItems(1 /* ANY */, true);
-        await indexItems(items, track, seq, 'video', i);
-        if (found) break;
+        if (await indexItems(items, track, seq, 'video', i)) break;
       }
       if (found) break;
       const aCount = await seq.getAudioTrackCount();
       for (let i = 0; i < aCount; i++) {
+        if (targetTrackId && !(targetKind === 'audio' && targetIndex === i)) continue;
         const track = await seq.getAudioTrack(i);
         const items = await track.getTrackItems(1, true);
-        await indexItems(items, track, seq, 'audio', i);
-        if (found) break;
+        if (await indexItems(items, track, seq, 'audio', i)) break;
       }
+      if (found) break;
     }
 
-    this.clipCache = cache;
+    // Chỉ lưu cache khi quét đầy đủ (không có target prefix) để tránh
+    // cache thiếu. Khi có target prefix ta thoát sớm → cache 1 phần,
+    // không gán làm cache chính.
+    if (!targetTrackId) this.clipCache = cache;
     if (found) return found;
     throw new NotFoundError('Clip', clipId);
   }
 
   /**
-   * E1 — Reverted D5's Promise.race. The race left lockedPromise
-   * unhandled after timeout winner, creating unhandled rejection that
-   * may have crashed the panel React tree at module evaluation.
-   * Back to original simple shape.
+   * E1 — `mutate` cũ dùng lockedAccess cho write → treo trên Premiere 26.
+   * Giữ lại cho các thao tác KHÔNG-action (vd component chain) nhưng các
+   * mutation chuẩn nên dùng `runTransaction` (A2) bên dưới.
    */
   private async mutate<T>(label: string, action: () => Promise<T>): Promise<T> {
     const proj = await this.project();
@@ -222,6 +245,44 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
       throw new AdapterError('UXP', `${label} failed`, captured);
     }
     return result;
+  }
+
+  /**
+   * A2 — Cách GHI đúng cho Premiere 26: tạo Action BÊN TRONG callback của
+   * executeTransaction (pattern chuẩn Adobe DEC). `addActions` nhận
+   * compoundAction; bạn gọi factory + addAction ngay trong đó.
+   *
+   * Bọc thêm timing log để chẩn đoán nếu treo.
+   */
+  private async runTransaction(
+    label: string,
+    addActions: (compound: PProCompoundAction) => void
+  ): Promise<void> {
+    const proj = await this.project();
+    const t0 = Date.now();
+
+    console.info(`[tx ${label}] executeTransaction start`);
+    const ok = await proj.executeTransaction((compound: PProCompoundAction) => {
+      addActions(compound);
+    }, label);
+
+    console.info(`[tx ${label}] done in ${Date.now() - t0}ms, ok=${ok}`);
+    if (!ok) {
+      throw new AdapterError('UXP', `${label}: executeTransaction returned false`);
+    }
+  }
+
+  /**
+   * A3 — "Lọc clip kém": tắt (disable) clip thay vì xoá. Clip vẫn nằm
+   * trên timeline nhưng không render — an toàn, có thể bật lại. Dùng
+   * createSetDisabledAction (đã verify tồn tại qua introspection).
+   */
+  async setClipDisabled(clipId: string, disabled: boolean): Promise<void> {
+    this.invalidateClipCache();
+    const { item } = await this.findTrackItem(clipId);
+    await this.runTransaction(disabled ? 'Tắt clip' : 'Bật clip', (compound) => {
+      compound.addAction(item.createSetDisabledAction(disabled));
+    });
   }
 
   // ─── Project ──────────────────────────────────────────────────────────────
@@ -304,84 +365,65 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
 
   // ─── Timeline edit ────────────────────────────────────────────────────────
 
-  /** Mutations that change clip identity invalidate the cache. */
-  async cutClip(input: CutClipInput): Promise<readonly Clip[]> {
-    this.invalidateClipCache();
-    return this.mutate('cutClip', async () => {
-      const { item, track } = await this.findTrackItem(input.clipId);
-      const cutAt = this.secondsToTick(input.at);
-      // Premiere UXP doesn't expose a direct "split at" — we change current
-      // clip's outPoint and insert a new clip starting from `cutAt` with
-      // the matching ProjectItem. Falls back to AdapterError if unsupported.
-      const startT = await item.getStartTime();
-      const endT = await item.getEndTime();
-      if (input.at <= startT.seconds || input.at >= endT.seconds) {
-        throw new Error(`Cut at ${input.at}s is outside clip [${startT.seconds}, ${endT.seconds}]`);
-      }
-      const projItem = await item.getProjectItem();
-      if (!projItem) throw new Error('Clip has no source ProjectItem');
-
-      // Adjust end of left half
-      const inT = await item.getInPoint();
-      const offset = input.at - startT.seconds;
-      const newOut = this.secondsToTick(inT.seconds + offset);
-      await item.setOutPoint(newOut);
-
-      // Insert right half via track.insertClip at cutAt
-      await track.insertClip(projItem, cutAt);
-
-      // Return the two halves (re-list to find the new piece)
-      const items = await track.getTrackItems(1, false);
-      const at = input.at;
-      const left = items.find((it) => it.nodeId === input.clipId);
-      const right = items.find(async (it) => {
-        const s = await it.getStartTime();
-        return Math.abs(s.seconds - at) < 0.001 && it.nodeId !== input.clipId;
-      });
-      const out: Clip[] = [];
-      const mt = await track.getMediaType();
-      const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
-      if (left) out.push(await translateTrackItem(left, `${k}-${track.id}`, k));
-      if (right) out.push(await translateTrackItem(await right, `${k}-${track.id}`, k));
-      return out;
-    });
+  /**
+   * A3 — Premiere 26 UXP KHÔNG có action "split / cắt đôi clip". Không thể
+   * tách 1 clip thành 2 qua API hiện tại. Báo lỗi rõ ràng để Director
+   * tránh dùng tool này, gợi ý dùng trim hoặc xuất FCPXML (N4).
+   */
+  async cutClip(_input: CutClipInput): Promise<readonly Clip[]> {
+    throw new AdapterError(
+      'UXP',
+      'Premiere 26 chưa hỗ trợ cắt-đôi clip qua UXP (không có split action). ' +
+        'Dùng timeline.trimClip để tỉa, hoặc xuất FCPXML để cắt sẵn.'
+    );
   }
 
+  /**
+   * A3 — Tỉa clip dùng Action factory (createSetInPoint/Start/OutPoint).
+   * Thay thế hoàn toàn cách gọi item.setInPoint() trực tiếp (treo trên 26).
+   */
   async trimClip(input: TrimClipInput): Promise<Clip> {
-    return this.mutate('trimClip', async () => {
-      const { item, track } = await this.findTrackItem(input.clipId);
-      const inT = await item.getInPoint();
-      const startT = await item.getStartTime();
-      const delta = input.newRange.start - startT.seconds;
-      await item.setInPoint(this.secondsToTick(inT.seconds + delta));
-      await item.setStartTime(this.secondsToTick(input.newRange.start));
-      const dur = input.newRange.end - input.newRange.start;
-      await item.setOutPoint(this.secondsToTick(inT.seconds + delta + dur));
-      const mt = await track.getMediaType();
-      const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
-      return translateTrackItem(item, `${k}-${track.id}`, k);
+    this.invalidateClipCache();
+    const { item, track } = await this.findTrackItem(input.clipId);
+    const inT = await item.getInPoint();
+    const startT = await item.getStartTime();
+    const delta = input.newRange.start - startT.seconds;
+    const dur = input.newRange.end - input.newRange.start;
+    await this.runTransaction('Tỉa clip', (compound) => {
+      compound.addAction(item.createSetInPointAction(this.secondsToTick(inT.seconds + delta)));
+      compound.addAction(item.createSetStartAction(this.secondsToTick(input.newRange.start)));
+      compound.addAction(
+        item.createSetOutPointAction(this.secondsToTick(inT.seconds + delta + dur))
+      );
     });
+    const mt = await track.getMediaType();
+    const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
+    return translateTrackItem(item, `${k}-${track.id}`, k);
   }
 
+  /** A3 — Di chuyển clip dùng createMoveAction. */
   async moveClip(input: MoveClipInput): Promise<Clip> {
-    return this.mutate('moveClip', async () => {
-      const { item, track } = await this.findTrackItem(input.clipId);
-      await item.move(this.secondsToTick(input.newStart));
-      // Cross-track moves not exposed in UXP API directly — left as TODO
-      if (input.newTrackId) {
-        throw new AdapterError('UXP', 'Cross-track move not supported by premierepro UXP API yet');
-      }
-      const mt = await track.getMediaType();
-      const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
-      return translateTrackItem(item, `${k}-${track.id}`, k);
+    this.invalidateClipCache();
+    const { item, track } = await this.findTrackItem(input.clipId);
+    if (input.newTrackId) {
+      throw new AdapterError('UXP', 'Premiere 26 UXP chưa hỗ trợ chuyển clip sang track khác');
+    }
+    await this.runTransaction('Di chuyển clip', (compound) => {
+      compound.addAction(item.createMoveAction(this.secondsToTick(input.newStart)));
     });
+    const mt = await track.getMediaType();
+    const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
+    return translateTrackItem(item, `${k}-${track.id}`, k);
   }
 
+  /**
+   * A3 — Premiere 26 không có hard-delete action. Chuyển sang SOFT-DELETE:
+   * tắt clip (disable) — clip vẫn trên timeline nhưng không render. Đây là
+   * cách "xoá an toàn" duy nhất khả thi, và phù hợp use case "lọc clip kém"
+   * (có thể bật lại). Để xoá hẳn, người dùng tự chọn + Delete trong Premiere.
+   */
   async deleteClip(clipId: string): Promise<void> {
-    await this.mutate('deleteClip', async () => {
-      const { item } = await this.findTrackItem(clipId);
-      await item.remove(false /* ripple */, false /* alignToVideo */);
-    });
+    await this.setClipDisabled(clipId, true);
   }
 
   // ─── Effects ──────────────────────────────────────────────────────────────

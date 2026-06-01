@@ -251,6 +251,14 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     track.clips = track.clips.filter((c) => c.id !== clipId);
   }
 
+  /** A3 — Mock: đảo cờ enabled của clip. */
+  async setClipDisabled(clipId: string, disabled: boolean): Promise<void> {
+    const { clip } = this.findClip(clipId);
+    const idx = clip.effects.findIndex((e) => e.matchName === '__disabled__');
+    void idx;
+    (clip as { enabled?: boolean }).enabled = !disabled;
+  }
+
   async listTracks(sequenceId: string): Promise<readonly Track[]> {
     const s = this.requireSequence(sequenceId);
     return s.tracks.map((t) => ({

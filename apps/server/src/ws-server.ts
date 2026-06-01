@@ -437,6 +437,10 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
         } else if (m === '_panel.error') {
           // L1 — panel-side window error or unhandled rejection.
           opts.logger.error({ params }, 'panel error reported');
+        } else if (m === '_panel.console') {
+          // A4 — forward panel console.* to server log for live debug.
+          const p = params as { level?: string; text?: string };
+          opts.logger.info({ panelConsole: p.text }, `panel console [${p.level}]`);
         }
       }
     });

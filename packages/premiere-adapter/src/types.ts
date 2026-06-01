@@ -147,6 +147,8 @@ export interface INLEAdapter {
   trimClip(input: TrimClipInput): Promise<Clip>;
   moveClip(input: MoveClipInput): Promise<Clip>;
   deleteClip(clipId: string): Promise<void>;
+  /** A3 — Tắt/bật clip (disable). An toàn hơn xoá; dùng cho "lọc clip kém". */
+  setClipDisabled(clipId: string, disabled: boolean): Promise<void>;
 
   listTracks(sequenceId: string): Promise<readonly Track[]>;
 

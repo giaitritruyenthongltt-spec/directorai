@@ -60,13 +60,29 @@ export interface PProTrackItem {
   getMediaType(): Promise<string>;
   getProjectItem(): Promise<PProProjectItem | null>;
   getComponentChain(): Promise<PProComponentChain>;
-  move(time: TickTime): Promise<boolean>;
-  remove(rippleEdit: boolean, alignToVideo: boolean): Promise<boolean>;
-  setInPoint(time: TickTime): Promise<boolean>;
-  setOutPoint(time: TickTime): Promise<boolean>;
-  setStartTime(time: TickTime): Promise<boolean>;
-  setDisabled(disabled: boolean): Promise<boolean>;
   isDisabled(): Promise<boolean>;
+
+  // ─── A1 — Action factories (Premiere 26 edit model) ──────────────────
+  // Các method dưới đây trả về 1 PProAction; phải đưa vào compoundAction
+  // bên trong project.executeTransaction để thực sự áp dụng.
+  createSetDisabledAction(disabled: boolean): PProAction;
+  createSetInPointAction(time: TickTime): PProAction;
+  createSetOutPointAction(time: TickTime): PProAction;
+  createSetStartAction(time: TickTime): PProAction;
+  createSetEndAction(time: TickTime): PProAction;
+  createSetNameAction(name: string): PProAction;
+  createMoveAction(time: TickTime): PProAction;
+  createAddVideoTransitionAction?(...args: unknown[]): PProAction;
+  createRemoveVideoTransitionAction?(...args: unknown[]): PProAction;
+
+  // ─── Legacy direct-mutation (KHÔNG hoạt động trên Premiere 26) ───────
+  // Giữ optional để code cũ + mock vẫn compile; uxp.ts không dùng nữa.
+  move?(time: TickTime): Promise<boolean>;
+  remove?(rippleEdit: boolean, alignToVideo: boolean): Promise<boolean>;
+  setInPoint?(time: TickTime): Promise<boolean>;
+  setOutPoint?(time: TickTime): Promise<boolean>;
+  setStartTime?(time: TickTime): Promise<boolean>;
+  setDisabled?(disabled: boolean): Promise<boolean>;
 }
 
 export interface PProTrack {
@@ -137,8 +153,26 @@ export interface PProProject {
     asNumberedStill: boolean
   ): Promise<boolean>;
   lockedAccess<T>(action: () => Promise<T> | T): Promise<T>;
-  executeTransaction(action: () => Promise<void> | void, label: string): Promise<boolean>;
+  /**
+   * A1 — Premiere 26 dùng mô hình Transaction + Action cho mọi edit.
+   * Callback nhận một CompoundAction; bạn tạo action qua các factory
+   * `createXxxAction` trên trackItem/sequence rồi addAction vào.
+   */
+  executeTransaction(
+    action: (compoundAction: PProCompoundAction) => void,
+    label?: string
+  ): Promise<boolean>;
   createBin(name: string, parent?: PProProjectItem): Promise<PProProjectItem>;
+}
+
+/** A1 — Một edit nguyên tử (vd kết quả của createSetOutPointAction). */
+export interface PProAction {
+  readonly __action?: true;
+}
+
+/** A1 — Gom nhiều Action thành 1 transaction (1 undo step). */
+export interface PProCompoundAction {
+  addAction(action: PProAction): void;
 }
 
 export interface PProProjectStatic {
