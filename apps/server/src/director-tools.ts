@@ -95,24 +95,76 @@ export class CompositeTools {
 
   // ─── context.scanClips ────────────────────────────────────────────────
 
-  /** Read all clips from the active sequence (or a given sequenceId) and
-   *  return a compact summary that downstream LLM steps can reason about. */
-  async scanClips(params: { sequenceId?: string }): Promise<{
+  /**
+   * P1-1 — Read all clips and optionally rank by visual quality.
+   *
+   * If `rankByQuality: true` is passed, the sidecar /vision/analyze_clip
+   * endpoint scores each clip's blur/exposure/focus/framing composite,
+   * and the result is sorted desc by score. Otherwise just lists clips.
+   * `topN` (default no limit) trims the result for rough-cut workflows.
+   */
+  async scanClips(params: {
+    sequenceId?: string;
+    rankByQuality?: boolean;
+    topN?: number;
+    sampleCount?: number;
+  }): Promise<{
     count: number;
-    clips: { id: string; name: string; path: string; durationSec: number }[];
+    ranked: boolean;
+    clips: {
+      id: string;
+      name: string;
+      path: string;
+      durationSec: number;
+      quality?: number;
+    }[];
   }> {
     const seqId = params.sequenceId ?? (await this.deps.adapter.getActiveSequence())?.id;
     if (!seqId) throw new Error('No active sequence');
     const clips = await this.deps.adapter.listClips(seqId);
-    return {
-      count: clips.length,
-      clips: clips.map((c) => ({
-        id: c.id,
-        name: c.name,
-        path: c.source?.path ?? '',
-        durationSec: c.timelineRange.end - c.timelineRange.start,
-      })),
-    };
+
+    interface Out {
+      id: string;
+      name: string;
+      path: string;
+      durationSec: number;
+      quality?: number;
+    }
+
+    const summary: Out[] = clips.map((c) => ({
+      id: c.id,
+      name: c.name,
+      path: c.source?.path ?? '',
+      durationSec: c.timelineRange.end - c.timelineRange.start,
+    }));
+
+    if (!params.rankByQuality) {
+      const out = typeof params.topN === 'number' ? summary.slice(0, params.topN) : summary;
+      return { count: summary.length, ranked: false, clips: out };
+    }
+
+    const sampleCount = params.sampleCount ?? 5;
+    let scored = 0;
+    for (const c of summary) {
+      if (!c.path) continue;
+      try {
+        const r = await sidecarPost<SidecarAnalyzeClip>('/vision/analyze_clip', {
+          path: c.path,
+          sample_count: sampleCount,
+        });
+        c.quality = r.quality.composite;
+        scored++;
+      } catch (e) {
+        this.deps.logger.debug(
+          { clipId: c.id, error: e instanceof Error ? e.message : String(e) },
+          'scanClips score skip'
+        );
+      }
+    }
+    summary.sort((a, b) => (b.quality ?? -1) - (a.quality ?? -1));
+    this.deps.logger.info({ total: summary.length, scored }, 'context.scanClips ranked by quality');
+    const out = typeof params.topN === 'number' ? summary.slice(0, params.topN) : summary;
+    return { count: summary.length, ranked: true, clips: out };
   }
 
   // ─── context.scoreQuality ─────────────────────────────────────────────
@@ -203,49 +255,99 @@ export class CompositeTools {
     audioPath: string;
   }): Promise<{ silences: { start: number; end: number }[] }> {
     if (!params.audioPath) throw new Error('audioPath required');
-    // Sidecar exposes analyze_audio but no dedicated /silences endpoint —
-    // for now use scene detect endpoint which already exists. Future-fix
-    // will add /silences proper.
-    const r = await sidecarPost<{ shots: { start: number; end: number }[] }>('/scenes', {
+    // P1-2 — real /audio/silences endpoint now exists in the sidecar
+    // (modules/silences.py), backed by audio_analyze.detect_silences.
+    const r = await sidecarPost<{
+      media_path: string;
+      silences: { start: number; end: number }[];
+    }>('/audio/silences', {
       media_path: params.audioPath,
     });
-    // Adapt to silences shape if scene endpoint returns shots. Best-effort.
-    return { silences: r.shots ?? [] };
+    this.deps.logger.info(
+      { count: r.silences.length, media: r.media_path },
+      'context.detectSilences complete'
+    );
+    return { silences: r.silences };
   }
 
   // ─── timeline.cutOnBeats ──────────────────────────────────────────────
 
-  /** Iterate beats and call adapter.cutClip for each. Skips beats outside
-   *  the clip's time range. */
-  async cutOnBeats(params: {
-    sequenceId: string;
-    beats: number[];
-    clipId?: string;
-  }): Promise<{ cuts: number; skipped: number }> {
+  /**
+   * P1-3 — Cut the sequence at each beat time.
+   *
+   * Without `clipId`, walks the V1 clip list and finds the clip whose
+   * timeline range contains each beat (so a single 60s music track laid
+   * across many video clips still cuts the *right* clip at every beat).
+   * With `clipId`, scopes the cuts to that one clip.
+   */
+  async cutOnBeats(params: { sequenceId: string; beats: number[]; clipId?: string }): Promise<{
+    cuts: number;
+    skipped: number;
+    details: { beatSec: number; clipId?: string; ok: boolean; reason?: string }[];
+  }> {
     if (!params.beats?.length) throw new Error('beats array required');
+
+    // Pre-load the sequence's clip list once when caller didn't pin a clip.
+    let clipsOnSeq: Clip[] = [];
+    if (!params.clipId) {
+      clipsOnSeq = [...(await this.deps.adapter.listClips(params.sequenceId))]
+        // Only video clips are relevant for visual cuts. Audio cuts go via
+        // adapter.cutClip on the audio track when needed — out of scope here.
+        .filter((c) => c.kind === 'video')
+        .sort((a, b) => a.timelineRange.start - b.timelineRange.start);
+    }
+
     let cuts = 0;
     let skipped = 0;
+    const details: { beatSec: number; clipId?: string; ok: boolean; reason?: string }[] = [];
+
     for (const beatSec of params.beats) {
-      try {
-        if (params.clipId) {
-          await this.deps.adapter.cutClip({
-            clipId: params.clipId,
-            at: beatSec as never,
-          });
-          cuts++;
-        } else {
-          // Without a target clipId we'd need to find the clip under the
-          // playhead at beatSec — skipped for now, caller should pass clipId.
-          skipped++;
-        }
-      } catch (e) {
-        this.deps.logger.debug(
-          { beatSec, error: e instanceof Error ? e.message : String(e) },
-          'cutOnBeats skip'
+      // Locate the target clip: explicit override OR clip-under-beat.
+      let targetClipId = params.clipId;
+      let targetClip: Clip | undefined;
+      if (!targetClipId) {
+        targetClip = clipsOnSeq.find(
+          (c) => c.timelineRange.start <= beatSec && beatSec < c.timelineRange.end
         );
+        targetClipId = targetClip?.id;
+      }
+      if (!targetClipId) {
         skipped++;
+        details.push({ beatSec, ok: false, reason: 'no clip at beat' });
+        continue;
+      }
+      // Refuse cuts within 1 frame of either edge — Premiere rejects those
+      // and they'd just thrash. 0.04s ≈ 1 frame @25fps, conservative.
+      if (targetClip) {
+        const eps = 0.04;
+        if (
+          beatSec <= targetClip.timelineRange.start + eps ||
+          beatSec >= targetClip.timelineRange.end - eps
+        ) {
+          skipped++;
+          details.push({ beatSec, clipId: targetClipId, ok: false, reason: 'edge of clip' });
+          continue;
+        }
+      }
+      try {
+        await this.deps.adapter.cutClip({
+          clipId: targetClipId,
+          at: beatSec as never,
+        });
+        cuts++;
+        details.push({ beatSec, clipId: targetClipId, ok: true });
+      } catch (e) {
+        skipped++;
+        const msg = e instanceof Error ? e.message : String(e);
+        details.push({ beatSec, clipId: targetClipId, ok: false, reason: msg });
+        this.deps.logger.debug({ beatSec, error: msg }, 'cutOnBeats skip');
       }
     }
-    return { cuts, skipped };
+
+    this.deps.logger.info(
+      { beats: params.beats.length, cuts, skipped },
+      'timeline.cutOnBeats complete'
+    );
+    return { cuts, skipped, details };
   }
 }

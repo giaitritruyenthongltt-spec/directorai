@@ -42,6 +42,7 @@
     "smoke:director": "tsx tools/smoke-director.ts",
     "smoke:director-ws": "tsx tools/smoke-director-ws.ts",
     "smoke:effect-apply": "tsx tools/smoke-effect-apply.ts",
+    "smoke:rough-cut": "tsx tools/smoke-rough-cut.ts",
     "prepare": "husky"
   },
   "devDependencies": {

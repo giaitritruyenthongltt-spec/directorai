@@ -247,6 +247,23 @@ def create_app() -> FastAPI:
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
 
+    @app.post("/audio/silences")
+    async def post_silences(req: BeatRequest) -> dict[str, object]:
+        """P1-2 — Detect silent intervals in an audio/video file.
+
+        Reuses BeatRequest shape (`media_path`) so callers don't need a
+        new model. Returns `{ media_path, silences: [{start, end}] }`.
+        """
+        from directorai_context.modules.silences import detect_silences_in_file
+
+        try:
+            return detect_silences_in_file(req.media_path)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            log.error("silences_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
     @app.post("/vision", response_model=VisionResult)
     async def post_vision(req: VisionRequest) -> VisionResult:
         from directorai_context.modules.vision import analyze_video

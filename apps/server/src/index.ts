@@ -17,6 +17,7 @@ import { initSentry } from './sentry.js';
 import { createTelemetryRouter } from './telemetry-router.js';
 import { createFirstRunRouter } from './first-run-router.js';
 import { DirectorRouter } from './director-router.js';
+import { CompositeTools } from './director-tools.js';
 import { loadAllPlugins, deactivateAll } from './plugin-loader.js';
 import path from 'node:path';
 import { ConsentStore, InMemorySink, TelemetryClient } from '@directorai/telemetry';
@@ -112,13 +113,23 @@ async function main(): Promise<void> {
   // Loaded from env (GEMINI_API_KEY / ANTHROPIC_API_KEY) — returns null if
   // no key is set, in which case the WS server replies with a friendly
   // METHOD_NOT_FOUND for director.* calls.
+  // P1-1/P1-3 — Composite tool layer. Handles `context.scanClips`,
+  // `context.scoreQuality`, `context.detectBeats`, `context.detectSilences`,
+  // `timeline.cutOnBeats` — high-level operations that compose adapter
+  // primitives + Python sidecar HTTP. The director's PlanExecutor probes
+  // composites first, then falls through to the primitive RPC dispatcher.
+  const compositeTools: { current: CompositeTools | null } = { current: null };
+
   const directorRouter = DirectorRouter.fromEnv({
     logger,
     toolDispatch: async (step) => {
-      // For now route every tool call through the routed adapter via RPC.
-      // The adapter handles routing to either the UXP panel or the mock
-      // fallback. Tool-name → adapter-method translation is 1:1.
       if (!routedAdapterRef.current) throw new Error('Adapter not ready');
+      // Try composite layer first (returns null on miss → fall through).
+      if (compositeTools.current) {
+        const composite = await compositeTools.current.maybeHandle(step.tool, step.params);
+        if (composite !== null) return composite;
+      }
+      // Primitive RPC — routed through panel or mock adapter.
       const { dispatchRpc } = await import('./rpc-dispatcher.js');
       return dispatchRpc(step.tool, step.params, routedAdapterRef.current);
     },
@@ -158,6 +169,14 @@ async function main(): Promise<void> {
       return (await dispatchRpc(method, params, mockAdapter)) as T;
     }
   );
+
+  // Now that routedAdapterRef is live, instantiate the composite tools so
+  // the director's toolDispatch closure (defined above) can reach them.
+  compositeTools.current = new CompositeTools({
+    adapter: routedAdapterRef.current,
+    logger,
+  });
+  logger.info({ methods: compositeTools.current.listMethods().length }, 'Composite tools wired');
 
   const mcpServer = await startMcpServer({
     logger,
