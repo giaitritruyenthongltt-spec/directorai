@@ -35,11 +35,19 @@ interface Plan {
   steps: PlanStep[];
 }
 
+interface StepResult {
+  stepId: number;
+  ok: boolean;
+  error?: string;
+  elapsedMs: number;
+}
+
 interface PlanProgress {
   planId: string;
   status: PlanStatus;
   currentStep: number;
   totalSteps: number;
+  stepResults?: StepResult[];
 }
 
 const GOAL_PRESETS = [
@@ -129,6 +137,28 @@ export function DirectorTab(): React.ReactElement {
       await wsClient.call('director.cancel', { planId: progress.planId });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  // P3-3 — refine the current plan with free-text feedback.
+  const [feedback, setFeedback] = useState<string>('');
+  const refine = async (): Promise<void> => {
+    if (!progress?.planId || !feedback.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const refined = await wsClient.call<Plan>('director.refine', {
+        previousPlanId: progress.planId,
+        feedback: feedback.trim(),
+        persona,
+      });
+      setPlan(refined);
+      setProgress(null);
+      setFeedback('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -249,14 +279,34 @@ export function DirectorTab(): React.ReactElement {
           </p>
           {plan.note && <p className="director-plan-note">{plan.note}</p>}
           <ol className="director-steps">
-            {plan.steps.map((s) => (
-              <li key={s.id} className={`director-step ${s.checkpoint ? 'checkpoint' : ''}`}>
-                <span className="director-step-id">{s.id}</span>
-                <span className="director-step-tool">{s.tool}</span>
-                <span className="director-step-why">{s.why}</span>
-                {s.checkpoint && <span className="director-step-cp">⏸ điểm dừng</span>}
-              </li>
-            ))}
+            {plan.steps.map((s) => {
+              // P3-2 — annotate each step with live progress state.
+              const resultsForStep = progress?.stepResults?.find((r) => r.stepId === s.id);
+              const isCurrent = progress?.status === 'running' && progress.currentStep + 1 === s.id;
+              const classes = [
+                'director-step',
+                s.checkpoint ? 'checkpoint' : '',
+                isCurrent ? 'current' : '',
+                resultsForStep ? (resultsForStep.ok ? 'ok' : 'failed') : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
+              return (
+                <li key={s.id} className={classes}>
+                  <span className="director-step-id">
+                    {resultsForStep?.ok ? '✓' : resultsForStep ? '✗' : isCurrent ? '▶' : s.id}
+                  </span>
+                  <span className="director-step-tool">{s.tool}</span>
+                  <span className="director-step-why">{s.why}</span>
+                  {s.checkpoint && <span className="director-step-cp">⏸ điểm dừng</span>}
+                  {resultsForStep && !resultsForStep.ok && resultsForStep.error && (
+                    <span className="director-step-err" title={resultsForStep.error}>
+                      {resultsForStep.error.slice(0, 60)}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ol>
           {!progress && (
             <div className="director-plan-actions">
@@ -290,9 +340,31 @@ export function DirectorTab(): React.ReactElement {
           {(progress.status === 'done' ||
             progress.status === 'error' ||
             progress.status === 'cancelled') && (
-            <button className="director-secondary" onClick={reset}>
-              Plan mới
-            </button>
+            <>
+              <button className="director-secondary" onClick={reset}>
+                Plan mới
+              </button>
+              {/* P3-3 — refine feedback box, only after a run finishes */}
+              <div className="director-refine">
+                <label htmlFor="refine-input">Tinh chỉnh plan này:</label>
+                <textarea
+                  id="refine-input"
+                  className="director-custom-goal"
+                  placeholder="e.g. cắt nhanh hơn, màu ấm hơn, bỏ phần silence"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  disabled={busy}
+                  rows={2}
+                />
+                <button
+                  className="director-secondary"
+                  onClick={() => void refine()}
+                  disabled={busy || !feedback.trim()}
+                >
+                  🔁 Tinh chỉnh
+                </button>
+              </div>
+            </>
           )}
         </section>
       )}

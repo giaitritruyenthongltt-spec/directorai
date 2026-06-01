@@ -197,6 +197,55 @@
   text-transform: uppercase;
 }
 
+/* P3-2 — Live step status colors */
+.director-step.current {
+  background: rgba(99, 102, 241, 0.18);
+  border-left: 2px solid #818cf8;
+  font-weight: 600;
+}
+
+.director-step.ok {
+  opacity: 0.6;
+}
+
+.director-step.ok .director-step-id {
+  color: #34d399;
+}
+
+.director-step.failed {
+  background: rgba(239, 68, 68, 0.08);
+  border-left: 2px solid #ef4444;
+}
+
+.director-step.failed .director-step-id {
+  color: #ef4444;
+}
+
+.director-step-err {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  color: #fca5a5;
+  padding: 2px 6px 0;
+  word-break: break-word;
+}
+
+/* P3-3 — Refine feedback box */
+.director-refine {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--ui-border, #3e3e3e);
+}
+
+.director-refine label {
+  font-size: 11px;
+  color: var(--ui-text-secondary, #969696);
+  font-weight: 600;
+}
+
 .director-progress {
   display: flex;
   flex-direction: column;
