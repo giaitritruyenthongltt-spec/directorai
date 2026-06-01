@@ -14,19 +14,26 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     loadDotenv();
   }
 
+  // Treat empty strings the same as undefined so an inherited but-empty env
+  // var doesn't break schema validation (e.g. ANTHROPIC_API_KEY="" → undefined).
+  const env = (k: string): string | undefined => {
+    const v = process.env[k];
+    return v && v.length > 0 ? v : undefined;
+  };
+
   const raw = {
-    env: process.env.NODE_ENV,
-    logLevel: process.env.LOG_LEVEL,
+    env: env('NODE_ENV'),
+    logLevel: env('LOG_LEVEL'),
     server: {
-      host: process.env.SERVER_HOST,
-      port: process.env.SERVER_PORT ? Number(process.env.SERVER_PORT) : undefined,
-      wsPort: process.env.WS_PORT ? Number(process.env.WS_PORT) : undefined,
+      host: env('SERVER_HOST'),
+      port: env('SERVER_PORT') ? Number(env('SERVER_PORT')) : undefined,
+      wsPort: env('WS_PORT') ? Number(env('WS_PORT')) : undefined,
     },
     llm: {
-      provider: process.env.LLM_PROVIDER as 'anthropic' | 'openai' | 'gemini' | undefined,
-      apiKey: process.env.ANTHROPIC_API_KEY ?? process.env.LLM_API_KEY,
-      model: process.env.LLM_MODEL,
-      maxTokens: process.env.LLM_MAX_TOKENS ? Number(process.env.LLM_MAX_TOKENS) : undefined,
+      provider: env('LLM_PROVIDER') as 'anthropic' | 'openai' | 'gemini' | undefined,
+      apiKey: env('ANTHROPIC_API_KEY') ?? env('LLM_API_KEY'),
+      model: env('LLM_MODEL'),
+      maxTokens: env('LLM_MAX_TOKENS') ? Number(env('LLM_MAX_TOKENS')) : undefined,
     },
     context: {
       url: process.env.CONTEXT_ENGINE_URL,

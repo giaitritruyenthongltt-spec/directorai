@@ -1,19 +1,14 @@
 {
-  "manifestVersion": 6,
+  "manifestVersion": 5,
   "id": "com.directorai.panel",
   "name": "DirectorAI",
   "version": "0.2.0",
   "main": "index.html",
-  "host": [
-    {
-      "app": "PP",
-      "minVersion": "24.0",
-      "data": {
-        "apiVersion": 2
-      }
-    }
-  ],
-  "entryPoints": [
+  "host": {
+    "app": "premierepro",
+    "minVersion": "25.1.0"
+  },
+  "entrypoints": [
     {
       "type": "panel",
       "id": "directorai-main",
@@ -23,7 +18,23 @@
       "minimumSize": { "width": 320, "height": 480 },
       "maximumSize": { "width": 800, "height": 2048 },
       "preferredDockedSize": { "width": 400, "height": 600 },
-      "icons": [{ "width": 23, "height": 23, "path": "icons/icon23.png", "scale": [1, 2] }]
+      "icons": [
+        {
+          "width": 23,
+          "height": 23,
+          "path": "icons/icon23.png",
+          "scale": [1, 2]
+        }
+      ]
+    }
+  ],
+  "icons": [
+    {
+      "width": 48,
+      "height": 48,
+      "path": "icons/icon23.png",
+      "scale": [1, 2],
+      "species": ["pluginList"]
     }
   ],
   "requiredPermissions": {
