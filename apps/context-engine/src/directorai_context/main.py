@@ -11,6 +11,8 @@ from directorai_context import __version__
 from directorai_context.config import get_settings
 from directorai_context.logger import log
 from directorai_context.modules.hardware import probe as probe_hardware
+from directorai_context.storage import init_db
+from directorai_context.storage import repositories as store
 from directorai_context.models import (
     BeatRequest,
     BeatResult,
@@ -38,6 +40,9 @@ def create_app() -> FastAPI:
         description="ML service for transcription, scene detection, beat tracking, vision analysis",
     )
 
+    # Sprint A.3 — ensure SQLite schema exists on startup. Idempotent.
+    init_db()
+
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
@@ -46,6 +51,11 @@ def create_app() -> FastAPI:
     async def hardware() -> dict[str, object]:
         """Sprint A.5 — hardware report for the Node server to pick model variants."""
         return probe_hardware().to_dict()
+
+    @app.get("/storage/stats")
+    async def storage_stats() -> dict[str, int]:
+        """Sprint A.3 — row counts for clips / analyses / plans / styles."""
+        return store.stats()
 
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket) -> None:
@@ -80,6 +90,8 @@ def create_app() -> FastAPI:
                         result = probe_hardware().to_dict()
                     elif method == "health":
                         result = {"status": "ok", "version": __version__}
+                    elif method == "storage.stats":
+                        result = store.stats()
                     else:
                         await ws.send_text(
                             json.dumps(

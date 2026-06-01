@@ -23,6 +23,11 @@ dependencies = [
     # Embeddings + vector store
     "sentence-transformers>=3.2.0",
     "chromadb>=0.5.15",
+    # Sprint A.3 — relational storage
+    "sqlalchemy>=2.0.35",
+    "alembic>=1.13.3",
+    # Sprint A.5 — hardware probe (optional accelerator)
+    "psutil>=6.1.0",
 ]
 
 [project.optional-dependencies]
