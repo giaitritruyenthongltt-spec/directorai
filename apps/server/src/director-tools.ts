@@ -83,6 +83,8 @@ export class CompositeTools {
         return this.analyzeColor(params as { clipPath: string });
       case 'context.classifyScene':
         return this.classifyScene(params as { clipPath: string });
+      case 'context.understandClip':
+        return this.understandClip(params as { clipPath: string; frames?: number });
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
       case 'color.applyLookByScene':
@@ -103,9 +105,40 @@ export class CompositeTools {
       'context.listEffects',
       'context.analyzeColor',
       'context.classifyScene',
+      'context.understandClip',
       'timeline.cutOnBeats',
       'color.applyLookByScene',
     ];
+  }
+
+  // ─── context.understandClip (AI-1 — Vision) ───────────────────────────
+
+  /**
+   * AI-1 — Hiểu ngữ nghĩa 1 clip bằng Gemini Vision (Tầng 2). Trả về
+   * understanding có quality_verdict + lý do (phân biệt blur-action vs
+   * blur-lỗi) thay vì chỉ con số.
+   */
+  async understandClip(params: { clipPath: string; frames?: number }): Promise<{
+    media_path: string;
+    summary: string;
+    scene_type: string;
+    action_level: number;
+    is_key_moment: boolean;
+    key_moment_type: string | null;
+    subjects: string[];
+    blur_assessment: string;
+    quality_verdict: 'keep' | 'review' | 'discard';
+    quality_reason: string;
+    emotion: string;
+    confidence: number;
+    frames_used: number;
+  }> {
+    if (!params.clipPath) throw new Error('clipPath required');
+    const interval = params.frames ? 1.0 / params.frames : 0.33;
+    return sidecarPost('/vision/understand_clip', {
+      media_path: params.clipPath,
+      sample_interval_sec: interval,
+    });
   }
 
   // ─── context.classifyScene ────────────────────────────────────────────

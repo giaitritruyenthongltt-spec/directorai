@@ -247,6 +247,29 @@ def create_app() -> FastAPI:
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
 
+    @app.post("/vision/understand_clip")
+    async def post_understand_clip(req: VisionRequest) -> dict[str, object]:
+        """AI-1 — Hiểu ngữ nghĩa 1 clip bằng Gemini Vision (Tầng 2).
+
+        Dùng VisionRequest (media_path + sample_interval_sec). Số frame
+        suy từ sample_interval (hoặc mặc định config).
+        """
+        from directorai_context.modules.vision_understand import understand_clip
+
+        try:
+            frames = None
+            try:
+                if req.sample_interval_sec and req.sample_interval_sec > 0:
+                    frames = max(1, min(8, round(1.0 / req.sample_interval_sec)))
+            except (TypeError, ValueError):
+                frames = None
+            return understand_clip(req.media_path, frames=frames)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            log.error("understand_clip_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
     @app.post("/scenes/classify")
     async def post_scene_classify(req: VisionRequest) -> dict[str, object]:
         """F6 — Heuristic scene class + aesthetic-lite score.

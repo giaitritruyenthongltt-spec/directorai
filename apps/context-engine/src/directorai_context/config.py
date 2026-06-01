@@ -8,10 +8,29 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _find_env_files() -> list[str]:
+    """Tìm .env ở cả thư mục hiện tại lẫn repo root (đi lên tối đa 5 cấp)
+    để sidecar đọc được GEMINI_API_KEY đặt ở .env gốc của monorepo."""
+    found: list[str] = []
+    cur = Path.cwd()
+    for _ in range(6):
+        candidate = cur / ".env"
+        if candidate.exists():
+            found.append(str(candidate))
+        if (cur / "pnpm-workspace.yaml").exists() or (cur / ".git").exists():
+            break
+        if cur.parent == cur:
+            break
+        cur = cur.parent
+    return found or [".env"]
+
+
 class Settings(BaseSettings):
     """Application settings."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="CONTEXT_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_find_env_files(), env_prefix="CONTEXT_", extra="ignore"
+    )
 
     # Service
     host: str = "127.0.0.1"
@@ -30,10 +49,15 @@ class Settings(BaseSettings):
     # Beat
     beat_sample_rate: int = 22_050
 
-    # Vision
+    # Vision (Claude — legacy)
     vision_sample_interval_sec: float = 2.0
     anthropic_api_key: str = Field(default="", validation_alias="ANTHROPIC_API_KEY")
     vision_model: str = "claude-haiku-4-5-20251001"
+
+    # AI-1 — Gemini Vision (hiểu ngữ nghĩa clip)
+    gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
+    gemini_vision_model: str = "gemini-2.5-flash"
+    vision_frames_per_clip: int = 3  # số frame gửi Gemini / clip (cost)
 
     # Cache
     cache_dir: Path = Field(default_factory=lambda: Path.home() / ".directorai" / "cache")

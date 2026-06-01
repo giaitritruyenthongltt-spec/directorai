@@ -31,9 +31,11 @@ qua hiểu biết của AI + bạn duyệt + hoàn tác được.
 | disable / trim / move / transition                   | ✅ Code xong (disable verified) |
 | Giao diện tiếng Việt + nút hướng dẫn + sơ đồ         | ✅ Live                         |
 | Ops log + panel telemetry + auto-reload-verify       | ✅ Công cụ debug                |
+| **Tầng 2 — AI XEM + HIỂU clip** (Gemini Vision)      | ✅ **VERIFIED** (7/7 Nerf thật) |
 
-**Mảnh còn THIẾU cốt lõi**: Tầng 2 — AI **XEM và HIỂU** nội dung (Vision).
-Hiện AI mới có "số" (CV), chưa có "ý nghĩa".
+**Mảnh còn THIẾU cốt lõi**: Tầng 3 — gộp hiểu-biết-từng-clip thành **bản đồ
+video tổng** (cốt truyện, cao trào, clip trùng). Tầng 2 đã chứng minh AI mô
+tả đúng "cú trúng đạn" + phân biệt action-blur vs lỗi-thật.
 
 ---
 
@@ -170,21 +172,21 @@ Tab tự render từ registry. Không sửa UI, không sửa server.
 
 ## 6. LỘ TRÌNH THỰC THI (thứ tự, gộp nhất quán)
 
-| GĐ          | Tên                        | Nội dung                                                                | Trạng thái          |
-| ----------- | -------------------------- | ----------------------------------------------------------------------- | ------------------- |
-| **Track A** | Nền ghi                    | executeTransaction + Action model                                       | ✅ XONG             |
-| **AI-1**    | Vision pipeline (Tầng 2)   | sample keyframe → Gemini Vision → "clip understanding"                  | ⬜ TIẾP THEO        |
-| **AI-2**    | Video map (Tầng 3)         | gộp understanding → bản đồ video                                        | ⬜                  |
-| **AI-3**    | Editorial planner (Tầng 4) | bản đồ + mục tiêu → kế hoạch có lý do                                   | ⬜                  |
-| **SAFE-1**  | Tầng an toàn               | checkpoint tự động + preview bắt buộc + chế độ báo-cáo                  | ⬜                  |
-| **MOD-1**   | Khung module               | package modules: types+registry+pipeline                                | ⬜                  |
-| **MOD-2**   | Tab Tự động                | checklist + params + Run + UnderstandingView                            | ⬜                  |
-| **MOD-3**   | 6 module Tầng 1            | lọc/cắt-lặng/tỉa/xếp/đổi-tên/transition (mỗi cái signals+judge+execute) | ⬜                  |
-| **MOD-4**   | Verify màu Lumetri         | introspect component chain → Tầng 3 ready hay FCPXML                    | ⬜                  |
-| **MOD-5**   | Tab Phân tích              | báo cáo CSV/HTML (Tầng 2)                                               | ⬜                  |
-| **COST-1**  | Tối ưu Vision              | cụm hoá + cache theo file hash                                          | ⬜                  |
-| **MOD-6**   | FCPXML (Tầng 4)            | speed/beat-cut/auto-build                                               | ⬜ (quyết định sau) |
-| **MOD-7**   | Template Nerf              | lưu template + nút preset 1-click                                       | ⬜                  |
+| GĐ          | Tên                        | Nội dung                                                                | Trạng thái                                      |
+| ----------- | -------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- |
+| **Track A** | Nền ghi                    | executeTransaction + Action model                                       | ✅ XONG                                         |
+| **AI-1**    | Vision pipeline (Tầng 2)   | sample keyframe → Gemini Vision → "clip understanding"                  | ✅ **VERIFIED** (7/7 clip Nerf thật, 3.9s/clip) |
+| **AI-2**    | Video map (Tầng 3)         | gộp understanding → bản đồ video                                        | ⬜ TIẾP THEO                                    |
+| **AI-3**    | Editorial planner (Tầng 4) | bản đồ + mục tiêu → kế hoạch có lý do                                   | ⬜                                              |
+| **SAFE-1**  | Tầng an toàn               | checkpoint tự động + preview bắt buộc + chế độ báo-cáo                  | ⬜                                              |
+| **MOD-1**   | Khung module               | package modules: types+registry+pipeline                                | ⬜                                              |
+| **MOD-2**   | Tab Tự động                | checklist + params + Run + UnderstandingView                            | ⬜                                              |
+| **MOD-3**   | 6 module Tầng 1            | lọc/cắt-lặng/tỉa/xếp/đổi-tên/transition (mỗi cái signals+judge+execute) | ⬜                                              |
+| **MOD-4**   | Verify màu Lumetri         | introspect component chain → Tầng 3 ready hay FCPXML                    | ⬜                                              |
+| **MOD-5**   | Tab Phân tích              | báo cáo CSV/HTML (Tầng 2)                                               | ⬜                                              |
+| **COST-1**  | Tối ưu Vision              | cụm hoá + cache theo file hash                                          | ⬜                                              |
+| **MOD-6**   | FCPXML (Tầng 4)            | speed/beat-cut/auto-build                                               | ⬜ (quyết định sau)                             |
+| **MOD-7**   | Template Nerf              | lưu template + nút preset 1-click                                       | ⬜                                              |
 
 **Đường tới hành**: Track A ✅ → AI-1 → AI-2 → SAFE-1 → MOD-1 → MOD-3.
 Mỗi mốc verify live trên video Nerf thật.
