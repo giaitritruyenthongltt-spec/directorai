@@ -202,58 +202,22 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   }
 
   /**
-   * D5 — Premiere 26 `lockedAccess` hangs all mutations indefinitely
-   * (live observed: marker.add, cutClip, applyEffect all timeout >90s).
-   * Hypothesis: the lockedAccess wrapper signature changed in 26 and
-   * either never resolves or deadlocks the panel thread.
-   *
-   * Fallback strategy: race lockedAccess against a 5s timeout. If it
-   * hasn't acquired the lock by then, skip the wrapper and call the
-   * action directly. Loses undo grouping but unblocks the write path.
-   *
-   * Set `DIRECTORAI_BYPASS_LOCK=1` to skip lockedAccess entirely
-   * (useful for Premiere 26 environments where the API is broken).
+   * E1 — Reverted D5's Promise.race. The race left lockedPromise
+   * unhandled after timeout winner, creating unhandled rejection that
+   * may have crashed the panel React tree at module evaluation.
+   * Back to original simple shape.
    */
   private async mutate<T>(label: string, action: () => Promise<T>): Promise<T> {
     const proj = await this.project();
-    const bypass = typeof process !== 'undefined' && process.env?.DIRECTORAI_BYPASS_LOCK === '1';
-
-    if (bypass) {
-      // Direct path — no lockedAccess wrapper. Each mutation is its own
-      // undo step in Premiere's history. Slower for batch ops but works.
-      return action();
-    }
-
-    // Try lockedAccess but race a 5s timeout. If it doesn't fire by then
-    // we assume the API is hung and fall back to direct.
     let result!: T;
     let captured: unknown;
-    let resolved = false;
-
-    const lockedPromise = proj.lockedAccess(async () => {
+    await proj.lockedAccess(async () => {
       try {
         result = await action();
-        resolved = true;
       } catch (err) {
         captured = err;
-        resolved = true;
       }
     });
-
-    const timeoutPromise = new Promise<'timeout'>((res) => setTimeout(() => res('timeout'), 5000));
-
-    const winner = await Promise.race([
-      lockedPromise.then(() => 'locked' as const),
-      timeoutPromise,
-    ]);
-
-    if (winner === 'timeout' && !resolved) {
-      // Premiere 26 lockedAccess didn't enter callback in 5s — fall back.
-
-      console.warn(`[mutate ${label}] lockedAccess timeout, falling back to direct call`);
-      return action();
-    }
-
     if (captured) {
       throw new AdapterError('UXP', `${label} failed`, captured);
     }
