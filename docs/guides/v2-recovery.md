@@ -6,6 +6,25 @@ the fallback paths below.
 
 ---
 
+## ⚠️ Premiere version requirement
+
+UXP for Premiere ships in **v25.6 or later** (released May 2025).
+Any version below that has **no UXP runtime at all** — no side-load,
+no UDT, no plugin manifest of any kind will load. `pnpm diagnose:v2`
+now reports this explicitly.
+
+| Premiere version    | UXP works? |
+| ------------------- | :--------: |
+| 24.x (2024 release) |     ❌     |
+| 25.0 – 25.5         |     ❌     |
+| **25.6+**           |     ✅     |
+| 26.x (2026 release) |     ✅     |
+
+If `pnpm diagnose:v2` shows your Premiere is below 25.6, **upgrade
+Premiere before doing anything else in this guide**.
+
+---
+
 ## Path B — Side-load (no UDT, no CC needed) ★ fastest
 
 The `.ccx` is just a zip. Premiere will load any plugin found at:

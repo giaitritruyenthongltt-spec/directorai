@@ -62,22 +62,61 @@ function regQueryDisplayNames(): string[] {
   }
 }
 
-function findFirstPremiere(): { name: string; version: string; path: string } | null {
+function getExeProductVersion(exePath: string): string | null {
+  try {
+    // wmic was deprecated; use PowerShell with the exe path passed via env
+    // to dodge nested-quoting hell.
+    const out = execSync(
+      'powershell -NoProfile -Command "(Get-Item $env:DA_EXE).VersionInfo.ProductVersion"',
+      {
+        encoding: 'utf8',
+        env: { ...process.env, DA_EXE: exePath },
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }
+    );
+    return out.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function findFirstPremiere(): {
+  name: string;
+  year: string;
+  productVersion: string | null;
+  path: string;
+  uxpCapable: boolean;
+} | null {
   const candidates = [
-    'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2024',
-    'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2025',
     'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2026',
+    'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2025',
+    'C:\\Program Files\\Adobe\\Adobe Premiere Pro 2024',
   ];
   for (const dir of candidates) {
     if (exists(dir)) {
       const exe = path.join(dir, 'Adobe Premiere Pro.exe');
       if (exists(exe)) {
-        const version = dir.match(/Premiere Pro (\d{4})/)?.[1] ?? '?';
-        return { name: 'Adobe Premiere Pro', version, path: exe };
+        const year = dir.match(/Premiere Pro (\d{4})/)?.[1] ?? '?';
+        const productVersion = getExeProductVersion(exe);
+        // UXP for Premiere shipped in v25.6 (May 2025). Anything older
+        // — including all 24.x and early 25.x builds — has no UXP runtime.
+        const uxpCapable = isUxpCapable(productVersion);
+        return { name: 'Adobe Premiere Pro', year, productVersion, path: exe, uxpCapable };
       }
     }
   }
   return null;
+}
+
+function isUxpCapable(productVersion: string | null): boolean {
+  if (!productVersion) return false;
+  const m = productVersion.match(/^(\d+)\.(\d+)/);
+  if (!m) return false;
+  const major = Number(m[1]);
+  const minor = Number(m[2]);
+  if (major > 25) return true;
+  if (major === 25 && minor >= 6) return true;
+  return false;
 }
 
 function findCreativeCloud(): boolean {
@@ -126,22 +165,31 @@ async function portInUse(port: number, host = '127.0.0.1', timeoutMs = 500): Pro
 async function main(): Promise<void> {
   const checks: Check[] = [];
 
-  // 1 — Premiere install
+  // 1 — Premiere install + UXP capability (must be >= 25.6)
   const ppro = findFirstPremiere();
-  checks.push(
-    ppro
-      ? {
-          name: 'Adobe Premiere Pro 2024+',
-          status: 'pass',
-          detail: `Found "${ppro.name} ${ppro.version}" at ${ppro.path}`,
-        }
-      : {
-          name: 'Adobe Premiere Pro 2024+',
-          status: 'fail',
-          detail: 'Premiere Pro 2024/2025/2026 not detected.',
-          action: 'Install Premiere Pro 2024+ via Creative Cloud Desktop.',
-        }
-  );
+  if (!ppro) {
+    checks.push({
+      name: 'Adobe Premiere Pro (UXP capable: v25.6+)',
+      status: 'fail',
+      detail: 'No Premiere Pro install detected at C:\\Program Files\\Adobe\\.',
+      action: 'Install Premiere Pro 2025 (v25.6+) via Creative Cloud Desktop.',
+    });
+  } else if (!ppro.uxpCapable) {
+    checks.push({
+      name: 'Adobe Premiere Pro (UXP capable: v25.6+)',
+      status: 'fail',
+      detail: `Found Premiere ${ppro.year} v${ppro.productVersion ?? '?'} — too old for UXP. UXP runtime was added in v25.6 (May 2025).`,
+      action:
+        'Upgrade Premiere Pro to 2025 (v25.6+) via Creative Cloud. ' +
+        'No UXP panel — including this one — can load on this version.',
+    });
+  } else {
+    checks.push({
+      name: 'Adobe Premiere Pro (UXP capable: v25.6+)',
+      status: 'pass',
+      detail: `Found Premiere ${ppro.year} v${ppro.productVersion} at ${ppro.path}`,
+    });
+  }
 
   // 2 — Creative Cloud Desktop
   checks.push(
