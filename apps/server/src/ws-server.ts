@@ -103,6 +103,15 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       return;
     }
 
+    // Special: heartbeat ping from panel. Reply with a notification so the
+    // panel's pong watchdog stays armed. Otherwise the panel closes the
+    // socket every ~35s and reconnects, churning the active-panel reference.
+    if (req.method === '_panel.ping') {
+      // Notifications have no id — reply with a notification too.
+      send(ws, { jsonrpc: '2.0', method: '_panel.pong' });
+      return;
+    }
+
     // Special: progress.cancel — flip the abort signal for the op
     if (req.method === PROGRESS_CANCEL_METHOD) {
       const { opId } = (req.params ?? {}) as ProgressCancelParams;
@@ -412,6 +421,14 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
         void handleInboundRequest(ws, msg);
       } else if (isResponse(msg)) {
         handleInboundResponse(msg);
+      } else if (typeof msg === 'object' && msg !== null && 'method' in msg && !('id' in msg)) {
+        // JSON-RPC notification (no id). The panel uses these for
+        // heartbeat — reply with a pong notification so the panel's
+        // pong watchdog stays armed.
+        const m = (msg as { method?: string }).method;
+        if (m === '_panel.ping') {
+          send(ws, { jsonrpc: '2.0', method: '_panel.pong' });
+        }
       }
     });
 
