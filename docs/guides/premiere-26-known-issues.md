@@ -34,6 +34,33 @@
 
 ## 🔴 What hangs (live observed)
 
+### UPDATE 2026-06-01 — bug is WIDER than initially thought
+
+Live Plan-A smoke (`pnpm smoke:plan-a`) revealed that **ALL write
+operations hang**, not just `Component.create`:
+
+| Operation                         | Result         |
+| --------------------------------- | -------------- |
+| `marker.add` (cheapest write)     | ❌ 90s timeout |
+| `timeline.cutClip`                | ❌ 90s timeout |
+| `effect.apply` (Component.create) | ❌ 90s timeout |
+| `color.applyPreset` (calls above) | ❌ 90s timeout |
+
+This means the root cause is NOT specific to Lumetri or Component
+factory — it's the **mutation wrapper** (`proj.lockedAccess(...)`).
+Either `lockedAccess` itself never resolves, or the inner action()
+hangs on Premiere 26's binding layer.
+
+D5 (this commit): mutate() now races lockedAccess against a 5s
+timeout and falls back to direct action() call. **Even with bypass,
+mutations still hang** — confirming the issue is in the underlying
+Adobe binding, not the lockedAccess wrapper.
+
+**Verdict**: DirectorAI panel can READ Premiere 26 but cannot WRITE
+to it via the current adapter implementation. This is a Premiere 26
+v26.0.0 regression that requires either Adobe 26.1 hotfix OR a new
+adapter probe using the post-26 API surface.
+
 ### `Component.create('AE.ADBE Lumetri')` — 90s+ timeout
 
 **Symptom**: server-side `panelCall('effect.apply', ...)` and
