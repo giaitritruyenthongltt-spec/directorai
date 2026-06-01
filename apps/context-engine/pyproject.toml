@@ -20,6 +20,8 @@ dependencies = [
     # Vision
     "pillow>=10.4.0",
     "anthropic>=0.36.0",
+    "opencv-python-headless>=4.10.0",  # Sprint B.1/B.2 — frame sampling + quality scoring
+    "numpy>=1.26.0",
     # Embeddings + vector store
     "sentence-transformers>=3.2.0",
     "chromadb>=0.5.15",

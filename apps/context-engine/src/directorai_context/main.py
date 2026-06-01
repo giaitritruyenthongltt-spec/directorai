@@ -78,6 +78,46 @@ def create_app() -> FastAPI:
         except JobNotFound as e:
             raise HTTPException(status_code=404, detail=f"Job not found: {job_id}") from e
 
+    @app.post("/vision/analyze_clip")
+    async def post_analyze_clip(payload: dict[str, object]) -> dict[str, object]:
+        """Sprint B.6 — sync wrapper around analyze_clip().
+
+        For batch jobs prefer POST /vision/analyze_clip_async which schedules
+        on the job queue and returns a job_id.
+        """
+        from directorai_context.modules.analyze_clip import analyze_clip
+
+        path = str(payload.get("path", ""))
+        sample_count = int(payload.get("sample_count", 10))
+        max_dim = int(payload.get("max_dim", 1280))
+        if not path:
+            raise HTTPException(status_code=400, detail="path required")
+        try:
+            return analyze_clip(path, sample_count=sample_count, max_dim=max_dim).to_dict()
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.post("/vision/analyze_clip_async")
+    async def post_analyze_clip_async(payload: dict[str, object]) -> dict[str, str]:
+        """Background variant — returns a job_id to poll."""
+        from directorai_context.modules.analyze_clip import analyze_clip
+
+        path = str(payload.get("path", ""))
+        sample_count = int(payload.get("sample_count", 10))
+        max_dim = int(payload.get("max_dim", 1280))
+        if not path:
+            raise HTTPException(status_code=400, detail="path required")
+
+        def _job(ctx, p: str, n: int, d: int) -> dict[str, object]:  # type: ignore[no-untyped-def]
+            return analyze_clip(
+                p, sample_count=n, max_dim=d, progress_cb=ctx.set_progress
+            ).to_dict()
+
+        job_id = get_queue().submit(
+            _job, args=(path, sample_count, max_dim), label=f"analyze:{path}"
+        )
+        return {"job_id": job_id}
+
     @app.post("/jobs/demo")
     async def job_demo(seconds: int = 5) -> dict[str, str]:
         """Submit a sleep job for end-to-end smoke testing."""
