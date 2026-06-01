@@ -20,6 +20,7 @@ import type { Logger } from '@directorai/shared';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import type { Clip } from '@directorai/core';
 import { EFFECT_PRESETS, pickColorPresetForMood } from '@directorai/effect-library';
+import { listModuleInfos } from '@directorai/modules';
 import { resolvePlan, type PlanPreview } from './plan-resolver.js';
 import { applyResolvedPlan, type ApplyResult } from './plan-executor.js';
 import type { CheckpointStore } from './checkpoint-store.js';
@@ -139,6 +140,8 @@ export class CompositeTools {
         );
       case 'context.buildEditPlan':
         return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
+      case 'module.list':
+        return { modules: listModuleInfos() };
       case 'safe.previewPlan':
         return this.previewPlan(
           params as {
@@ -185,6 +188,7 @@ export class CompositeTools {
       'context.understandClip',
       'context.buildVideoMap',
       'context.buildEditPlan',
+      'module.list',
       'safe.previewPlan',
       'safe.applyPlan',
       'timeline.cutOnBeats',

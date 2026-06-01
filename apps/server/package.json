@@ -22,6 +22,7 @@
     "@directorai/cut-planner": "workspace:*",
     "@directorai/effect-library": "workspace:*",
     "@directorai/llm-client": "workspace:*",
+    "@directorai/modules": "workspace:*",
     "@directorai/premiere-adapter": "workspace:*",
     "@directorai/shared": "workspace:*",
     "@directorai/style-engine": "workspace:*",

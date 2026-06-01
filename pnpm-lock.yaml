@@ -189,6 +189,9 @@ importers:
       '@directorai/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@directorai/modules':
+        specifier: workspace:*
+        version: link:../../packages/modules
       '@directorai/premiere-adapter':
         specifier: workspace:*
         version: link:../../packages/premiere-adapter
@@ -281,6 +284,9 @@ importers:
       '@directorai/llm-client':
         specifier: workspace:*
         version: link:../../packages/llm-client
+      '@directorai/modules':
+        specifier: workspace:*
+        version: link:../../packages/modules
       '@directorai/premiere-adapter':
         specifier: workspace:*
         version: link:../../packages/premiere-adapter
@@ -474,6 +480,15 @@ importers:
       zod:
         specifier: ^3.23.0
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.2
+        version: 2.1.9(@types/node@22.19.19)(terser@5.47.1)
+
+  packages/modules:
     devDependencies:
       typescript:
         specifier: ^5.6.2

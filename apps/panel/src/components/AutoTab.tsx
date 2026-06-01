@@ -11,59 +11,14 @@
  */
 
 import React, { useState } from 'react';
+import { MODULE_REGISTRY, moduleInfo, buildGoalFromModules } from '@directorai/modules';
 import { wsClient } from '../bridge/ws-client.js';
 import { HelpButton } from './HelpButton.js';
 import './AutoTab.css';
 
-interface EditModule {
-  id: string;
-  icon: string;
-  label: string;
-  /** Câu mục tiêu (tiếng Việt) ghép vào goal khi module được tích. */
-  goalHint: string;
-  /** false = chưa khả dụng (Premiere 26 chưa cho ghi). */
-  enabled: boolean;
-  note?: string;
-}
-
-const MODULES: readonly EditModule[] = [
-  {
-    id: 'filter_bad',
-    icon: '🚮',
-    label: 'Lọc clip kém / trùng',
-    goalHint: 'Ẩn (disable) các clip hỏng, rung lắc, lia trượt hoặc trùng nội dung.',
-    enabled: true,
-  },
-  {
-    id: 'trim',
-    icon: '✂️',
-    label: 'Tỉa phần thừa',
-    goalHint: 'Tỉa in/out để bỏ khoảng đầu/cuối thừa, giữ phần action đắt giá.',
-    enabled: true,
-  },
-  {
-    id: 'reorder',
-    icon: '🔢',
-    label: 'Xếp lại theo cốt truyện',
-    goalHint: 'Sắp xếp lại thứ tự clip theo cao trào và mạch hành động.',
-    enabled: true,
-  },
-  {
-    id: 'rename',
-    icon: '🏷️',
-    label: 'Đổi tên theo cảnh',
-    goalHint: 'Đổi tên clip theo nội dung cảnh (vd Hit_Climax, Aim_CloseUp).',
-    enabled: true,
-  },
-  {
-    id: 'transition',
-    icon: '🎞️',
-    label: 'Thêm chuyển cảnh',
-    goalHint: '',
-    enabled: false,
-    note: 'Premiere 26 chưa cho ghi transition qua plugin — sẽ mở sau.',
-  },
-];
+// MOD-1b — render động từ registry canonical (@directorai/modules).
+const MODULES = MODULE_REGISTRY.map(moduleInfo);
+const DEFAULT_TICKED = MODULES.filter((m) => m.defaultEnabled).map((m) => m.id);
 
 type StepStatus = 'applied' | 'failed' | 'skipped' | 'deferred' | 'dry-run';
 interface StepResult {
@@ -94,7 +49,7 @@ const STATUS_ICON: Record<StepStatus, string> = {
 };
 
 export function AutoTab(): React.ReactElement {
-  const [ticked, setTicked] = useState<Set<string>>(new Set(['filter_bad', 'rename']));
+  const [ticked, setTicked] = useState<Set<string>>(new Set(DEFAULT_TICKED));
   const [clipText, setClipText] = useState<string>('');
   const [customGoal, setCustomGoal] = useState<string>('');
   const [busy, setBusy] = useState<boolean>(false);
@@ -118,11 +73,7 @@ export function AutoTab(): React.ReactElement {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const buildGoal = (): string => {
-    const hints = MODULES.filter((m) => m.enabled && ticked.has(m.id)).map((m) => m.goalHint);
-    const extra = customGoal.trim();
-    return [...hints, extra].filter(Boolean).join(' ');
-  };
+  const buildGoal = (): string => buildGoalFromModules(Array.from(ticked), customGoal);
 
   const run = async (dryRun: boolean, approved: boolean): Promise<void> => {
     setError(null);
@@ -219,7 +170,7 @@ export function AutoTab(): React.ReactElement {
             <label
               key={m.id}
               className={`auto-module ${ticked.has(m.id) ? 'on' : ''} ${m.enabled ? '' : 'disabled'}`}
-              title={m.note ?? m.goalHint}
+              title={m.goalHint || m.help.title}
             >
               <input
                 type="checkbox"
@@ -228,7 +179,8 @@ export function AutoTab(): React.ReactElement {
                 onChange={() => toggle(m.id)}
               />
               <span className="auto-module-icon">{m.icon}</span>
-              <span className="auto-module-label">{m.label}</span>
+              <span className="auto-module-label">{m.name}</span>
+              <HelpButton title={m.help.title} lines={m.help.lines} example={m.help.example} />
               {!m.enabled && <span className="auto-module-soon">sắp có</span>}
             </label>
           ))}
