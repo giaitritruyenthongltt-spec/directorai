@@ -60,7 +60,10 @@ interface PendingResponse {
 }
 
 const PANEL_REGISTER_METHOD = '_panel.register';
-const DEFAULT_PANEL_CALL_TIMEOUT = 30_000;
+// D2 — bumped 30s → 120s. Premiere 26 Lumetri Component.create on
+// first call after panel boot is consistently 30-60s on large projects;
+// 120s gives headroom while still failing fast on a real deadlock.
+const DEFAULT_PANEL_CALL_TIMEOUT = 120_000;
 
 export async function startWebSocketServer(opts: WsServerOptions): Promise<RunningWsServer> {
   const wss = new WebSocketServer({ host: opts.host, port: opts.port });

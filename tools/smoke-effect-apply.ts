@@ -13,7 +13,10 @@
 import WebSocket from 'ws';
 
 const URL = 'ws://127.0.0.1:7778';
-const TIMEOUT = 30_000;
+// D2 — bumped 30s → 90s. Lumetri Component.create on first call after
+// Premiere boot is consistently 30-60s on the user's 413-clip project,
+// presumably because Premiere builds an effect-cache on demand.
+const TIMEOUT = 90_000;
 
 interface RpcResponse {
   id?: number;

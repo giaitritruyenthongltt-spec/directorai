@@ -381,15 +381,30 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   // ─── Effects ──────────────────────────────────────────────────────────────
 
   async applyEffect(input: ApplyEffectInput): Promise<Effect> {
+    // D1 — diagnostic timing. We've seen 30s+ hangs on Premiere 26;
+    // these logs nail down which sub-step is the bottleneck. Log to
+    // console so the panel devtools captures them.
+    const tStart = Date.now();
+    const log = (label: string): void => {
+      console.info(`[applyEffect ${input.effectMatchName}] +${Date.now() - tStart}ms ${label}`);
+    };
+    log('enter');
     return this.mutate('applyEffect', async () => {
+      log('mutate lockedAccess opened');
       const { item } = await this.findTrackItem(input.clipId);
+      log('findTrackItem ok');
       const chain = await item.getComponentChain();
+      log('getComponentChain ok');
       if (!this.ppro.Component) {
         throw new AdapterError('UXP', 'Component factory not available in this PPro version');
       }
       const comp = await this.ppro.Component.create(input.effectMatchName);
+      log('Component.create ok');
       await chain.insertComponent(comp, 1);
-      return translateComponent(comp);
+      log('insertComponent ok');
+      const translated = await translateComponent(comp);
+      log('translateComponent ok — DONE');
+      return translated;
     });
   }
 
