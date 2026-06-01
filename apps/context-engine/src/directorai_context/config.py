@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     gemini_vision_model: str = "gemini-2.5-flash"
     vision_frames_per_clip: int = 3  # số frame gửi Gemini / clip (cost)
 
+    # AI-2 — Gemini text (gộp understandings → bản đồ video, Tầng 3)
+    gemini_text_model: str = "gemini-2.5-flash"
+
     # Cache
     cache_dir: Path = Field(default_factory=lambda: Path.home() / ".directorai" / "cache")
 

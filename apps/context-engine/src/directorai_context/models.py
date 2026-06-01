@@ -85,6 +85,14 @@ class VisionRequest(BaseModel):
     sample_interval_sec: float | None = None
 
 
+class VideoMapRequest(BaseModel):
+    """AI-2 — Request gộp nhiều clip thành bản đồ video (Tầng 3)."""
+
+    clip_paths: list[str]
+    goal: str | None = None
+    sample_interval_sec: float | None = None
+
+
 class VisionTag(BaseModel):
     """A single frame analysis result."""
 

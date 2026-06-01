@@ -85,6 +85,10 @@ export class CompositeTools {
         return this.classifyScene(params as { clipPath: string });
       case 'context.understandClip':
         return this.understandClip(params as { clipPath: string; frames?: number });
+      case 'context.buildVideoMap':
+        return this.buildVideoMap(
+          params as { clipPaths: string[]; goal?: string; frames?: number }
+        );
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
       case 'color.applyLookByScene':
@@ -106,6 +110,7 @@ export class CompositeTools {
       'context.analyzeColor',
       'context.classifyScene',
       'context.understandClip',
+      'context.buildVideoMap',
       'timeline.cutOnBeats',
       'color.applyLookByScene',
     ];
@@ -137,6 +142,53 @@ export class CompositeTools {
     const interval = params.frames ? 1.0 / params.frames : 0.33;
     return sidecarPost('/vision/understand_clip', {
       media_path: params.clipPath,
+      sample_interval_sec: interval,
+    });
+  }
+
+  // ─── context.buildVideoMap (AI-2 — Tầng 3) ────────────────────────────
+
+  /**
+   * AI-2 — Gộp nhiều clip thành "bản đồ video" tổng: cốt truyện, phân
+   * đoạn, khoảnh khắc đắt giá, clip trùng, thứ tự lắp ráp gợi ý. Mỗi clip
+   * được hiểu qua AI-1 (có cache) rồi gộp bằng Gemini text. Read-only —
+   * chỉ ĐỀ XUẤT, không sửa timeline.
+   */
+  async buildVideoMap(params: { clipPaths: string[]; goal?: string; frames?: number }): Promise<{
+    video_map: {
+      title_suggestion: string;
+      overall_summary: string;
+      story_arc: string;
+      segments: {
+        name: string;
+        purpose: string;
+        clip_paths: string[];
+        description: string;
+      }[];
+      key_moments: {
+        clip_path: string;
+        type: string;
+        why: string;
+        suggested_emphasis: string;
+      }[];
+      duplicates: { clip_paths: string[]; reason: string; keep_suggestion: string }[];
+      discard_candidates: string[];
+      assembly_suggestion: string[];
+      quality_summary: { keep: number; review: number; discard: number };
+      editorial_notes: string;
+      total_clips: number;
+      confidence: number;
+    };
+    understandings: unknown[];
+    errors: { clip_path: string; error: string }[];
+    clips_understood: number;
+    clips_failed: number;
+  }> {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const interval = params.frames ? 1.0 / params.frames : 0.33;
+    return sidecarPost('/vision/build_video_map', {
+      clip_paths: params.clipPaths,
+      goal: params.goal,
       sample_interval_sec: interval,
     });
   }

@@ -14,6 +14,7 @@ cho rẻ + nhanh.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -22,6 +23,26 @@ import httpx
 from directorai_context.config import get_settings
 from directorai_context.logger import log
 from directorai_context.modules.frame_sampler import sample as sample_frames
+
+# Tăng khi đổi prompt/schema để vô hiệu cache cũ.
+_CACHE_VERSION = "v1"
+
+
+def _cache_key(path: Path, frames: int, model: str) -> str:
+    """Key cache theo nội dung file (size+mtime) + tham số → không trả phí
+    Gemini Vision lặp lại cho cùng 1 clip."""
+    try:
+        st = path.stat()
+        sig = f"{path.resolve()}|{st.st_size}|{int(st.st_mtime)}|{frames}|{model}|{_CACHE_VERSION}"
+    except OSError:
+        sig = f"{path}|{frames}|{model}|{_CACHE_VERSION}"
+    return hashlib.sha1(sig.encode("utf-8")).hexdigest()
+
+
+def _cache_path(key: str) -> Path:
+    d = get_settings().cache_dir / "vision"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{key}.json"
 
 # Prompt hệ thống — hướng dẫn Gemini hiểu như editor video hành động Nerf.
 _PROMPT = """Bạn là một editor video chuyên nghiệp đang xem các khung hình
@@ -106,10 +127,13 @@ def _gemini_vision_request(jpeg_frames: list[bytes], model: str, api_key: str) -
         ) from e
 
 
-def understand_clip(media_path: str, frames: int | None = None) -> dict:
+def understand_clip(
+    media_path: str, frames: int | None = None, *, use_cache: bool = True
+) -> dict:
     """Hiểu 1 clip: sample frame → Gemini Vision → ClipUnderstanding dict.
 
     Trả về dict gồm media_path + các trường hiểu biết (xem _PROMPT schema).
+    Có cache theo nội dung file: lần 2 trở đi trả ngay, không gọi Gemini.
     """
     cfg = get_settings()
     if not cfg.gemini_api_key:
@@ -120,6 +144,19 @@ def understand_clip(media_path: str, frames: int | None = None) -> dict:
         raise FileNotFoundError(f"Media not found: {media_path}")
 
     n = frames or cfg.vision_frames_per_clip
+    model = cfg.gemini_vision_model
+
+    if use_cache:
+        cp = _cache_path(_cache_key(path, n, model))
+        if cp.exists():
+            try:
+                cached = json.loads(cp.read_text(encoding="utf-8"))
+                cached["_cached"] = True
+                log.info("vision_understand_cache_hit", media=str(path))
+                return cached
+            except (OSError, json.JSONDecodeError):
+                pass  # cache hỏng → tính lại
+
     log.info("vision_understand_start", media=str(path), frames=n)
 
     sampled = sample_frames(str(path), count=n, max_dim=768)
@@ -127,10 +164,19 @@ def understand_clip(media_path: str, frames: int | None = None) -> dict:
         raise RuntimeError(f"Không trích được frame nào từ {media_path}")
     jpegs = [f.to_jpeg(quality=80) for f in sampled]
 
-    result = _gemini_vision_request(jpegs, cfg.gemini_vision_model, cfg.gemini_api_key)
+    result = _gemini_vision_request(jpegs, model, cfg.gemini_api_key)
     result["media_path"] = str(path)
     result["frames_used"] = len(jpegs)
 
+    if use_cache:
+        try:
+            _cache_path(_cache_key(path, n, model)).write_text(
+                json.dumps(result, ensure_ascii=False), encoding="utf-8"
+            )
+        except OSError:
+            pass  # ghi cache lỗi không chặn kết quả
+
+    result["_cached"] = False
     log.info(
         "vision_understand_done",
         media=str(path),

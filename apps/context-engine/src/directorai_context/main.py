@@ -28,6 +28,7 @@ from directorai_context.models import (
     SearchResult,
     TranscribeRequest,
     TranscribeResult,
+    VideoMapRequest,
     VisionRequest,
     VisionResult,
 )
@@ -269,6 +270,55 @@ def create_app() -> FastAPI:
         except Exception as e:  # noqa: BLE001
             log.error("understand_clip_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/vision/build_video_map")
+    async def post_build_video_map(req: VideoMapRequest) -> dict[str, object]:
+        """AI-2 — Gộp nhiều clip → bản đồ video tổng (Tầng 3).
+
+        Chạy understand_clip (có cache) cho từng clip rồi gộp bằng Gemini
+        text. Clip lỗi được bỏ qua + ghi vào `errors`, không chặn cả mẻ.
+        """
+        from directorai_context.modules.video_map import build_video_map
+        from directorai_context.modules.vision_understand import understand_clip
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+
+        frames = None
+        try:
+            if req.sample_interval_sec and req.sample_interval_sec > 0:
+                frames = max(1, min(8, round(1.0 / req.sample_interval_sec)))
+        except (TypeError, ValueError):
+            frames = None
+
+        understandings: list[dict[str, object]] = []
+        errors: list[dict[str, str]] = []
+        for path in req.clip_paths:
+            try:
+                understandings.append(understand_clip(path, frames=frames))
+            except Exception as e:  # noqa: BLE001
+                log.error("video_map_clip_failed", media=path, error=str(e))
+                errors.append({"clip_path": path, "error": str(e)})
+
+        if not understandings:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Không hiểu được clip nào ({len(errors)} lỗi)",
+            )
+
+        try:
+            video_map = build_video_map(understandings, goal=req.goal)
+        except Exception as e:  # noqa: BLE001
+            log.error("video_map_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+        return {
+            "video_map": video_map,
+            "understandings": understandings,
+            "errors": errors,
+            "clips_understood": len(understandings),
+            "clips_failed": len(errors),
+        }
 
     @app.post("/scenes/classify")
     async def post_scene_classify(req: VisionRequest) -> dict[str, object]:
