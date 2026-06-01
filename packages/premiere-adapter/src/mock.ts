@@ -259,6 +259,12 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     (clip as { enabled?: boolean }).enabled = !disabled;
   }
 
+  async renameClip(clipId: string, newName: string): Promise<void> {
+    if (!newName || !newName.trim()) throw new Error('renameClip: newName rỗng');
+    const { clip } = this.findClip(clipId);
+    (clip as { name?: string }).name = newName;
+  }
+
   async listTracks(sequenceId: string): Promise<readonly Track[]> {
     const s = this.requireSequence(sequenceId);
     return s.tracks.map((t) => ({

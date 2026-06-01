@@ -285,6 +285,22 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     });
   }
 
+  /**
+   * SAFE-1b — Đổi tên clip theo cảnh/nội dung. Dùng createSetNameAction
+   * (đã thấy tồn tại qua introspection Premiere 26). An toàn, undo được.
+   */
+  async renameClip(clipId: string, newName: string): Promise<void> {
+    if (!newName || !newName.trim()) throw new AdapterError('UXP', 'renameClip: newName rỗng');
+    this.invalidateClipCache();
+    const { item } = await this.findTrackItem(clipId);
+    if (typeof item.createSetNameAction !== 'function') {
+      throw new AdapterError('UXP', 'renameClip: createSetNameAction không tồn tại trên host này');
+    }
+    await this.runTransaction('Đổi tên clip', (compound) => {
+      compound.addAction(item.createSetNameAction(newName));
+    });
+  }
+
   // ─── Project ──────────────────────────────────────────────────────────────
 
   async getProject(): Promise<Project> {

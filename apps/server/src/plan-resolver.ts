@@ -16,14 +16,14 @@
 import type { Clip } from '@directorai/core';
 import type { EditPlan, EditPlanStep, SafePlanAction } from './director-tools.js';
 
-/** Action nào có method adapter thực sự ghi được (Track A). `rename` CHƯA
- *  có trên INLEAdapter → preview-only cho tới khi bổ sung renameClip. */
+/** Action nào có method adapter thực sự ghi được (Track A). Cả 5 đều có
+ *  method sau khi bổ sung renameClip (SAFE-1b, createSetNameAction). */
 export const EXECUTABLE_ACTIONS: Record<SafePlanAction, boolean> = {
   disable: true,
   trim: true,
   move: true,
   transition: true,
-  rename: false,
+  rename: true,
 };
 
 export interface ResolvedStep {
@@ -93,10 +93,7 @@ function describe(
     }
     case 'rename': {
       const nn = typeof p.new_name === 'string' ? p.new_name : '?';
-      return {
-        description: `Đổi tên "${name}" → "${nn}"`,
-        warning: 'rename chưa ghi được trên Premiere 26 qua adapter (preview-only)',
-      };
+      return { description: `Đổi tên "${name}" → "${nn}"` };
     }
     default:
       return { description: `Thao tác "${step.action}" trên "${name}"` };

@@ -18,6 +18,7 @@ import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import type { Clip } from '@directorai/core';
 import { EFFECT_PRESETS, pickColorPresetForMood } from '@directorai/effect-library';
 import { resolvePlan, type PlanPreview } from './plan-resolver.js';
+import { applyResolvedPlan, type ApplyResult } from './plan-executor.js';
 
 const SIDECAR_URL = process.env.CONTEXT_ENGINE_URL ?? 'http://127.0.0.1:8000';
 
@@ -141,6 +142,18 @@ export class CompositeTools {
             frames?: number;
           }
         );
+      case 'safe.applyPlan':
+        return this.applyPlan(
+          params as {
+            sequenceId?: string;
+            editPlan?: EditPlan;
+            clipPaths?: string[];
+            goal?: string;
+            frames?: number;
+            dryRun?: boolean;
+            approved?: boolean;
+          }
+        );
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
       case 'color.applyLookByScene':
@@ -165,6 +178,7 @@ export class CompositeTools {
       'context.buildVideoMap',
       'context.buildEditPlan',
       'safe.previewPlan',
+      'safe.applyPlan',
       'timeline.cutOnBeats',
       'color.applyLookByScene',
     ];
@@ -366,6 +380,69 @@ export class CompositeTools {
       'safe.previewPlan resolved'
     );
     return { ...preview, plan };
+  }
+
+  // ─── safe.applyPlan (SAFE-1c — GHI THẬT có kiểm soát) ──────────────────
+
+  /**
+   * SAFE-1c — Áp dụng kế hoạch lên timeline thật, có cổng duyệt.
+   *
+   * Quy trình: dựng preview (SAFE-1a) → CỔNG DUYỆT (ghi thật cần
+   * approved=true) → executor ghi từng bước qua Track A.
+   *
+   * - `dryRun: true` → chỉ mô phỏng, KHÔNG ghi (mặc định khi chưa duyệt).
+   * - Ghi thật yêu cầu `approved: true` — nếu không sẽ tự hạ về dry-run +
+   *   báo cần duyệt. Đây là chốt an toàn cuối: không bao giờ ghi lén.
+   */
+  async applyPlan(params: {
+    sequenceId?: string;
+    editPlan?: EditPlan;
+    clipPaths?: string[];
+    goal?: string;
+    frames?: number;
+    dryRun?: boolean;
+    approved?: boolean;
+  }): Promise<ApplyResult & { plan: EditPlan; requiredApproval: boolean; approvalNote?: string }> {
+    const preview = await this.previewPlan({
+      sequenceId: params.sequenceId,
+      editPlan: params.editPlan,
+      clipPaths: params.clipPaths,
+      goal: params.goal,
+      frames: params.frames,
+    });
+
+    // CỔNG DUYỆT: ghi thật chỉ khi dryRun=false VÀ approved=true.
+    const wantWrite = params.dryRun === false;
+    const approved = params.approved === true;
+    const effectiveDryRun = !(wantWrite && approved);
+    const approvalNote =
+      wantWrite && !approved
+        ? 'Cần approved=true để ghi thật — đã tự hạ về dry-run để bạn xem trước.'
+        : undefined;
+
+    const result = await applyResolvedPlan(this.deps.adapter, preview, {
+      dryRun: effectiveDryRun,
+      logger: this.deps.logger,
+    });
+
+    this.deps.logger.info(
+      {
+        sequenceId: result.sequenceId,
+        dryRun: result.dryRun,
+        applied: result.applied,
+        failed: result.failed,
+        deferred: result.deferred,
+        skipped: result.skipped,
+      },
+      'safe.applyPlan done'
+    );
+
+    return {
+      ...result,
+      plan: preview.plan,
+      requiredApproval: wantWrite,
+      approvalNote,
+    };
   }
 
   // ─── context.classifyScene ────────────────────────────────────────────

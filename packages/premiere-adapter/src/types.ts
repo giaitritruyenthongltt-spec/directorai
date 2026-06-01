@@ -149,6 +149,9 @@ export interface INLEAdapter {
   deleteClip(clipId: string): Promise<void>;
   /** A3 — Tắt/bật clip (disable). An toàn hơn xoá; dùng cho "lọc clip kém". */
   setClipDisabled(clipId: string, disabled: boolean): Promise<void>;
+  /** SAFE-1b — Đổi tên clip trên timeline (createSetNameAction). Dùng cho
+   *  "đổi tên theo cảnh". An toàn, hoàn tác được. */
+  renameClip(clipId: string, newName: string): Promise<void>;
 
   listTracks(sequenceId: string): Promise<readonly Track[]>;
 

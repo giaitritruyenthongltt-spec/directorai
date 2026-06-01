@@ -76,6 +76,9 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   setClipDisabled(clipId: string, disabled: boolean): Promise<void> {
     return this.send<void>('timeline.setClipDisabled', { clipId, disabled });
   }
+  renameClip(clipId: string, newName: string): Promise<void> {
+    return this.send<void>('timeline.renameClip', { clipId, newName });
+  }
 
   // Effects
   applyEffect(input: ApplyEffectInput): Promise<Effect> {

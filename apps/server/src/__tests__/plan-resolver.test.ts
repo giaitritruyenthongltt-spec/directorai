@@ -100,7 +100,7 @@ describe('resolvePlan', () => {
     expect(out.steps[0]!.description).toContain('KHÔNG tìm thấy');
   });
 
-  it('rename resolve được nhưng KHÔNG executable (adapter thiếu method)', () => {
+  it('rename giờ executable (đã bổ sung renameClip — SAFE-1b)', () => {
     const p = plan([
       {
         order: 1,
@@ -113,9 +113,9 @@ describe('resolvePlan', () => {
     ]);
     const out = resolvePlan(p, CLIPS, 'seq-1');
     expect(out.steps[0]!.resolved).toBe(true);
-    expect(out.steps[0]!.executable).toBe(false);
-    expect(out.steps[0]!.warning).toContain('preview-only');
-    expect(EXECUTABLE_ACTIONS.rename).toBe(false);
+    expect(out.steps[0]!.executable).toBe(true);
+    expect(out.steps[0]!.description).toContain('Đổi tên');
+    expect(EXECUTABLE_ACTIONS.rename).toBe(true);
   });
 
   it('cảnh báo khi 1 file dùng nhiều lần trên timeline', () => {
@@ -165,7 +165,7 @@ describe('resolvePlan', () => {
     const out = resolvePlan(p, CLIPS, 'seq-1');
     expect(out.totalSteps).toBe(3);
     expect(out.resolvedCount).toBe(2); // 6.mp4 + 2.mp4
-    expect(out.executableCount).toBe(1); // chỉ disable 6.mp4
+    expect(out.executableCount).toBe(2); // disable 6.mp4 + rename 2.mp4 (đều executable)
     expect(out.unresolvedCount).toBe(1); // ghost
   });
 });
