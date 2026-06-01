@@ -16,6 +16,7 @@
 import type { Logger } from '@directorai/shared';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import type { Clip } from '@directorai/core';
+import { EFFECT_PRESETS, pickColorPresetForMood } from '@directorai/effect-library';
 
 const SIDECAR_URL = process.env.CONTEXT_ENGINE_URL ?? 'http://127.0.0.1:8000';
 
@@ -76,8 +77,16 @@ export class CompositeTools {
         return this.detectBeats(params as { audioPath: string });
       case 'context.detectSilences':
         return this.detectSilences(params as { audioPath: string });
+      case 'context.listEffects':
+        return this.listEffects(params as { category?: string });
+      case 'context.analyzeColor':
+        return this.analyzeColor(params as { clipPath: string });
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
+      case 'color.applyLookByScene':
+        return this.applyLookByScene(
+          params as { sequenceId?: string; defaultPreset?: string; sampleCount?: number }
+        );
       default:
         return null;
     }
@@ -89,8 +98,65 @@ export class CompositeTools {
       'context.scoreQuality',
       'context.detectBeats',
       'context.detectSilences',
+      'context.listEffects',
+      'context.analyzeColor',
       'timeline.cutOnBeats',
+      'color.applyLookByScene',
     ];
+  }
+
+  // ─── context.listEffects ──────────────────────────────────────────────
+
+  /**
+   * P2-1 — List every effect/transition/color preset in the catalog so
+   * the LLM can choose a valid `matchName` for `effect.apply` /
+   * `transition.apply`. Optional `category` filter ('transition',
+   * 'color', 'zoom', 'text'…).
+   */
+  listEffects(params: { category?: string }): {
+    count: number;
+    effects: {
+      key: string;
+      matchName: string;
+      displayName: string;
+      category: string;
+      description: string;
+    }[];
+  } {
+    const filtered = params.category
+      ? EFFECT_PRESETS.filter((e) => e.category === params.category)
+      : EFFECT_PRESETS;
+    return {
+      count: filtered.length,
+      effects: filtered.map((e) => ({
+        key: e.key,
+        matchName: e.matchName,
+        displayName: e.displayName,
+        category: e.category,
+        description: e.description,
+      })),
+    };
+  }
+
+  // ─── context.analyzeColor ─────────────────────────────────────────────
+
+  /** Wrapper around sidecar /color/analyze — returns mood + warmth +
+   *  dominant colors for the LLM to reason about per-clip looks. */
+  async analyzeColor(params: { clipPath: string }): Promise<{
+    media_path: string;
+    sample_count: number;
+    mood: 'warm' | 'cool' | 'neutral' | 'dark' | 'bright';
+    brightness: number;
+    saturation: number;
+    contrast: number;
+    warmth: number;
+    dominants: { r: number; g: number; b: number; fraction: number }[];
+  }> {
+    if (!params.clipPath) throw new Error('clipPath required');
+    return sidecarPost('/color/analyze', {
+      media_path: params.clipPath,
+      sample_interval_sec: 0.2,
+    });
   }
 
   // ─── context.scanClips ────────────────────────────────────────────────
@@ -349,5 +415,80 @@ export class CompositeTools {
       'timeline.cutOnBeats complete'
     );
     return { cuts, skipped, details };
+  }
+
+  // ─── color.applyLookByScene ───────────────────────────────────────────
+
+  /**
+   * P2-2 — Per-clip color grade.
+   *
+   * For each clip on the sequence: hit sidecar /color/analyze to get
+   * mood, then `pickColorPresetForMood` returns a preset key, then
+   * `adapter.applyColorPreset` writes it. `defaultPreset` is used when
+   * analysis fails for a clip.
+   */
+  async applyLookByScene(params: {
+    sequenceId?: string;
+    defaultPreset?: string;
+    sampleCount?: number;
+  }): Promise<{
+    graded: number;
+    skipped: number;
+    details: { clipId: string; preset?: string; mood?: string; ok: boolean; reason?: string }[];
+  }> {
+    const seqId = params.sequenceId ?? (await this.deps.adapter.getActiveSequence())?.id;
+    if (!seqId) throw new Error('No active sequence');
+    const clips = (await this.deps.adapter.listClips(seqId)).filter((c) => c.kind === 'video');
+
+    const defaultPreset = params.defaultPreset ?? 'teal_orange';
+    let graded = 0;
+    let skipped = 0;
+    const details: {
+      clipId: string;
+      preset?: string;
+      mood?: string;
+      ok: boolean;
+      reason?: string;
+    }[] = [];
+
+    for (const clip of clips) {
+      const path = clip.source?.path;
+      if (!path) {
+        skipped++;
+        details.push({ clipId: clip.id, ok: false, reason: 'no media path' });
+        continue;
+      }
+      let preset = defaultPreset;
+      let mood: string | undefined;
+      try {
+        const analysis = await this.analyzeColor({ clipPath: path });
+        mood = analysis.mood;
+        preset = pickColorPresetForMood(mood as 'warm' | 'cool' | 'neutral' | 'dark' | 'bright');
+      } catch (e) {
+        this.deps.logger.debug(
+          { clipId: clip.id, error: e instanceof Error ? e.message : String(e) },
+          'applyLookByScene analyze fallback'
+        );
+      }
+      try {
+        await this.deps.adapter.applyColorPreset(clip.id, preset);
+        graded++;
+        details.push({ clipId: clip.id, preset, mood, ok: true });
+      } catch (e) {
+        skipped++;
+        details.push({
+          clipId: clip.id,
+          preset,
+          mood,
+          ok: false,
+          reason: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+    this.deps.logger.info(
+      { total: clips.length, graded, skipped },
+      'color.applyLookByScene complete'
+    );
+    return { graded, skipped, details };
   }
 }

@@ -36,11 +36,18 @@ TIMELINE MUTATE
   marker.delete                     — params { sequenceId, markerId }
 
 CONTEXT (Python sidecar — analysis)
-  context.scanClips                 — params { sequenceId? } → list+summarise clips
+  context.scanClips                 — params { sequenceId?, rankByQuality?:bool,
+                                       topN?:number, sampleCount?:number }
+                                       → list+summarise clips, optionally
+                                         ranked by quality (top-N first)
   context.scoreQuality              — params { sequenceId?, clipId?, sampleCount? }
                                        → per-clip blur/exposure/focus/framing scores
   context.detectBeats               — params { audioPath } → BPM + beat times
   context.detectSilences            — params { audioPath } → silent ranges
+  context.listEffects               — params { category?:'transition'|'color'|… }
+                                       → catalog of valid matchNames + keys
+  context.analyzeColor              — params { clipPath } → mood/warmth/dominants
+                                       moods: warm/cool/neutral/dark/bright
 
 EFFECT
   effect.apply                      — params { clipId, effectMatchName }
@@ -53,6 +60,11 @@ EFFECT
                                        noir_high_contrast, pastel_dream,
                                        sunset_glow, cold_drama, vintage_kodak,
                                        bw_documentary
+  color.applyLookByScene            — params { sequenceId?, defaultPreset?:string }
+                                       → composite: analyzes each clip's mood
+                                         and applies a matching Lumetri preset
+                                         per clip (much faster than calling
+                                         color.applyPreset N times yourself).
   color.setParams                   — params { clipId, params{...} } → raw Lumetri
   transition.apply                  — params { clipId, transitionMatchName, durationSec }
                                        transition matchNames: 'CrossDissolve',

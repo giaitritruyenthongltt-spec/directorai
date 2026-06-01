@@ -86,9 +86,10 @@ describe('buildDirectorPrompt', () => {
     expect(b).toContain(PERSONA_DESCRIPTIONS.action);
   });
 
-  it('prompt is under 8K characters (rough token budget guard)', () => {
+  it('prompt is under 10K characters (rough token budget guard)', () => {
+    // Budget grew slightly when P2 added 3 new composite tools.
     const p = buildDirectorPrompt('cinematic');
-    expect(p.length).toBeLessThan(8000);
+    expect(p.length).toBeLessThan(10_000);
   });
 });
 

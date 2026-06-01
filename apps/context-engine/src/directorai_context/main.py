@@ -247,6 +247,23 @@ def create_app() -> FastAPI:
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
 
+    @app.post("/color/analyze")
+    async def post_color_analyze(req: VisionRequest) -> dict[str, object]:
+        """P2-2 — Sample frames + compute color mood/warmth/dominants."""
+        from directorai_context.modules.color_analyze import analyze_clip_path
+
+        try:
+            sample_count = int(max(1, round(1.0 / max(0.001, req.sample_interval_sec))))
+        except (TypeError, ValueError):
+            sample_count = 5
+        try:
+            return analyze_clip_path(req.media_path, sample_count=sample_count)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            log.error("color_analyze_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
     @app.post("/audio/silences")
     async def post_silences(req: BeatRequest) -> dict[str, object]:
         """P1-2 — Detect silent intervals in an audio/video file.

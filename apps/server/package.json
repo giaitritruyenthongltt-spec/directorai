@@ -20,6 +20,7 @@
     "@directorai/config": "workspace:*",
     "@directorai/core": "workspace:*",
     "@directorai/cut-planner": "workspace:*",
+    "@directorai/effect-library": "workspace:*",
     "@directorai/llm-client": "workspace:*",
     "@directorai/premiere-adapter": "workspace:*",
     "@directorai/shared": "workspace:*",
