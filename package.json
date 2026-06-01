@@ -33,6 +33,8 @@
     "smoke:sentry": "tsx tools/smoke-sentry.ts",
     "smoke:stripe": "tsx tools/smoke-stripe.ts",
     "smoke:dns": "tsx tools/smoke-dns.ts",
+    "diagnose:v2": "tsx tools/diagnose-v2.ts",
+    "start:v2": "pwsh tools/start-v2.ps1",
     "prepare": "husky"
   },
   "devDependencies": {
