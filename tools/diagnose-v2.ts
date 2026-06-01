@@ -128,12 +128,16 @@ function findCreativeCloud(): boolean {
 
 function findUXPDevTool(): { found: boolean; path?: string } {
   const names = regQueryDisplayNames();
-  const hasReg = names.some((n) => /UXP\s*Developer\s*Tool/i.test(n));
-  // Common install locations
+  const hasReg = names.some((n) => /UXP\s*Developer\s*Tools?/i.test(n));
+  // Adobe ships the folder as "Adobe UXP Developer Tools" (plural) — match both.
   const paths = [
+    'C:\\Program Files\\Adobe\\Adobe UXP Developer Tools',
     'C:\\Program Files\\Adobe\\Adobe UXP Developer Tool',
+    'C:\\Program Files (x86)\\Adobe\\Adobe UXP Developer Tools',
     'C:\\Program Files (x86)\\Adobe\\Adobe UXP Developer Tool',
+    `${process.env.LOCALAPPDATA}\\Programs\\Adobe UXP Developer Tools`,
     `${process.env.LOCALAPPDATA}\\Programs\\Adobe UXP Developer Tool`,
+    `${process.env.LOCALAPPDATA}\\Adobe\\Adobe UXP Developer Tools`,
     `${process.env.LOCALAPPDATA}\\Adobe\\Adobe UXP Developer Tool`,
   ];
   for (const p of paths) {

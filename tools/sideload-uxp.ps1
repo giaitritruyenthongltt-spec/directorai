@@ -92,7 +92,7 @@ Write-Host ""
 Write-Host "[PASS] Side-load complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "-- Next steps (manual, in Premiere) ----------------------"
-Write-Host "1. Open Adobe Premiere Pro 2024."
+Write-Host "1. Open Adobe Premiere Pro (must be v25.6+ for UXP)."
 Write-Host "2. Edit -> Preferences -> Plug-ins."
 Write-Host "3. Check the box: Enable Developer Mode."
 Write-Host "4. Restart Premiere (quit and reopen)."
