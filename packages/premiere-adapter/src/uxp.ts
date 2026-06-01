@@ -111,57 +111,93 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   }
 
   /**
-   * Walk all tracks of all sequences looking for a track item by nodeId
-   * OR by synthetic ID (trackId:startTick:name) used as fallback when
-   * Premiere 2026 returns undefined nodeId. See resolveTrackItemId in
-   * uxp-translate.ts.
+   * V2 (smoke fallout) — Session-scoped clip-ID cache.
+   *
+   * The synthetic ID path (when nodeId is undefined in Premiere 26)
+   * needs `getStartTime()` + `getName()` per clip to compute the
+   * synthetic ID. On a 413-clip project that's 800+ UXP RPCs per
+   * lookup — observed live as 30s timeout on `effect.apply`.
+   *
+   * Cache strategy:
+   *   - Map<clipId, { item, track, seq }> populated lazily.
+   *   - On miss, walk + index everything once, then look up.
+   *   - Cleared whenever the project changes (`setActiveSequence`,
+   *     `importFile`, etc.) to avoid serving stale references.
    */
+  private clipCache: Map<
+    string,
+    { item: PProTrackItem; track: PProTrack; seq: PProSequence }
+  > | null = null;
+
+  private invalidateClipCache(): void {
+    this.clipCache = null;
+  }
+
   private async findTrackItem(clipId: string): Promise<{
     item: PProTrackItem;
     track: PProTrack;
     seq: PProSequence;
   }> {
+    // Fast path — cache hit.
+    if (this.clipCache) {
+      const hit = this.clipCache.get(clipId);
+      if (hit) return hit;
+    }
+
+    // Slow path — walk + index. Build the cache as we go so subsequent
+    // lookups are O(1) for any clip in any track.
     const proj = await this.project();
     const sequences = await proj.getSequences();
-    const matchItem = async (
+    const cache = new Map<string, { item: PProTrackItem; track: PProTrack; seq: PProSequence }>();
+    let found: { item: PProTrackItem; track: PProTrack; seq: PProSequence } | undefined;
+
+    const indexItems = async (
       items: PProTrackItem[],
+      track: PProTrack,
+      seq: PProSequence,
       trackKind: 'video' | 'audio',
       trackIndex: number
-    ): Promise<PProTrackItem | undefined> => {
-      // Fast path — direct nodeId match.
-      let hit = items.find((it) => it.nodeId === clipId);
-      if (hit) return hit;
-      // Synthetic path — try matching against the same scheme used by
-      // resolveTrackItemId.
+    ): Promise<void> => {
       const trackId = `${trackKind}-${trackIndex}`;
-      if (!clipId.startsWith(`${trackId}:`)) return undefined;
       for (const it of items) {
+        // 1) Try direct nodeId — cheap.
+        const nid = (it as { nodeId?: unknown }).nodeId;
+        if (typeof nid === 'string' && nid.length > 0) {
+          cache.set(nid, { item: it, track, seq });
+          if (nid === clipId) found = { item: it, track, seq };
+          continue;
+        }
+        // 2) Synthetic — compute once + index. Each iteration costs
+        // 2 UXP RPCs (getStartTime + getName) but only happens during
+        // the one-time index build; later lookups are O(1).
         const startT = await it.getStartTime().catch(() => null);
         const name = await it.getName().catch(() => it.name ?? 'Untitled');
         const synthetic = `${trackId}:${String(startT?.ticks ?? '')}:${name}`;
-        if (synthetic === clipId) {
-          hit = it;
-          break;
-        }
+        cache.set(synthetic, { item: it, track, seq });
+        if (synthetic === clipId) found = { item: it, track, seq };
       }
-      return hit;
     };
+
     for (const seq of sequences) {
       const vCount = await seq.getVideoTrackCount();
       for (let i = 0; i < vCount; i++) {
         const track = await seq.getVideoTrack(i);
         const items = await track.getTrackItems(1 /* ANY */, true);
-        const item = await matchItem(items, 'video', i);
-        if (item) return { item, track, seq };
+        await indexItems(items, track, seq, 'video', i);
+        if (found) break;
       }
+      if (found) break;
       const aCount = await seq.getAudioTrackCount();
       for (let i = 0; i < aCount; i++) {
         const track = await seq.getAudioTrack(i);
         const items = await track.getTrackItems(1, true);
-        const item = await matchItem(items, 'audio', i);
-        if (item) return { item, track, seq };
+        await indexItems(items, track, seq, 'audio', i);
+        if (found) break;
       }
     }
+
+    this.clipCache = cache;
+    if (found) return found;
     throw new NotFoundError('Clip', clipId);
   }
 
@@ -214,6 +250,7 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     const proj = await this.project();
     const seq = await this.findSequence(sequenceId);
     await proj.setActiveSequence(seq);
+    this.invalidateClipCache();
   }
 
   async getActiveSequence(): Promise<Sequence | null> {
@@ -261,7 +298,9 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
 
   // ─── Timeline edit ────────────────────────────────────────────────────────
 
+  /** Mutations that change clip identity invalidate the cache. */
   async cutClip(input: CutClipInput): Promise<readonly Clip[]> {
+    this.invalidateClipCache();
     return this.mutate('cutClip', async () => {
       const { item, track } = await this.findTrackItem(input.clipId);
       const cutAt = this.secondsToTick(input.at);
@@ -368,6 +407,7 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   // ─── Media ────────────────────────────────────────────────────────────────
 
   async importFile(input: ImportFileInput): Promise<{ id: string; path: string }> {
+    this.invalidateClipCache();
     return this.mutate('importFile', async () => {
       const proj = await this.project();
       const root = await proj.getRootItem();
@@ -502,11 +542,21 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
           // skip
         }
       };
+      // V4 — Adobe Lumetri Basic Correction param names. We try multiple
+      // candidate names per slider because Premiere 26 sometimes uses
+      // 'Color Temperature' for what older builds called 'Temperature'.
+      // setIfPresent silently swallows missing-param errors so the call
+      // is a no-op when the install differs.
       await setIfPresent('Exposure', input.exposure);
       await setIfPresent('Contrast', input.contrast);
       await setIfPresent('Highlights', input.highlights);
       await setIfPresent('Shadows', input.shadows);
+      await setIfPresent('Whites', input.whites);
+      await setIfPresent('Blacks', input.blacks);
       await setIfPresent('Saturation', input.saturation);
+      await setIfPresent('Vibrance', input.vibrance);
+      // Try modern Adobe name first, then legacy.
+      await setIfPresent('Color Temperature', input.temperature);
       await setIfPresent('Temperature', input.temperature);
     });
   }

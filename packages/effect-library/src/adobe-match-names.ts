@@ -23,76 +23,127 @@ export const ADOBE_LUMETRI_MATCH_NAME = 'AE.ADBE Lumetri';
 const TX = 'AE.ADBE ';
 
 /**
- * F3 — Each entry tells callers whether the match-name is *verified*
- * against the Premiere Pro 2026 v26 component registry (`verified: true`)
- * or whether it's a best-guess / third-party plugin / known-missing
- * mapping (`verified: false`). Unverified mappings emit a warning when
- * resolved so the LLM doesn't silently emit broken plans.
+ * V3 — Confidence tiers replacing the binary `verified` flag.
  *
- * Verification source: Adobe UXP DEC sample + Premiere Pro 2026 SDK
- * reference. Items marked `verified: false` were either:
- *   - never standard in Premiere (e.g. "Whip Pan" was removed)
- *   - third-party plugin matches (e.g. Camera Shake Deluxe is Red Giant)
- *   - speculative (Page Turn dropped in Premiere ≥ 23)
+ *   'high'       — Component shipped by Adobe Premiere Pro 2026 stock;
+ *                  match-name confirmed in UXP DEC samples + SDK docs.
+ *   'medium'     — Real Adobe After Effects component that Premiere can
+ *                  apply via Effects panel, BUT may need the effect to
+ *                  be installed/enabled in the user's Premiere config.
+ *                  Apply may fail with "component not found" on a fresh
+ *                  install.
+ *   'unverified' — Best-guess fallback, third-party plugin, or
+ *                  known-removed component. Apply will likely fail.
+ *                  Callers should skip in autogen plans unless they
+ *                  ship the underlying preset asset.
+ *
+ * The old `verified: true | false` boolean was misleading — many of the
+ * formerly "verified" entries are actually `medium` (could fail under
+ * the right conditions). This tiering makes that honest.
  */
+export type AdobeConfidence = 'high' | 'medium' | 'unverified';
+
 interface AdobeMatchEntry {
   readonly matchName: string;
-  readonly verified: boolean;
+  readonly confidence: AdobeConfidence;
   readonly note?: string;
+  /** @deprecated Kept for backward compat — true iff confidence === 'high'. */
+  readonly verified: boolean;
+}
+
+/** Helper so we don't repeat ourselves on every entry. */
+function entry(matchName: string, confidence: AdobeConfidence, note?: string): AdobeMatchEntry {
+  return { matchName, confidence, verified: confidence === 'high', note };
 }
 
 export const ADOBE_MATCH_REGISTRY: Record<string, AdobeMatchEntry> = {
-  // ─── Transitions (verified) ─────────────────────────────────────────
-  cross_dissolve: { matchName: `${TX}Cross Dissolve`, verified: true },
-  dip_to_black: { matchName: `${TX}Dip to Black`, verified: true },
-  dip_to_white: { matchName: `${TX}Dip to White`, verified: true },
-  film_dissolve: { matchName: `${TX}Film Dissolve`, verified: true },
-  cross_zoom: { matchName: `${TX}Cross Zoom`, verified: true },
-  morph_cut: { matchName: `${TX}Morph Cut`, verified: true },
-  slide_left: { matchName: `${TX}Slide`, verified: true },
-  iris_round: { matchName: `${TX}Iris Round`, verified: true },
+  // ─── Transitions: HIGH confidence (Premiere stock, always present) ──
+  cross_dissolve: entry(`${TX}Cross Dissolve`, 'high'),
+  dip_to_black: entry(`${TX}Dip to Black`, 'high'),
+  dip_to_white: entry(`${TX}Dip to White`, 'high'),
+  film_dissolve: entry(`${TX}Film Dissolve`, 'high'),
 
-  // ─── Transitions (unverified — best guess / third-party) ────────────
-  whip_pan: {
-    matchName: `${TX}Iris Round`,
-    verified: false,
-    note: 'No native Whip Pan in Premiere; closest fallback is Iris Round. Skip in plans unless you ship a custom preset.',
-  },
-  page_turn: {
-    matchName: `${TX}Page Turn`,
-    verified: false,
-    note: 'Page Turn was removed from Premiere in ≥ v23. Will fail silently — pick another transition.',
-  },
+  // ─── Transitions: MEDIUM (real Adobe, may depend on Premiere build) ─
+  cross_zoom: entry(
+    `${TX}Cross Zoom`,
+    'medium',
+    'Cross Zoom is an AE transition that Premiere can use; effect must be enabled in Effects panel.'
+  ),
+  morph_cut: entry(
+    `${TX}Morph Cut`,
+    'medium',
+    'Premiere built-in but requires analysis pass; may fail on short clips < 2s.'
+  ),
+  slide_left: entry(
+    `${TX}Slide`,
+    'medium',
+    'Generic "Slide" matchName covers Slide Left/Right/Up/Down; direction set via param.'
+  ),
+  iris_round: entry(
+    `${TX}Iris Round`,
+    'medium',
+    'Iris transition family; specific shape via params. Confirm exists on user system.'
+  ),
 
-  // ─── Color (all route to Lumetri base — recipe in lumetri-presets.ts)
-  warm_vlog: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  teal_orange: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  punchy_vibrant: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  desaturated_film: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  noir_high_contrast: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  pastel_dream: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  sunset_glow: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  cold_drama: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  tech_blue: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  vintage_kodak: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  matrix_green: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
-  bw_documentary: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  // ─── Transitions: UNVERIFIED (fabrications or removed components) ───
+  whip_pan: entry(
+    `${TX}Iris Round`,
+    'unverified',
+    'No native Whip Pan in Premiere; mapped to Iris Round as closest fallback. Skip unless you ship a custom preset.'
+  ),
+  page_turn: entry(
+    `${TX}Page Turn`,
+    'unverified',
+    'Page Turn was removed from Premiere ≥ v23. Will fail silently — pick another transition.'
+  ),
+
+  // ─── Color: HIGH (Lumetri is rock-solid + always present) ───────────
+  warm_vlog: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  teal_orange: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  punchy_vibrant: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  desaturated_film: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  noir_high_contrast: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  pastel_dream: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  sunset_glow: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  cold_drama: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  tech_blue: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  vintage_kodak: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  matrix_green: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
+  bw_documentary: entry(ADOBE_LUMETRI_MATCH_NAME, 'high'),
 
   // ─── Zoom / motion ──────────────────────────────────────────────────
-  zoom_punch: { matchName: `${TX}Transform`, verified: true },
-  zoom_highlight: { matchName: `${TX}Transform`, verified: true },
-  zoom_pulse: { matchName: `${TX}Transform`, verified: true },
-  ken_burns: { matchName: `${TX}Transform`, verified: true },
-  parallax: { matchName: `${TX}Parallax`, verified: true },
-  tilt_shift: { matchName: `${TX}Tilt-Shift Blur`, verified: true },
-  lens_distort: { matchName: `${TX}Lens Distortion`, verified: true },
+  // Transform IS a real Premiere built-in — `high` for the component
+  // itself. The "zoom_punch / pulse / highlight / ken_burns" labels are
+  // keyframe-animation styling on top of Transform, so the COMPONENT
+  // applies cleanly even if the LLM needs to set keyframes separately.
+  zoom_punch: entry(`${TX}Transform`, 'high'),
+  zoom_highlight: entry(`${TX}Transform`, 'high'),
+  zoom_pulse: entry(`${TX}Transform`, 'high'),
+  ken_burns: entry(`${TX}Transform`, 'high'),
+  // Parallax / Tilt-Shift / Lens Distortion are AE effects that Premiere
+  // can apply but depend on the user's installed effect pack — medium.
+  parallax: entry(
+    `${TX}Parallax`,
+    'medium',
+    'AE effect — confirm available in user Premiere install. Some builds ship it under Video Effects > Distort.'
+  ),
+  tilt_shift: entry(
+    `${TX}Tilt-Shift Blur`,
+    'medium',
+    'Tilt-Shift Blur is AE-side; if absent, fall back to Gaussian Blur on a mask.'
+  ),
+  lens_distort: entry(
+    `${TX}Lens Distortion`,
+    'medium',
+    'AE Lens Distortion effect. Usually present, but params differ from Adobe Lens Correction.'
+  ),
 
-  // ─── Zoom / motion (unverified — third-party plugins) ───────────────
-  shake: {
-    matchName: `${TX}Camera Shake Deluxe`,
-    verified: false,
-    note: 'Camera Shake Deluxe is a Red Giant Universe plugin, not Adobe stock. Will fail if not installed.',
-  },
+  // ─── Zoom / motion: UNVERIFIED (third-party plugins) ────────────────
+  shake: entry(
+    `${TX}Camera Shake Deluxe`,
+    'unverified',
+    'Camera Shake Deluxe is Red Giant Universe (paid plugin), not Adobe stock. Will fail if not installed.'
+  ),
 };
 
 /**
@@ -105,35 +156,48 @@ export const ADOBE_MATCH_NAMES: Record<string, string> = Object.fromEntries(
 
 /**
  * Look up a preset key and return the Adobe match-name. Falls back to
- * the Lumetri base for `color` category misses. Returns `null` for
- * non-color misses so the caller can decide whether to skip or surface
- * an error.
+ * the Lumetri base for `color` category misses.
  *
- * Pass `onUnverified` to receive a warning callback for unverified
- * mappings — used by the composite tool layer to log a warning before
- * trying an apply that's likely to fail.
+ * The `onLowConfidence` callback fires for `'medium'` and `'unverified'`
+ * entries so callers can log a warning or skip the apply.
  */
 export function resolveAdobeMatchName(
   key: string,
   category: 'transition' | 'color' | 'zoom' | 'text' | 'audio' | 'speed' | 'distort' | 'stylize',
-  onUnverified?: (entry: AdobeMatchEntry) => void
+  onLowConfidence?: (entry: AdobeMatchEntry) => void
 ): string | null {
-  const entry = ADOBE_MATCH_REGISTRY[key];
-  if (entry) {
-    if (!entry.verified) onUnverified?.(entry);
-    return entry.matchName;
+  const e = ADOBE_MATCH_REGISTRY[key];
+  if (e) {
+    if (e.confidence !== 'high') onLowConfidence?.(e);
+    return e.matchName;
   }
   if (category === 'color') return ADOBE_LUMETRI_MATCH_NAME;
   return null;
 }
 
-/** Return only the verified-against-real-Premiere subset. Useful to
- *  feed the Director system prompt so the LLM doesn't propose tools
- *  that we know will fail. */
-export function listVerifiedMatchNames(): readonly { key: string; matchName: string }[] {
+/**
+ * V3 — List entries by minimum confidence tier. `'high'` is the safest
+ * subset to feed into the Director prompt; `'medium'` is acceptable
+ * with a fallback strategy; `'unverified'` should be excluded from
+ * autogen plans.
+ */
+export function listMatchNamesByConfidence(
+  minConfidence: AdobeConfidence = 'high'
+): readonly { key: string; matchName: string; confidence: AdobeConfidence }[] {
+  const tier: Record<AdobeConfidence, number> = {
+    unverified: 0,
+    medium: 1,
+    high: 2,
+  };
+  const threshold = tier[minConfidence];
   return Object.entries(ADOBE_MATCH_REGISTRY)
-    .filter(([, v]) => v.verified)
-    .map(([k, v]) => ({ key: k, matchName: v.matchName }));
+    .filter(([, v]) => tier[v.confidence] >= threshold)
+    .map(([k, v]) => ({ key: k, matchName: v.matchName, confidence: v.confidence }));
+}
+
+/** @deprecated Use listMatchNamesByConfidence('high') instead. */
+export function listVerifiedMatchNames(): readonly { key: string; matchName: string }[] {
+  return listMatchNamesByConfidence('high').map(({ key, matchName }) => ({ key, matchName }));
 }
 
 /**

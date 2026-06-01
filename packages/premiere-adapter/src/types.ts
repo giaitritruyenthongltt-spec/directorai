@@ -57,13 +57,33 @@ export interface KeyframeInput {
   value: number | string | boolean;
 }
 
+/**
+ * Lumetri Basic Correction param surface.
+ *
+ * V4 — added whites/blacks/vibrance for full 9-slider coverage. All
+ * params are optional — pass only those you want to set.
+ *
+ * Ranges (the adapter clamps to these — out-of-range silently fails):
+ *   exposure    -5..5
+ *   contrast    -100..100
+ *   highlights  -100..100
+ *   shadows     -100..100
+ *   whites      -100..100
+ *   blacks      -100..100
+ *   saturation  0..200
+ *   vibrance    -100..100
+ *   temperature -100..100
+ */
 export interface ColorParamsInput {
   clipId: string;
   exposure?: number;
   contrast?: number;
   highlights?: number;
   shadows?: number;
+  whites?: number;
+  blacks?: number;
   saturation?: number;
+  vibrance?: number;
   temperature?: number;
 }
 

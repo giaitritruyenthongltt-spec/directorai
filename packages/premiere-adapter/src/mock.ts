@@ -1,4 +1,5 @@
 import { NotFoundError, uniqueId } from '@directorai/shared';
+import { getLumetriRecipe, LUMETRI_PRESET_KEYS } from '@directorai/effect-library';
 import {
   type Project,
   type Sequence,
@@ -339,25 +340,49 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     // Mock: no-op
   }
 
+  /**
+   * V1 — Mirror uxp.ts behaviour so unit tests verify the same shape
+   * production hits. Previously this stored a fake match-name
+   * `Lumetri:${name}` that masked the real bug in the UXP path. Now:
+   *   1. Resolve recipe; throw same AdapterError-shape on unknown key.
+   *   2. Ensure ONE `AE.ADBE Lumetri` effect entry on the clip.
+   *   3. Delegate to setColorParams to write recipe values.
+   * Match-name is the canonical Adobe ID — what real Premiere returns.
+   */
   async applyColorPreset(clipId: string, presetName: string): Promise<void> {
+    const recipe = getLumetriRecipe(presetName);
+    if (!recipe) {
+      throw new Error(
+        `Unknown Lumetri preset "${presetName}". Valid keys: ${LUMETRI_PRESET_KEYS.join(', ')}`
+      );
+    }
     const { clip } = this.findClip(clipId);
-    clip.effects.push({
-      id: uniqueId('effect'),
-      matchName: `Lumetri:${presetName}`,
-      displayName: `Lumetri Preset: ${presetName}`,
-      kind: 'color',
-      enabled: true,
-      params: [],
-    });
+    let lumetri = clip.effects.find((e) => e.matchName === 'AE.ADBE Lumetri');
+    if (!lumetri) {
+      lumetri = {
+        id: uniqueId('effect'),
+        matchName: 'AE.ADBE Lumetri',
+        displayName: 'Lumetri Color',
+        kind: 'color',
+        enabled: true,
+        params: [],
+      };
+      clip.effects.push(lumetri);
+    }
+    await this.setColorParams({ clipId, ...recipe });
   }
 
   async setColorParams(input: ColorParamsInput): Promise<void> {
     const { clip } = this.findClip(input.clipId);
-    let lumetri = clip.effects.find((e) => e.matchName.startsWith('Lumetri'));
+    // V1 — mirror UXP: real Lumetri component matchName is 'AE.ADBE Lumetri',
+    // never 'Lumetri:Custom'. Find by the canonical ID.
+    let lumetri = clip.effects.find(
+      (e) => e.matchName === 'AE.ADBE Lumetri' || e.matchName.toLowerCase().includes('lumetri')
+    );
     if (!lumetri) {
       lumetri = {
         id: uniqueId('effect'),
-        matchName: 'Lumetri:Custom',
+        matchName: 'AE.ADBE Lumetri',
         displayName: 'Lumetri Color',
         kind: 'color',
         enabled: true,

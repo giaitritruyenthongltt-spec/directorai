@@ -117,8 +117,10 @@ describe('7. Color (Lumetri)', () => {
   it('applyPreset + setParams', async () => {
     const a = newAdapter();
     const id = await seedClip(a);
-    await dispatchRpc('color.applyPreset', { clipId: id, presetName: 'WarmVlog' }, a);
-    await dispatchRpc('color.setParams', { clipId: id, exposure: 0.5, contrast: 1.1 }, a);
+    // V1+V4 — preset names are now lowercase keys from LUMETRI_RECIPES,
+    // not arbitrary strings. Old test used 'WarmVlog' which is rejected.
+    await dispatchRpc('color.applyPreset', { clipId: id, presetName: 'warm_vlog' }, a);
+    await dispatchRpc('color.setParams', { clipId: id, exposure: 0.5, contrast: 5 }, a);
   });
 });
 

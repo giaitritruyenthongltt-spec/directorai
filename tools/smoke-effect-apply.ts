@@ -117,11 +117,13 @@ async function main(): Promise<void> {
   summary.push({ name: 'effect.apply (Lumetri)', ok: effectStep.ok, error: effectStep.error });
 
   // 4. Apply color preset (Lumetri preset by name)
+  // V1+V4 — presetName must be a key from LUMETRI_PRESET_KEYS, not an
+  // arbitrary string. Previous run used 'cinematic' which fails.
   console.info('\nStep 4 — color.applyPreset');
-  const colorStep = await tryStep('color.applyPreset cinematic', () =>
+  const colorStep = await tryStep('color.applyPreset warm_vlog', () =>
     call(ws, nextId++, 'color.applyPreset', {
       clipId: firstClip.id,
-      presetName: 'cinematic',
+      presetName: 'warm_vlog',
     })
   );
   summary.push({ name: 'color.applyPreset', ok: colorStep.ok, error: colorStep.error });

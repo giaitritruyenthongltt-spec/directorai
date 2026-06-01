@@ -4,6 +4,7 @@ import {
   ADOBE_LUMETRI_MATCH_NAME,
   ADOBE_MATCH_NAMES,
   ADOBE_MATCH_REGISTRY,
+  listMatchNamesByConfidence,
   listVerifiedMatchNames,
   pickColorPresetForMood,
   resolveAdobeMatchName,
@@ -42,39 +43,69 @@ describe('adobe match-names catalog', () => {
   });
 });
 
-describe('verified vs unverified mappings (F3)', () => {
+describe('confidence tiers (V3)', () => {
   it('flags 3 known-bad mappings as unverified', () => {
-    // These were fabrications caught in the F3 audit.
-    expect(ADOBE_MATCH_REGISTRY.whip_pan?.verified).toBe(false);
-    expect(ADOBE_MATCH_REGISTRY.page_turn?.verified).toBe(false);
-    expect(ADOBE_MATCH_REGISTRY.shake?.verified).toBe(false);
+    expect(ADOBE_MATCH_REGISTRY.whip_pan?.confidence).toBe('unverified');
+    expect(ADOBE_MATCH_REGISTRY.page_turn?.confidence).toBe('unverified');
+    expect(ADOBE_MATCH_REGISTRY.shake?.confidence).toBe('unverified');
   });
 
-  it('listVerifiedMatchNames returns only verified rows', () => {
-    const verified = listVerifiedMatchNames();
-    expect(verified.length).toBeGreaterThan(0);
-    for (const v of verified) {
-      expect(ADOBE_MATCH_REGISTRY[v.key]?.verified).toBe(true);
+  it('Lumetri-base color entries are all high-confidence', () => {
+    for (const key of [
+      'warm_vlog',
+      'teal_orange',
+      'punchy_vibrant',
+      'noir_high_contrast',
+      'bw_documentary',
+    ]) {
+      expect(ADOBE_MATCH_REGISTRY[key]?.confidence).toBe('high');
     }
-    expect(verified.find((v) => v.key === 'whip_pan')).toBeUndefined();
-    expect(verified.find((v) => v.key === 'page_turn')).toBeUndefined();
   });
 
-  it('resolveAdobeMatchName invokes onUnverified for fabricated keys', () => {
-    let warned = '';
-    const got = resolveAdobeMatchName('whip_pan', 'transition', (e) => {
-      warned = e.note ?? 'unverified';
-    });
-    expect(got).toBe('AE.ADBE Iris Round');
-    expect(warned).toMatch(/Whip Pan/);
+  it('AE-effect-pack zoom mappings sit at medium confidence', () => {
+    for (const key of ['parallax', 'tilt_shift', 'lens_distort']) {
+      expect(ADOBE_MATCH_REGISTRY[key]?.confidence).toBe('medium');
+    }
   });
 
-  it('resolveAdobeMatchName does NOT invoke onUnverified for verified keys', () => {
-    let warned = false;
+  it('deprecated `verified` boolean still mirrors confidence===high', () => {
+    for (const [, v] of Object.entries(ADOBE_MATCH_REGISTRY)) {
+      expect(v.verified).toBe(v.confidence === 'high');
+    }
+  });
+
+  it('listMatchNamesByConfidence("high") excludes medium + unverified', () => {
+    const high = listMatchNamesByConfidence('high');
+    expect(high.find((v) => v.key === 'whip_pan')).toBeUndefined();
+    expect(high.find((v) => v.key === 'parallax')).toBeUndefined(); // medium
+    expect(high.find((v) => v.key === 'cross_dissolve')).toBeDefined();
+    for (const v of high) expect(v.confidence).toBe('high');
+  });
+
+  it('listMatchNamesByConfidence("medium") includes high + medium', () => {
+    const med = listMatchNamesByConfidence('medium');
+    expect(med.find((v) => v.key === 'cross_dissolve')).toBeDefined(); // high
+    expect(med.find((v) => v.key === 'parallax')).toBeDefined(); // medium
+    expect(med.find((v) => v.key === 'whip_pan')).toBeUndefined(); // unverified
+  });
+
+  it('resolveAdobeMatchName invokes onLowConfidence for medium + unverified', () => {
+    const warnings: string[] = [];
+    resolveAdobeMatchName('parallax', 'zoom', (e) => warnings.push(`med:${e.confidence}`));
+    resolveAdobeMatchName('whip_pan', 'transition', (e) => warnings.push(`unv:${e.confidence}`));
+    expect(warnings).toEqual(['med:medium', 'unv:unverified']);
+  });
+
+  it('resolveAdobeMatchName does NOT fire callback for high-confidence', () => {
+    let fired = false;
     resolveAdobeMatchName('cross_dissolve', 'transition', () => {
-      warned = true;
+      fired = true;
     });
-    expect(warned).toBe(false);
+    expect(fired).toBe(false);
+  });
+
+  it('listVerifiedMatchNames is back-compat alias for confidence=high', () => {
+    expect(listVerifiedMatchNames().length).toBe(listMatchNamesByConfidence('high').length);
   });
 });
 

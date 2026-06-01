@@ -51,11 +51,13 @@ function runOne(suite: Suite): Promise<SuiteResult> {
     const t0 = Date.now();
     const stdout: string[] = [];
     const stderr: string[] = [];
-    const tsx = process.platform === 'win32' ? 'tsx.cmd' : 'tsx';
-    const child = spawn(tsx, [suite.script, ...suite.args], {
+    // V2 — Windows needs shell:true; macOS/Linux works either way.
+    const isWin = process.platform === 'win32';
+    const child = spawn('npx', ['tsx', suite.script, ...suite.args], {
       cwd: resolve(import.meta.dirname ?? '.', '..'),
       env: { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe'],
+      shell: isWin,
     });
     child.stdout.on('data', (b) => stdout.push(b.toString()));
     child.stderr.on('data', (b) => stderr.push(b.toString()));
