@@ -12,7 +12,7 @@
 
 import React, { useEffect, useState } from 'react';
 
-import { wsClient } from '../bridge/ws-client.js';
+import { wsClient, type ConnectionState } from '../bridge/ws-client.js';
 import './DirectorTab.css';
 
 type Persona = 'cinematic' | 'action' | 'vlog' | 'vintage';
@@ -206,6 +206,37 @@ export function DirectorTab(): React.ReactElement {
     setProgress(null);
     setError(null);
   };
+
+  // P4-1 — Subscribe to WS connection state so we can show an offline banner
+  // instead of a cryptic "WS not connected" error from director.plan.
+  const [wsState, setWsState] = useState<ConnectionState>(wsClient.state);
+  useEffect(() => wsClient.onStateChange(setWsState), []);
+  const offline = wsState !== 'connected';
+
+  // Empty state when server isn't reachable.
+  if (offline) {
+    return (
+      <div className="director-tab">
+        <header className="director-header">
+          <h2>🎬 Director</h2>
+        </header>
+        <div className="director-offline">
+          <div className="director-offline-icon">📡</div>
+          <h3>Đang kết nối tới DirectorAI server…</h3>
+          <p>
+            Trạng thái WebSocket: <code>{wsState}</code>
+          </p>
+          <ul className="director-offline-help">
+            <li>
+              Đảm bảo server đang chạy: <code>pnpm --filter @directorai/server dev</code>
+            </li>
+            <li>Server lắng nghe trên ws://127.0.0.1:7778</li>
+            <li>Panel sẽ tự reconnect mỗi vài giây.</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="director-tab">

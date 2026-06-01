@@ -230,6 +230,55 @@
   word-break: break-word;
 }
 
+/* P4-1 — Offline / disconnected state */
+.director-offline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 16px;
+  border: 1px dashed var(--ui-border, #3e3e3e);
+  border-radius: 8px;
+  background: var(--ui-bg-secondary, #2d2d2d);
+  text-align: center;
+}
+
+.director-offline-icon {
+  font-size: 32px;
+}
+
+.director-offline h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ui-text, #d4d4d4);
+}
+
+.director-offline p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-text-secondary, #969696);
+}
+
+.director-offline code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  background: var(--ui-bg-tertiary, #1e1e1e);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.director-offline-help {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 11px;
+  color: var(--ui-text-secondary, #969696);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* P3-3 — Refine feedback box */
 .director-refine {
   display: flex;
