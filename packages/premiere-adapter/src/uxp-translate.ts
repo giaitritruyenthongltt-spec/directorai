@@ -60,7 +60,7 @@ export async function translateTrack(track: PProTrack, index: number): Promise<T
  * Premiere 26's UXP API returns `guid` as a Guid object with a string-valued
  * property, not a plain string. Our IPC layer assumes string IDs, so flatten.
  */
-function stringifyGuid(guid: unknown): string {
+export function stringifyGuid(guid: unknown): string {
   if (typeof guid === 'string') return guid;
   if (guid && typeof guid === 'object') {
     const g = guid as { asString?: () => string; toString?: () => string };

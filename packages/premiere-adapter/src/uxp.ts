@@ -56,6 +56,7 @@ import {
   translateComponent,
   translateMarker,
   tickToSeconds,
+  stringifyGuid,
 } from './uxp-translate.js';
 
 /**
@@ -100,7 +101,10 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
       return active;
     }
     const all = await proj.getSequences();
-    const found = all.find((s) => s.guid === sequenceId);
+    // Premiere 26 returns guid as a Guid object, not a string — we stored the
+    // stringified form when translating, so stringify both sides to compare.
+    const target = sequenceId.toLowerCase();
+    const found = all.find((s) => stringifyGuid(s.guid).toLowerCase() === target);
     if (!found) throw new NotFoundError('Sequence', sequenceId);
     return found;
   }
