@@ -265,6 +265,18 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     (clip as { name?: string }).name = newName;
   }
 
+  async setClipInOut(clipId: string, inSec: Seconds, outSec: Seconds): Promise<void> {
+    if (!(outSec > inSec)) throw new Error(`setClipInOut: outSec phải > inSec`);
+    const { clip } = this.findClip(clipId);
+    const dur = (outSec - inSec) as Seconds;
+    // Giữ vị trí timeline; đổi source in/out + rút thời lượng on-timeline.
+    clip.sourceRange = { start: inSec, end: outSec };
+    clip.timelineRange = {
+      start: clip.timelineRange.start,
+      end: (clip.timelineRange.start + dur) as Seconds,
+    };
+  }
+
   async listTracks(sequenceId: string): Promise<readonly Track[]> {
     const s = this.requireSequence(sequenceId);
     return s.tracks.map((t) => ({

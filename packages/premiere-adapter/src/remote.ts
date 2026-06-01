@@ -1,4 +1,4 @@
-import type { Project, Sequence, Clip, Track, Effect, Marker } from '@directorai/core';
+import type { Project, Sequence, Clip, Track, Effect, Marker, Seconds } from '@directorai/core';
 import type {
   IPremiereAdapter,
   ApplyEffectInput,
@@ -78,6 +78,9 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   }
   renameClip(clipId: string, newName: string): Promise<void> {
     return this.send<void>('timeline.renameClip', { clipId, newName });
+  }
+  setClipInOut(clipId: string, inSec: Seconds, outSec: Seconds): Promise<void> {
+    return this.send<void>('timeline.setClipInOut', { clipId, inSec, outSec });
   }
 
   // Effects

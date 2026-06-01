@@ -16,17 +16,32 @@
  */
 
 import type { INLEAdapter } from '@directorai/premiere-adapter';
+import type { Clip, Seconds } from '@directorai/core';
 import type { Logger } from '@directorai/shared';
 import type { SafePlanAction } from './director-tools.js';
 import type { PlanPreview, ResolvedStep } from './plan-resolver.js';
+
+function num(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Tính newStart (giây) cho 1 bước move từ to_index, dựa trên thứ tự clip
+ *  hiện tại trên timeline. Clamp an toàn trong [0, cuối timeline]. */
+function computeMoveStart(toIndex: number, sortedStarts: number[], sortedEnds: number[]): number {
+  if (sortedStarts.length === 0) return 0;
+  if (toIndex <= 0) return sortedStarts[0] ?? 0;
+  if (toIndex >= sortedStarts.length) return sortedEnds[sortedEnds.length - 1] ?? 0;
+  return sortedStarts[toIndex] ?? 0;
+}
 
 /** Thao tác có map tham số SẠCH sang adapter ngay bây giờ (an toàn ghi). */
 export const EXECUTOR_SUPPORTED: Record<SafePlanAction, boolean> = {
   disable: true,
   rename: true,
-  trim: false, // newRange = vị-trí-timeline, KHÁC in/out nội dung của plan
-  move: false, // plan dùng to_index, adapter cần newStart (giây)
-  transition: false, // cần clip kề (clipIdA+clipIdB), plan chỉ có 1 target
+  trim: true, // SAFE-1e: setClipInOut — tỉa in/out tại chỗ, không dịch vị trí
+  move: true, // SAFE-1e: moveClip(newStart) tính từ to_index
+  transition: false, // API transition Premiere 26 CHƯA verify → vẫn defer
 };
 
 export type StepStatus = 'applied' | 'failed' | 'skipped' | 'deferred' | 'dry-run';
@@ -52,17 +67,38 @@ export interface ApplyResult {
   results: ApplyStepResult[];
 }
 
-async function execStep(adapter: INLEAdapter, step: ResolvedStep): Promise<string> {
+interface ExecCtx {
+  sortedStarts: number[];
+  sortedEnds: number[];
+}
+
+async function execStep(adapter: INLEAdapter, step: ResolvedStep, ctx: ExecCtx): Promise<string> {
   const clipId = step.clipId as string; // đã đảm bảo resolved trước khi gọi
+  const p = step.params ?? {};
   switch (step.action) {
     case 'disable':
       await adapter.setClipDisabled(clipId, true);
       return `đã tắt clip "${step.clipName}"`;
     case 'rename': {
-      const newName = String(step.params?.new_name ?? '').trim();
+      const newName = String(p.new_name ?? '').trim();
       if (!newName) throw new Error('rename: thiếu new_name');
       await adapter.renameClip(clipId, newName);
       return `đã đổi tên "${step.clipName}" → "${newName}"`;
+    }
+    case 'trim': {
+      const inSec = num(p.in_sec);
+      const outSec = num(p.out_sec);
+      if (inSec === null || outSec === null) throw new Error('trim: thiếu in_sec/out_sec');
+      if (!(outSec > inSec)) throw new Error(`trim: out_sec (${outSec}) phải > in_sec (${inSec})`);
+      await adapter.setClipInOut(clipId, inSec as Seconds, outSec as Seconds);
+      return `đã tỉa "${step.clipName}" còn ${inSec}–${outSec}s`;
+    }
+    case 'move': {
+      const toIndex = num(p.to_index);
+      if (toIndex === null) throw new Error('move: thiếu to_index');
+      const newStart = computeMoveStart(Math.round(toIndex), ctx.sortedStarts, ctx.sortedEnds);
+      await adapter.moveClip({ clipId, newStart: newStart as Seconds });
+      return `đã chuyển "${step.clipName}" tới ~${newStart.toFixed(1)}s (index ${toIndex})`;
     }
     default:
       throw new Error(`execStep: action "${step.action}" chưa hỗ trợ`);
@@ -79,6 +115,21 @@ export async function applyResolvedPlan(
   opts: { dryRun: boolean; logger?: Logger }
 ): Promise<ApplyResult> {
   const results: ApplyStepResult[] = [];
+
+  // Cho move: cần thứ tự clip hiện tại để map to_index → newStart (giây).
+  // Chỉ tải khi sẽ GHI THẬT và có bước move executable.
+  let ctx: ExecCtx = { sortedStarts: [], sortedEnds: [] };
+  const hasMove = preview.steps.some(
+    (s) => s.action === 'move' && s.resolved && EXECUTOR_SUPPORTED.move
+  );
+  if (!opts.dryRun && hasMove) {
+    const clips: readonly Clip[] = await adapter.listClips(preview.sequenceId);
+    const sorted = [...clips].sort((a, b) => a.timelineRange.start - b.timelineRange.start);
+    ctx = {
+      sortedStarts: sorted.map((c) => c.timelineRange.start),
+      sortedEnds: sorted.map((c) => c.timelineRange.end),
+    };
+  }
 
   for (const step of preview.steps) {
     const base = {
@@ -113,7 +164,7 @@ export async function applyResolvedPlan(
     }
     // 4) Ghi thật.
     try {
-      const detail = await execStep(adapter, step);
+      const detail = await execStep(adapter, step, ctx);
       results.push({ ...base, status: 'applied', detail });
       opts.logger?.info(
         { order: step.order, action: step.action, clipId: step.clipId },

@@ -17,6 +17,7 @@ const MUTATING_METHODS = new Set([
   'timeline.deleteClip',
   'timeline.setClipDisabled',
   'timeline.renameClip',
+  'timeline.setClipInOut',
   'effect.apply',
   'effect.remove',
   'media.import',
@@ -110,6 +111,13 @@ const handlers: Record<string, RpcHandler> = {
     run: (p, a) => {
       const params = p as { clipId: string; newName: string };
       return a.renameClip(params.clipId, params.newName);
+    },
+  },
+  'timeline.setClipInOut': {
+    schema: z.object({ clipId: z.string(), inSec: z.number(), outSec: z.number() }),
+    run: (p, a) => {
+      const params = p as { clipId: string; inSec: number; outSec: number };
+      return a.setClipInOut(params.clipId, params.inSec as Seconds, params.outSec as Seconds);
     },
   },
 

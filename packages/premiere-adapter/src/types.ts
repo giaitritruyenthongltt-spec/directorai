@@ -152,6 +152,12 @@ export interface INLEAdapter {
   /** SAFE-1b — Đổi tên clip trên timeline (createSetNameAction). Dùng cho
    *  "đổi tên theo cảnh". An toàn, hoàn tác được. */
   renameClip(clipId: string, newName: string): Promise<void>;
+  /**
+   * SAFE-1e — Tỉa nội dung clip theo in/out (giây, gốc nguồn) mà KHÔNG dịch
+   * vị trí trên timeline → an toàn, không gây chồng lấn. Dùng cho "tỉa phần
+   * thừa / cắt khoảng lặng". createSetInPoint + createSetOutPoint. inSec < outSec.
+   */
+  setClipInOut(clipId: string, inSec: Seconds, outSec: Seconds): Promise<void>;
 
   listTracks(sequenceId: string): Promise<readonly Track[]>;
 

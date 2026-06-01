@@ -105,6 +105,7 @@ export const INVALIDATIONS: Record<string, readonly string[]> = {
   'timeline.moveClip': ['timeline', 'project.getActiveSequence'],
   'timeline.deleteClip': ['timeline', 'project.getActiveSequence'],
   'timeline.renameClip': ['timeline'],
+  'timeline.setClipInOut': ['timeline', 'project.getActiveSequence'],
   'effect.apply': ['timeline'],
   'effect.remove': ['timeline'],
   'media.import': ['project', 'timeline'],

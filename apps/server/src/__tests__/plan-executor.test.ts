@@ -126,26 +126,57 @@ describe('safe.applyPlan — cổng duyệt', () => {
     expect(clip?.name).toBe('Hit_Climax');
   });
 
-  it('trim/move/transition → DEFER (không ghi, báo rõ)', async () => {
+  it('approved=true → GHI THẬT trim (setClipInOut, giữ vị trí)', async () => {
     const plan = planWith([
       {
         order: 1,
         action: 'trim',
         target_path: ctx.clipPath,
-        params: { in_sec: 0, out_sec: 2 },
+        params: { in_sec: 1, out_sec: 3 },
         reason: 'r',
         reversible: true,
       },
+    ]);
+    const res = await ctx.tools.applyPlan({
+      sequenceId: ctx.seqId,
+      editPlan: plan,
+      dryRun: false,
+      approved: true,
+    });
+    expect(res.applied).toBe(1);
+    const clip = await ctx.adapter.getClip(ctx.clipId);
+    // thời lượng on-timeline = out-in = 2s
+    expect(clip!.timelineRange.end - clip!.timelineRange.start).toBeCloseTo(2, 5);
+    expect(clip!.sourceRange.start).toBeCloseTo(1, 5);
+  });
+
+  it('approved=true → GHI THẬT move (tính newStart từ to_index)', async () => {
+    // cần >1 clip để move có ý nghĩa
+    await ctx.adapter.importFile({ path: 'E:\\T11\\7.mp4' });
+    const plan = planWith([
       {
-        order: 2,
+        order: 1,
         action: 'move',
         target_path: ctx.clipPath,
         params: { to_index: 1 },
         reason: 'r',
         reversible: true,
       },
+    ]);
+    const res = await ctx.tools.applyPlan({
+      sequenceId: ctx.seqId,
+      editPlan: plan,
+      dryRun: false,
+      approved: true,
+    });
+    expect(res.applied).toBe(1);
+    expect(res.failed).toBe(0);
+  });
+
+  it('transition → DEFER (API Premiere 26 chưa verify)', async () => {
+    const plan = planWith([
       {
-        order: 3,
+        order: 1,
         action: 'transition',
         target_path: ctx.clipPath,
         params: { kind: 'Cut' },
@@ -159,7 +190,7 @@ describe('safe.applyPlan — cổng duyệt', () => {
       dryRun: false,
       approved: true,
     });
-    expect(res.deferred).toBe(3);
+    expect(res.deferred).toBe(1);
     expect(res.applied).toBe(0);
   });
 

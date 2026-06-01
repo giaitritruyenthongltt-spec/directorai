@@ -301,6 +301,31 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     });
   }
 
+  /**
+   * SAFE-1e — Tỉa in/out clip giữ NGUYÊN vị trí timeline (chỉ createSetInPoint
+   * + createSetOutPoint, KHÔNG createSetStart). An toàn, không chồng lấn.
+   */
+  async setClipInOut(clipId: string, inSec: number, outSec: number): Promise<void> {
+    if (!(outSec > inSec)) {
+      throw new AdapterError('UXP', `setClipInOut: outSec (${outSec}) phải > inSec (${inSec})`);
+    }
+    this.invalidateClipCache();
+    const { item } = await this.findTrackItem(clipId);
+    if (
+      typeof item.createSetInPointAction !== 'function' ||
+      typeof item.createSetOutPointAction !== 'function'
+    ) {
+      throw new AdapterError(
+        'UXP',
+        'setClipInOut: thiếu createSetInPoint/OutPointAction trên host'
+      );
+    }
+    await this.runTransaction('Tỉa in/out clip', (compound) => {
+      compound.addAction(item.createSetInPointAction(this.secondsToTick(inSec)));
+      compound.addAction(item.createSetOutPointAction(this.secondsToTick(outSec)));
+    });
+  }
+
   // ─── Project ──────────────────────────────────────────────────────────────
 
   async getProject(): Promise<Project> {
