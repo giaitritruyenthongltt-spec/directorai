@@ -322,6 +322,15 @@ class WsClient {
     this.ws.send(JSON.stringify(msg));
   }
 
+  /**
+   * L1 — Send a one-way JSON-RPC notification (no response expected).
+   * Used by App.tsx to report mount + error events to server log so
+   * we can debug panel render issues without DevTools access.
+   */
+  notify(method: string, params?: unknown): void {
+    this.sendRaw({ jsonrpc: '2.0', method, params });
+  }
+
   call<T = unknown>(method: string, params?: unknown): Promise<T> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {

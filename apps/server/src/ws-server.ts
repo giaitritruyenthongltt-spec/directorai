@@ -425,12 +425,18 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       } else if (isResponse(msg)) {
         handleInboundResponse(msg);
       } else if (typeof msg === 'object' && msg !== null && 'method' in msg && !('id' in msg)) {
-        // JSON-RPC notification (no id). The panel uses these for
-        // heartbeat — reply with a pong notification so the panel's
-        // pong watchdog stays armed.
+        // JSON-RPC notification (no id).
         const m = (msg as { method?: string }).method;
+        const params = (msg as { params?: unknown }).params;
         if (m === '_panel.ping') {
           send(ws, { jsonrpc: '2.0', method: '_panel.pong' });
+        } else if (m === '_panel.lifecycle') {
+          // L1 — panel mount heartbeat. Log so we can verify panel
+          // actually rendered (not just registered WS).
+          opts.logger.info({ params }, 'panel lifecycle');
+        } else if (m === '_panel.error') {
+          // L1 — panel-side window error or unhandled rejection.
+          opts.logger.error({ params }, 'panel error reported');
         }
       }
     });

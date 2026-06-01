@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, Suspense, lazy } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Header } from './components/Header.js';
 import { ChatLog } from './components/ChatLog.js';
 import { CommandBar } from './components/CommandBar.js';
@@ -7,25 +7,14 @@ import { ProgressBar } from './components/ProgressBar.js';
 import { ConsentDialog } from './components/ConsentDialog.js';
 import { FirstRunWizard } from './components/FirstRunWizard.js';
 import { OnboardingTour } from './components/OnboardingTour.js';
+// L2 — replaced lazy() with static imports. UXP's chunk-loader behaviour
+// in Premiere 26 may differ from web browsers; lazy() risked a silent
+// chunk 404 that would leave the panel blank with no error visible.
+import { StylePicker } from './components/StylePicker.js';
+import { ContextTab } from './components/ContextTab.js';
+import { DirectorTab } from './components/DirectorTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import './App.css';
-
-// P4.14 — code-split the heavy tabs so the first paint is the chat panel
-// only. StylePicker pulls cut-planner + style-engine; ContextTab pulls
-// the context client wiring. Both stay off the critical path.
-const StylePicker = lazy(() =>
-  import('./components/StylePicker.js').then((m) => ({ default: m.StylePicker }))
-);
-const ContextTab = lazy(() =>
-  import('./components/ContextTab.js').then((m) => ({ default: m.ContextTab }))
-);
-const DirectorTab = lazy(() =>
-  import('./components/DirectorTab.js').then((m) => ({ default: m.DirectorTab }))
-);
-
-function TabLoading(): React.ReactElement {
-  return <div className="tab-loading">Loading…</div>;
-}
 
 export type ActiveTab = 'director' | 'chat' | 'style' | 'context';
 
@@ -44,6 +33,58 @@ export function App(): React.ReactElement {
   const [connState, setConnState] = useState<ConnectionState>('disconnected');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [activeTab, setActiveTab] = useState<ActiveTab>('director');
+
+  // L1 — Send mount lifecycle + global error events to server log
+  // so we can debug panel render failures without UDT DevTools.
+  useEffect(() => {
+    // Defer notify by one tick so wsClient WebSocket has a chance to open.
+    const sendAlive = (): void => {
+      try {
+        wsClient.notify('_panel.lifecycle', {
+          phase: 'mounted',
+          ts: Date.now(),
+          ua: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        });
+      } catch {
+        // ignore — WS not open yet, the connect handler will eventually fire
+      }
+    };
+    const aliveTimer = setInterval(sendAlive, 5000);
+    setTimeout(sendAlive, 500);
+
+    const onErr = (e: ErrorEvent): void => {
+      try {
+        wsClient.notify('_panel.error', {
+          message: e.message,
+          filename: e.filename,
+          lineno: e.lineno,
+          colno: e.colno,
+          stack: e.error?.stack,
+          ts: Date.now(),
+        });
+      } catch {
+        // ignore
+      }
+    };
+    const onReject = (e: PromiseRejectionEvent): void => {
+      try {
+        wsClient.notify('_panel.error', {
+          message: `unhandledrejection: ${String(e.reason)}`,
+          stack: e.reason instanceof Error ? e.reason.stack : undefined,
+          ts: Date.now(),
+        });
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener('error', onErr);
+    window.addEventListener('unhandledrejection', onReject);
+    return () => {
+      clearInterval(aliveTimer);
+      window.removeEventListener('error', onErr);
+      window.removeEventListener('unhandledrejection', onReject);
+    };
+  }, []);
 
   useEffect(() => {
     const unsubState = wsClient.onStateChange((s) => {
@@ -140,22 +181,10 @@ export function App(): React.ReactElement {
         ))}
       </nav>
       <main className="main-content">
-        {activeTab === 'director' && (
-          <Suspense fallback={<TabLoading />}>
-            <DirectorTab />
-          </Suspense>
-        )}
+        {activeTab === 'director' && <DirectorTab />}
         {activeTab === 'chat' && <ChatLog entries={logs} />}
-        {activeTab === 'style' && (
-          <Suspense fallback={<TabLoading />}>
-            <StylePicker />
-          </Suspense>
-        )}
-        {activeTab === 'context' && (
-          <Suspense fallback={<TabLoading />}>
-            <ContextTab />
-          </Suspense>
-        )}
+        {activeTab === 'style' && <StylePicker />}
+        {activeTab === 'context' && <ContextTab />}
       </main>
       <ProgressBar />
       <CommandBar onSubmit={handleCommand} disabled={connState !== 'connected'} />
