@@ -2,7 +2,7 @@
   "manifestVersion": 5,
   "id": "com.directorai.panel",
   "name": "DirectorAI",
-  "version": "0.2.0",
+  "version": "2.1.0",
   "main": "index.html",
   "host": {
     "app": "premierepro",

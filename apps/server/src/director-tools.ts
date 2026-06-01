@@ -81,6 +81,8 @@ export class CompositeTools {
         return this.listEffects(params as { category?: string });
       case 'context.analyzeColor':
         return this.analyzeColor(params as { clipPath: string });
+      case 'context.classifyScene':
+        return this.classifyScene(params as { clipPath: string });
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
       case 'color.applyLookByScene':
@@ -100,9 +102,34 @@ export class CompositeTools {
       'context.detectSilences',
       'context.listEffects',
       'context.analyzeColor',
+      'context.classifyScene',
       'timeline.cutOnBeats',
       'color.applyLookByScene',
     ];
+  }
+
+  // ─── context.classifyScene ────────────────────────────────────────────
+
+  /**
+   * F6 — Heuristic scene class + aesthetic-lite score for one clip.
+   * Calls sidecar /scenes/classify. Returns the same shape as the
+   * Python `SceneClassResult.to_dict()`.
+   */
+  async classifyScene(params: { clipPath: string }): Promise<{
+    media_path: string;
+    sample_count: number;
+    motion_score: number;
+    brightness: number;
+    contrast: number;
+    edge_density: number;
+    aesthetic: number;
+    scene_class: 'landscape' | 'closeup' | 'action' | 'dialog' | 'static' | 'lowlight';
+  }> {
+    if (!params.clipPath) throw new Error('clipPath required');
+    return sidecarPost('/scenes/classify', {
+      media_path: params.clipPath,
+      sample_interval_sec: 0.15,
+    });
   }
 
   // ─── context.listEffects ──────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { AdapterError, NotFoundError } from '@directorai/shared';
+import { getLumetriRecipe, LUMETRI_PRESET_KEYS } from '@directorai/effect-library';
 
 /**
  * A.1 (Track A debt) — resolve which MOGRT template to use.
@@ -448,8 +449,37 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
 
   // ─── Color ────────────────────────────────────────────────────────────────
 
+  /**
+   * F1 — Apply a named Lumetri look via the REAL Adobe Lumetri component +
+   * tuned Basic Correction params. The previous implementation used a
+   * fabricated match-name `'Lumetri:${name}'` which Premiere doesn't
+   * recognize. Now:
+   *   1. Ensure an `AE.ADBE Lumetri` component exists on the clip.
+   *   2. Look up a recipe (exposure/contrast/highlights/...) by preset key.
+   *   3. Delegate to `setColorParams` to write the values.
+   * Unknown preset keys throw — caller should validate against
+   * LUMETRI_PRESET_KEYS first.
+   */
   async applyColorPreset(clipId: string, presetName: string): Promise<void> {
-    await this.applyEffect({ clipId, effectMatchName: `Lumetri:${presetName}` });
+    const recipe = getLumetriRecipe(presetName);
+    if (!recipe) {
+      throw new AdapterError(
+        'UXP',
+        `Unknown Lumetri preset "${presetName}". Valid keys: ${LUMETRI_PRESET_KEYS.join(', ')}`
+      );
+    }
+    await this.mutate('applyColorPreset', async () => {
+      const { item } = await this.findTrackItem(clipId);
+      const chain = await item.getComponentChain();
+      const comps = await chain.getComponents();
+      let lumetri = comps.find((c) => c.matchName.toLowerCase().includes('lumetri'));
+      if (!lumetri && this.ppro.Component) {
+        lumetri = await this.ppro.Component.create('AE.ADBE Lumetri');
+        await chain.insertComponent(lumetri, 1);
+      }
+      if (!lumetri) throw new AdapterError('UXP', 'Lumetri component unavailable');
+    });
+    await this.setColorParams({ clipId, ...recipe });
   }
 
   async setColorParams(input: ColorParamsInput): Promise<void> {

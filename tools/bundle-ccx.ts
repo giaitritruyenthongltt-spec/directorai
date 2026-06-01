@@ -47,6 +47,25 @@ async function walk(dir: string, base = dir): Promise<string[]> {
   return out;
 }
 
+/**
+ * F7 — Files we INCLUDE in the .ccx:
+ *   - manifest.json (canonical from apps/panel/manifest.json)
+ *   - index.html
+ *   - bundle.js (+ any non-map chunks)
+ *   - icons/**
+ *
+ * Files we EXCLUDE:
+ *   - *.map (source maps — leak source + double bundle size)
+ *   - duplicate manifest.json that webpack sometimes copies into dist
+ *   - .DS_Store / Thumbs.db
+ */
+function isIncluded(rel: string): boolean {
+  if (rel.endsWith('.map')) return false;
+  if (rel === 'manifest.json') return false; // we add the canonical one explicitly
+  if (rel.endsWith('.DS_Store') || rel.endsWith('Thumbs.db')) return false;
+  return true;
+}
+
 async function main(): Promise<void> {
   let manifest: PanelManifest;
   try {
@@ -70,9 +89,17 @@ async function main(): Promise<void> {
 
   const zip = new ZipFile();
   const distEntries = await walk(PANEL_DIST);
+  let included = 0;
+  let excluded = 0;
   for (const rel of distEntries) {
+    if (!isIncluded(rel)) {
+      excluded++;
+      continue;
+    }
     zip.addFile(path.join(PANEL_DIST, rel), rel);
+    included++;
   }
+  // Canonical manifest goes at the root.
   zip.addFile(PANEL_MANIFEST, 'manifest.json');
   zip.end();
 
@@ -86,6 +113,9 @@ async function main(): Promise<void> {
   const stat = await fs.stat(outPath);
   console.log(
     `CCX bundle written → ${path.relative(ROOT, outPath)} (${(stat.size / 1024).toFixed(1)} KB)`
+  );
+  console.log(
+    `  files: ${included + 1} included (manifest+${included}), ${excluded} excluded (.map, dupes)`
   );
   console.log('Next step: sign via tools/sign-ccx.ps1 (P4.23).');
 }

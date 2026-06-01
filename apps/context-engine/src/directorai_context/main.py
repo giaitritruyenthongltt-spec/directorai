@@ -247,6 +247,28 @@ def create_app() -> FastAPI:
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
 
+    @app.post("/scenes/classify")
+    async def post_scene_classify(req: VisionRequest) -> dict[str, object]:
+        """F6 — Heuristic scene class + aesthetic-lite score.
+
+        Buckets clip into landscape/closeup/action/dialog/static/lowlight
+        from color + motion + edge features. No ML model required.
+        """
+        from directorai_context.modules.scene_class import classify_clip
+
+        try:
+            sample_count = int(max(2, round(1.0 / max(0.001, req.sample_interval_sec))))
+        except (TypeError, ValueError):
+            sample_count = 7
+        try:
+            r = classify_clip(req.media_path, sample_count=sample_count)
+            return r.to_dict()
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            log.error("scene_classify_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
     @app.post("/color/analyze")
     async def post_color_analyze(req: VisionRequest) -> dict[str, object]:
         """P2-2 — Sample frames + compute color mood/warmth/dominants."""

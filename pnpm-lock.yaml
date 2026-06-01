@@ -23,6 +23,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
+      '@types/yauzl':
+        specifier: ^2.10.3
+        version: 2.10.3
       '@types/yazl':
         specifier: ^3.3.0
         version: 3.3.1
@@ -71,6 +74,9 @@ importers:
       ws:
         specifier: ^8.18.0
         version: 8.20.1
+      yauzl:
+        specifier: ^3.2.0
+        version: 3.3.2
       yazl:
         specifier: ^3.3.1
         version: 3.3.1
@@ -481,6 +487,9 @@ importers:
       '@directorai/core':
         specifier: workspace:*
         version: link:../core
+      '@directorai/effect-library':
+        specifier: workspace:*
+        version: link:../effect-library
       '@directorai/shared':
         specifier: workspace:*
         version: link:../shared
@@ -1626,6 +1635,9 @@ packages:
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+
+  '@types/yauzl@2.10.3':
+    resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
 
   '@types/yazl@3.3.1':
     resolution: {integrity: sha512-DIWfCKpsTp6hE5BDBHV3+fIL/bLUF9Bv13iDrWnMlmhQpH67buNvI291ZauQ1xcccxK3FqQ9honnXpq4R8NMuQ==}
@@ -3440,6 +3452,9 @@ packages:
     resolution: {integrity: sha512-//nshmD55c46FuFw26xV/xFAaB5HF9Xdap7HJBBnrKdAd6/GxDBaNA1870O79+9ueg61cZLSVc+OaFlfmObYVQ==}
     engines: {node: '>= 14.16'}
 
+  pend@1.2.0:
+    resolution: {integrity: sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==}
+
   pg-int8@1.0.1:
     resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
     engines: {node: '>=4.0.0'}
@@ -4339,6 +4354,10 @@ packages:
 
   yargs@17.7.2:
     resolution: {integrity: sha512-7dSzzRQ++CKnNI/krKnYRV7JKKPUXMEh61soaHKg9mrWEhzFWhFnxPxGl+69cD1Ou63C13NUPCnmIcrvqCuM6w==}
+    engines: {node: '>=12'}
+
+  yauzl@3.3.2:
+    resolution: {integrity: sha512-Md9ankxxN23wncAN8s7+Tn3Co52zLUPMtnrLAbVCnfG5d2tKBFfmygYSgXlqFgXObtzIgqkx7aNgDBpso9+4qA==}
     engines: {node: '>=12'}
 
   yazl@3.3.1:
@@ -5342,6 +5361,10 @@ snapshots:
   '@types/unist@3.0.3': {}
 
   '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 22.19.19
+
+  '@types/yauzl@2.10.3':
     dependencies:
       '@types/node': 22.19.19
 
@@ -7323,6 +7346,8 @@ snapshots:
 
   pathval@2.0.1: {}
 
+  pend@1.2.0: {}
+
   pg-int8@1.0.1: {}
 
   pg-protocol@1.14.0: {}
@@ -8345,6 +8370,10 @@ snapshots:
       string-width: 4.2.3
       y18n: 5.0.8
       yargs-parser: 21.1.1
+
+  yauzl@3.3.2:
+    dependencies:
+      pend: 1.2.0
 
   yazl@3.3.1:
     dependencies:

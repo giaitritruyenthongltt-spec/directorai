@@ -14,6 +14,7 @@
 
 import type { Logger } from '@directorai/shared';
 import { director, type ToolDispatcher } from '@directorai/llm-client';
+import { PlanHistoryStore, type PlanHistoryEntry } from './director-history-store.js';
 
 type Plan = director.Plan;
 type PlanProgress = director.PlanProgress;
@@ -83,31 +84,32 @@ async function callGemini(
   return text;
 }
 
-// P3-1 — Plan history entry stored per run.
-interface PlanHistoryEntry {
-  planId: string;
-  title: string;
-  persona: director.Persona;
-  goal: string;
-  stepCount: number;
-  status: director.PlanStatus;
-  createdAt: number;
-  finishedAt?: number;
-  /** Reference to the plan JSON so we can re-execute or refine. */
-  plan: director.Plan;
-}
-
-const MAX_HISTORY = 50;
+const MAX_HISTORY_LIMIT = 50;
 
 export class DirectorRouter {
   private readonly executors = new Map<string, director.PlanExecutor>();
-  // P3-1 — bounded history of all plans (latest first).
-  private readonly history: PlanHistoryEntry[] = [];
+  // F2 — persistent plan history (was in-memory only in P3-1).
+  private readonly historyStore: PlanHistoryStore;
 
-  constructor(private readonly deps: RouterDeps) {}
+  constructor(private readonly deps: RouterDeps) {
+    this.historyStore = new PlanHistoryStore(deps.logger);
+    // Load asynchronously — don't block constructor. Callers can opt
+    // in via .ready() if they need to await persistence init.
+    void this.historyStore.loadOrInit();
+  }
+
+  /** Await disk load — useful for tests + clean shutdown sequencing. */
+  async ready(): Promise<void> {
+    await this.historyStore.loadOrInit();
+  }
+
+  /** Force-persist now (call before process exit). */
+  async shutdown(): Promise<void> {
+    await this.historyStore.flush();
+  }
 
   private trackPlan(planId: string, plan: director.Plan, goal: string): void {
-    this.history.unshift({
+    this.historyStore.add({
       planId,
       title: plan.title,
       persona: plan.persona,
@@ -117,12 +119,10 @@ export class DirectorRouter {
       createdAt: Date.now(),
       plan,
     });
-    if (this.history.length > MAX_HISTORY) this.history.length = MAX_HISTORY;
   }
 
   private updateHistory(planId: string, patch: Partial<PlanHistoryEntry>): void {
-    const entry = this.history.find((h) => h.planId === planId);
-    if (entry) Object.assign(entry, patch);
+    this.historyStore.update(planId, patch);
   }
 
   static fromEnv(deps: Omit<RouterDeps, 'llm'>): DirectorRouter | null {
@@ -280,10 +280,10 @@ export class DirectorRouter {
     count: number;
     plans: Omit<PlanHistoryEntry, 'plan'>[];
   } {
-    const limit = Math.min(params?.limit ?? 20, MAX_HISTORY);
-    const slice = this.history.slice(0, limit);
+    const limit = Math.min(params?.limit ?? 20, MAX_HISTORY_LIMIT);
+    const slice = this.historyStore.list(limit);
     return {
-      count: this.history.length,
+      count: this.historyStore.totalCount(),
       // Strip the heavy `plan` payload — caller can fetch a full plan
       // by re-running director.progress(planId) if they want details.
       plans: slice.map((h) => ({
@@ -314,7 +314,7 @@ export class DirectorRouter {
   }): Promise<Plan> {
     if (!this.deps.llm) throw new Error('No LLM configured');
     if (!params.feedback?.trim()) throw new Error('feedback is required');
-    const prev = this.history.find((h) => h.planId === params.previousPlanId);
+    const prev = this.historyStore.find(params.previousPlanId);
     if (!prev) throw new Error(`Unknown previousPlanId: ${params.previousPlanId}`);
     const persona = params.persona ?? prev.persona;
     const refinedGoal = [

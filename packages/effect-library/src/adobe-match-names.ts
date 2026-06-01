@@ -23,65 +23,117 @@ export const ADOBE_LUMETRI_MATCH_NAME = 'AE.ADBE Lumetri';
 const TX = 'AE.ADBE ';
 
 /**
- * Map our preset key → real Adobe component match-name.
+ * F3 — Each entry tells callers whether the match-name is *verified*
+ * against the Premiere Pro 2026 v26 component registry (`verified: true`)
+ * or whether it's a best-guess / third-party plugin / known-missing
+ * mapping (`verified: false`). Unverified mappings emit a warning when
+ * resolved so the LLM doesn't silently emit broken plans.
  *
- * If a key isn't in the map, callers should fall back to ADOBE_LUMETRI
- * for `color` effects, or skip the effect with a logged warning for
- * non-color categories.
+ * Verification source: Adobe UXP DEC sample + Premiere Pro 2026 SDK
+ * reference. Items marked `verified: false` were either:
+ *   - never standard in Premiere (e.g. "Whip Pan" was removed)
+ *   - third-party plugin matches (e.g. Camera Shake Deluxe is Red Giant)
+ *   - speculative (Page Turn dropped in Premiere ≥ 23)
  */
-export const ADOBE_MATCH_NAMES: Record<string, string> = {
-  // ─── Transitions ────────────────────────────────────────────────────
-  cross_dissolve: `${TX}Cross Dissolve`,
-  dip_to_black: `${TX}Dip to Black`,
-  dip_to_white: `${TX}Dip to White`,
-  film_dissolve: `${TX}Film Dissolve`,
-  whip_pan: `${TX}Iris Round`, // closest Adobe stock to a whip
-  cross_zoom: `${TX}Cross Zoom`,
-  morph_cut: `${TX}Morph Cut`,
-  slide_left: `${TX}Slide`,
-  iris_round: `${TX}Iris Round`,
-  page_turn: `${TX}Page Turn`,
+interface AdobeMatchEntry {
+  readonly matchName: string;
+  readonly verified: boolean;
+  readonly note?: string;
+}
 
-  // ─── Color (all route to Lumetri — preset name does the styling) ────
-  warm_vlog: ADOBE_LUMETRI_MATCH_NAME,
-  teal_orange: ADOBE_LUMETRI_MATCH_NAME,
-  punchy_vibrant: ADOBE_LUMETRI_MATCH_NAME,
-  desaturated_film: ADOBE_LUMETRI_MATCH_NAME,
-  noir_high_contrast: ADOBE_LUMETRI_MATCH_NAME,
-  pastel_dream: ADOBE_LUMETRI_MATCH_NAME,
-  sunset_glow: ADOBE_LUMETRI_MATCH_NAME,
-  cold_drama: ADOBE_LUMETRI_MATCH_NAME,
-  tech_blue: ADOBE_LUMETRI_MATCH_NAME,
-  vintage_kodak: ADOBE_LUMETRI_MATCH_NAME,
-  matrix_green: ADOBE_LUMETRI_MATCH_NAME,
-  bw_documentary: ADOBE_LUMETRI_MATCH_NAME,
+export const ADOBE_MATCH_REGISTRY: Record<string, AdobeMatchEntry> = {
+  // ─── Transitions (verified) ─────────────────────────────────────────
+  cross_dissolve: { matchName: `${TX}Cross Dissolve`, verified: true },
+  dip_to_black: { matchName: `${TX}Dip to Black`, verified: true },
+  dip_to_white: { matchName: `${TX}Dip to White`, verified: true },
+  film_dissolve: { matchName: `${TX}Film Dissolve`, verified: true },
+  cross_zoom: { matchName: `${TX}Cross Zoom`, verified: true },
+  morph_cut: { matchName: `${TX}Morph Cut`, verified: true },
+  slide_left: { matchName: `${TX}Slide`, verified: true },
+  iris_round: { matchName: `${TX}Iris Round`, verified: true },
+
+  // ─── Transitions (unverified — best guess / third-party) ────────────
+  whip_pan: {
+    matchName: `${TX}Iris Round`,
+    verified: false,
+    note: 'No native Whip Pan in Premiere; closest fallback is Iris Round. Skip in plans unless you ship a custom preset.',
+  },
+  page_turn: {
+    matchName: `${TX}Page Turn`,
+    verified: false,
+    note: 'Page Turn was removed from Premiere in ≥ v23. Will fail silently — pick another transition.',
+  },
+
+  // ─── Color (all route to Lumetri base — recipe in lumetri-presets.ts)
+  warm_vlog: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  teal_orange: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  punchy_vibrant: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  desaturated_film: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  noir_high_contrast: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  pastel_dream: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  sunset_glow: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  cold_drama: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  tech_blue: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  vintage_kodak: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  matrix_green: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
+  bw_documentary: { matchName: ADOBE_LUMETRI_MATCH_NAME, verified: true },
 
   // ─── Zoom / motion ──────────────────────────────────────────────────
-  zoom_punch: `${TX}Transform`,
-  zoom_highlight: `${TX}Transform`,
-  zoom_pulse: `${TX}Transform`,
-  ken_burns: `${TX}Transform`,
-  shake: `${TX}Camera Shake Deluxe`,
-  parallax: `${TX}Parallax`,
-  tilt_shift: `${TX}Tilt-Shift Blur`,
-  lens_distort: `${TX}Lens Distortion`,
+  zoom_punch: { matchName: `${TX}Transform`, verified: true },
+  zoom_highlight: { matchName: `${TX}Transform`, verified: true },
+  zoom_pulse: { matchName: `${TX}Transform`, verified: true },
+  ken_burns: { matchName: `${TX}Transform`, verified: true },
+  parallax: { matchName: `${TX}Parallax`, verified: true },
+  tilt_shift: { matchName: `${TX}Tilt-Shift Blur`, verified: true },
+  lens_distort: { matchName: `${TX}Lens Distortion`, verified: true },
+
+  // ─── Zoom / motion (unverified — third-party plugins) ───────────────
+  shake: {
+    matchName: `${TX}Camera Shake Deluxe`,
+    verified: false,
+    note: 'Camera Shake Deluxe is a Red Giant Universe plugin, not Adobe stock. Will fail if not installed.',
+  },
 };
 
 /**
+ * Back-compat — flat string-only map used by older callers and the
+ * existing test suite. Internally just projects `ADOBE_MATCH_REGISTRY`.
+ */
+export const ADOBE_MATCH_NAMES: Record<string, string> = Object.fromEntries(
+  Object.entries(ADOBE_MATCH_REGISTRY).map(([k, v]) => [k, v.matchName])
+);
+
+/**
  * Look up a preset key and return the Adobe match-name. Falls back to
- * the Lumetri base for `color` category misses (callers should rely on
- * presetName parameter on the resulting `color.applyPreset` call to
- * actually pick the look). Returns `null` for non-color misses so the
- * caller can decide whether to skip or surface an error.
+ * the Lumetri base for `color` category misses. Returns `null` for
+ * non-color misses so the caller can decide whether to skip or surface
+ * an error.
+ *
+ * Pass `onUnverified` to receive a warning callback for unverified
+ * mappings — used by the composite tool layer to log a warning before
+ * trying an apply that's likely to fail.
  */
 export function resolveAdobeMatchName(
   key: string,
-  category: 'transition' | 'color' | 'zoom' | 'text' | 'audio' | 'speed' | 'distort' | 'stylize'
+  category: 'transition' | 'color' | 'zoom' | 'text' | 'audio' | 'speed' | 'distort' | 'stylize',
+  onUnverified?: (entry: AdobeMatchEntry) => void
 ): string | null {
-  const direct = ADOBE_MATCH_NAMES[key];
-  if (direct) return direct;
+  const entry = ADOBE_MATCH_REGISTRY[key];
+  if (entry) {
+    if (!entry.verified) onUnverified?.(entry);
+    return entry.matchName;
+  }
   if (category === 'color') return ADOBE_LUMETRI_MATCH_NAME;
   return null;
+}
+
+/** Return only the verified-against-real-Premiere subset. Useful to
+ *  feed the Director system prompt so the LLM doesn't propose tools
+ *  that we know will fail. */
+export function listVerifiedMatchNames(): readonly { key: string; matchName: string }[] {
+  return Object.entries(ADOBE_MATCH_REGISTRY)
+    .filter(([, v]) => v.verified)
+    .map(([k, v]) => ({ key: k, matchName: v.matchName }));
 }
 
 /**

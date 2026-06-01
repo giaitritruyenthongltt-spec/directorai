@@ -23,6 +23,7 @@
     "bench:perf": "tsx tools/perf-bench.ts",
     "bench:memory": "tsx --expose-gc tools/memory-soak.ts",
     "bundle:ccx": "tsx tools/bundle-ccx.ts",
+    "verify:ccx": "tsx tools/verify-ccx.ts",
     "bundle:sample": "tsx tools/bundle-sample.ts",
     "survey:send": "tsx tools/survey-schedule.ts send",
     "survey:next": "tsx tools/survey-schedule.ts next",
@@ -43,6 +44,7 @@
     "smoke:director-ws": "tsx tools/smoke-director-ws.ts",
     "smoke:effect-apply": "tsx tools/smoke-effect-apply.ts",
     "smoke:rough-cut": "tsx tools/smoke-rough-cut.ts",
+    "smoke:mvp": "tsx tools/smoke-mvp.ts",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -67,7 +69,9 @@
     "ws": "^8.18.0",
     "@types/ws": "^8.5.13",
     "yazl": "^3.3.1",
-    "@types/yazl": "^3.3.0"
+    "@types/yazl": "^3.3.0",
+    "yauzl": "^3.2.0",
+    "@types/yauzl": "^2.10.3"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
