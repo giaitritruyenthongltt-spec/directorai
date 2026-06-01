@@ -46,6 +46,7 @@
     "smoke:rough-cut": "tsx tools/smoke-rough-cut.ts",
     "smoke:mvp": "tsx tools/smoke-mvp.ts",
     "smoke:plan-a": "tsx tools/smoke-plan-a.ts",
+    "smoke:safe-dryrun": "tsx tools/smoke-safe-dryrun.ts",
     "ops:tail": "tsx tools/tail-ops.ts",
     "prepare": "husky"
   },

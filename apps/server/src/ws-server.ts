@@ -42,6 +42,14 @@ export interface WsServerOptions {
   onFirstRun?: FirstRunHandler;
   /** Optional handler for `director.*` RPC methods (Sprint H.2 AI Director). */
   onDirector?: (method: string, params: unknown) => Promise<unknown>;
+  /**
+   * Optional composite-tool probe (CompositeTools.maybeHandle). Tried for
+   * tool calls BEFORE forwarding to the panel: returns the result on a hit,
+   * or `null` on a miss (then falls through to panel/primitive dispatch).
+   * Lets `safe.*` + composite `context.*`/`timeline.*` be called directly
+   * over WS, not just inside the Director plan executor.
+   */
+  onComposite?: (method: string, params: unknown) => Promise<unknown | null>;
 }
 
 export interface RunningWsServer {
@@ -316,6 +324,31 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
         } satisfies JsonRpcErrorResponse);
       }
       return;
+    }
+
+    // Composite tools (safe.*, composite context.*/timeline.*) — tried
+    // BEFORE panel-forward. maybeHandle returns null on miss → fall through
+    // to panel/primitive dispatch below. Composites run in-server and may
+    // issue primitive calls back through the panel adapter.
+    if (opts.onComposite) {
+      try {
+        const handled = await opts.onComposite(req.method, req.params);
+        if (handled !== null) {
+          send(ws, { jsonrpc: '2.0', id: req.id, result: handled } satisfies JsonRpcSuccess);
+          return;
+        }
+      } catch (err) {
+        opts.logger.warn({ method: req.method, err }, 'composite RPC error');
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message: err instanceof Error ? err.message : 'composite call failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
     }
 
     // If a panel is connected and this is a tool call, forward to panel.

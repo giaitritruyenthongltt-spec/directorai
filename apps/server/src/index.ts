@@ -157,6 +157,13 @@ async function main(): Promise<void> {
     onDirector: directorRouter
       ? (method, params) => directorRouter.dispatch(method, params)
       : undefined,
+    // SAFE-1d — cho phép gọi composite (safe.*, context.* composite, …)
+    // trực tiếp qua WS. compositeTools.current set sau startWebSocketServer
+    // nên đọc lazily trong closure.
+    onComposite: (method, params) =>
+      compositeTools.current
+        ? compositeTools.current.maybeHandle(method, params)
+        : Promise.resolve(null),
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 
