@@ -50,7 +50,7 @@ async function callGemini(
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
       generationConfig: {
         temperature: 0.4,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 16384,
         responseMimeType: 'application/json',
       },
     }),
@@ -59,10 +59,27 @@ async function callGemini(
     const errText = await res.text();
     throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 300)}`);
   }
-  const data = (await res.json()) as GeminiResponse;
+  const data = (await res.json()) as GeminiResponse & {
+    candidates?: {
+      finishReason?: string;
+      content?: { parts?: { text?: string }[] };
+    }[];
+    promptFeedback?: { blockReason?: string };
+  };
   if (data.error) throw new Error(`Gemini API: ${data.error.message}`);
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  if (!text) throw new Error('Gemini returned empty content');
+  if (data.promptFeedback?.blockReason) {
+    throw new Error(`Gemini blocked: ${data.promptFeedback.blockReason}`);
+  }
+  const candidate = data.candidates?.[0];
+  if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(`Gemini finishReason=${candidate.finishReason}`);
+  }
+  const text = candidate?.content?.parts?.[0]?.text ?? '';
+  if (!text) {
+    throw new Error(
+      `Gemini returned empty content (finishReason=${candidate?.finishReason ?? 'unknown'})`
+    );
+  }
   return text;
 }
 

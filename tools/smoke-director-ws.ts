@@ -10,7 +10,7 @@ const URL = 'ws://127.0.0.1:7778';
 
 function call<T>(ws: WebSocket, id: number, method: string, params?: unknown): Promise<T> {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${method} timed out`)), 60_000);
+    const t = setTimeout(() => reject(new Error(`${method} timed out`)), 120_000);
     const handler = (raw: WebSocket.RawData): void => {
       const msg = JSON.parse(raw.toString()) as {
         id?: number;
