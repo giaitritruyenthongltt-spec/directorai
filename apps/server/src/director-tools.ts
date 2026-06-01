@@ -17,6 +17,7 @@ import type { Logger } from '@directorai/shared';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import type { Clip } from '@directorai/core';
 import { EFFECT_PRESETS, pickColorPresetForMood } from '@directorai/effect-library';
+import { resolvePlan, type PlanPreview } from './plan-resolver.js';
 
 const SIDECAR_URL = process.env.CONTEXT_ENGINE_URL ?? 'http://127.0.0.1:8000';
 
@@ -130,6 +131,16 @@ export class CompositeTools {
         );
       case 'context.buildEditPlan':
         return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
+      case 'safe.previewPlan':
+        return this.previewPlan(
+          params as {
+            sequenceId?: string;
+            editPlan?: EditPlan;
+            clipPaths?: string[];
+            goal?: string;
+            frames?: number;
+          }
+        );
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
       case 'color.applyLookByScene':
@@ -153,6 +164,7 @@ export class CompositeTools {
       'context.understandClip',
       'context.buildVideoMap',
       'context.buildEditPlan',
+      'safe.previewPlan',
       'timeline.cutOnBeats',
       'color.applyLookByScene',
     ];
@@ -292,6 +304,68 @@ export class CompositeTools {
     plan.requires_preview = true;
     plan.rejected_unsafe_steps = (plan.rejected_unsafe_steps ?? 0) + rejected;
     return res;
+  }
+
+  // ─── safe.previewPlan (SAFE-1a — Tầng an toàn, CHỈ ĐỌC) ────────────────
+
+  /**
+   * SAFE-1a — Xem trước kế hoạch trên timeline THẬT mà KHÔNG ghi gì. Khớp
+   * media_path → clipId thật, mô tả từng bước người-đọc-được, đánh dấu bước
+   * nào tìm được clip / ghi được. Đây là cổng bắt buộc trước khi áp dụng.
+   *
+   * Nhận sẵn `editPlan`, hoặc tự dựng từ `clipPaths + goal`.
+   */
+  async previewPlan(params: {
+    sequenceId?: string;
+    editPlan?: EditPlan;
+    clipPaths?: string[];
+    goal?: string;
+    frames?: number;
+  }): Promise<PlanPreview & { plan: EditPlan }> {
+    // 1) Lấy kế hoạch (qua guard an toàn).
+    let plan = params.editPlan;
+    if (!plan) {
+      if (!params.clipPaths?.length || !params.goal?.trim()) {
+        throw new Error('previewPlan: cần editPlan, hoặc (clipPaths + goal)');
+      }
+      const built = await this.buildEditPlan({
+        clipPaths: params.clipPaths,
+        goal: params.goal,
+        frames: params.frames,
+      });
+      plan = built.edit_plan;
+    } else {
+      // editPlan truyền vào cũng phải qua guard.
+      plan = this.guardEditPlan({
+        edit_plan: plan,
+        video_map: null,
+        clips_understood: 0,
+        clips_failed: 0,
+        errors: [],
+      }).edit_plan;
+    }
+
+    // 2) Xác định sequence + lấy clip thật.
+    let sequenceId = params.sequenceId;
+    if (!sequenceId) {
+      const seq = await this.deps.adapter.getActiveSequence();
+      if (!seq) throw new Error('previewPlan: không có sequence đang mở');
+      sequenceId = seq.id;
+    }
+    const clips = await this.deps.adapter.listClips(sequenceId);
+
+    // 3) Khớp + sinh preview (thuần, không ghi).
+    const preview = resolvePlan(plan, clips, sequenceId);
+    this.deps.logger.info(
+      {
+        sequenceId,
+        total: preview.totalSteps,
+        resolved: preview.resolvedCount,
+        executable: preview.executableCount,
+      },
+      'safe.previewPlan resolved'
+    );
+    return { ...preview, plan };
   }
 
   // ─── context.classifyScene ────────────────────────────────────────────
