@@ -39,6 +39,7 @@
     "sidecar:start": "pnpm --filter ./apps/context-engine sidecar:start",
     "sidecar:test": "pnpm --filter ./apps/context-engine sidecar:test",
     "smoke:sidecar": "tsx tools/smoke-sidecar.ts",
+    "smoke:director": "tsx tools/smoke-director.ts",
     "prepare": "husky"
   },
   "devDependencies": {
