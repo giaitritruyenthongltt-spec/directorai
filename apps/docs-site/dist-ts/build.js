@@ -30,7 +30,7 @@ async function writeFile(rel, content) {
   await fs.writeFile(full, content, 'utf8');
 }
 async function main() {
-  console.log(`Building docs from ${path.relative(REPO_ROOT, DOCS_ROOT)} …`);
+  console.info(`Building docs from ${path.relative(REPO_ROOT, DOCS_ROOT)} …`);
   await fs.rm(OUT_DIR, { recursive: true, force: true });
   await fs.mkdir(OUT_DIR, { recursive: true });
   const pages = await collectPages(DOCS_ROOT);
@@ -43,7 +43,7 @@ async function main() {
   }
   // 3. Search index (P4.30)
   await writeFile('search-index.json', JSON.stringify(buildSearchIndex(pages)));
-  console.log(`✔ ${pages.length} pages written to ${path.relative(REPO_ROOT, OUT_DIR)}`);
+  console.info(`✔ ${pages.length} pages written to ${path.relative(REPO_ROOT, OUT_DIR)}`);
 }
 void main();
 //# sourceMappingURL=build.js.map

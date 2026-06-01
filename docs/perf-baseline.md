@@ -1,6 +1,6 @@
 # Panel Cold-Start Baseline
 
-Last run: `2026-05-30` via `pnpm bench:perf`.
+Last run: `2026-06-01` via `pnpm bench:perf`.
 
 Captured by [`tools/perf-bench.ts`](../tools/perf-bench.ts) to give us
 something concrete to regress against in P4.14 / P4.15 / P4.16. The
@@ -9,12 +9,12 @@ those land in Section C.
 
 | Metric                    | Value   | Budget    | Status |
 | ------------------------- | ------- | --------- | ------ |
-| `bundle.raw`              | 451.2KB | —         | ➖     |
-| `bundle.gzip`             | 102.5KB | —         | ➖     |
-| `bundle.modules`          | 61      | —         | ➖     |
-| `module.coldLoad`         | 121.6ms | —         | ➖     |
-| `ttft.connect`            | 7.9ms   | ≤ 200.0ms | ✅     |
-| `ttft.connectToFirstTool` | 10.6ms  | ≤ 500.0ms | ✅     |
+| `bundle.raw`              | 483.1KB | —         | ➖     |
+| `bundle.gzip`             | 108.4KB | —         | ➖     |
+| `bundle.modules`          | 67      | —         | ➖     |
+| `module.coldLoad`         | 144.6ms | —         | ➖     |
+| `ttft.connect`            | 9.7ms   | ≤ 200.0ms | ✅     |
+| `ttft.connectToFirstTool` | 13.9ms  | ≤ 500.0ms | ✅     |
 
 ## How to read
 

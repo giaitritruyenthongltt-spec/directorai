@@ -36,6 +36,7 @@ env/
 *.pem
 credentials.json
 .anthropic_key
+.secrets/
 
 # IDE
 .vscode/*

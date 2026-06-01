@@ -27,6 +27,8 @@
     "survey:send": "tsx tools/survey-schedule.ts send",
     "survey:next": "tsx tools/survey-schedule.ts next",
     "sdk:surface": "tsx tools/sdk-surface-diff.ts",
+    "license:keygen": "tsx tools/generate-license-keys.ts",
+    "verify": "tsx tools/verify-precheck.ts",
     "prepare": "husky"
   },
   "devDependencies": {

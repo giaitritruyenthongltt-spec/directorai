@@ -79,7 +79,7 @@ async function main() {
     }
   });
   server.listen(port, () => {
-    console.log(`Docs dev server: http://127.0.0.1:${port}`);
+    console.info(`Docs dev server: http://127.0.0.1:${port}`);
   });
 }
 void main();
