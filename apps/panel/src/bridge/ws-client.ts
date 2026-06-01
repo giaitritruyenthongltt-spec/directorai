@@ -83,7 +83,14 @@ class WsClient {
     this.setState('connecting');
     try {
       this.ws = new WebSocket(this.url);
-    } catch {
+    } catch (err) {
+      console.error('[DirectorAI] WebSocket constructor threw:', err);
+      this.emit({
+        id: String(_idSeq++),
+        ts: Date.now(),
+        type: 'error',
+        error: `WebSocket constructor: ${err instanceof Error ? err.message : String(err)}`,
+      });
       this.setState('error');
       this.machine.onClose();
       this.scheduleReconnect();
@@ -111,9 +118,18 @@ class WsClient {
       if (this.machine.shouldReconnect()) this.scheduleReconnect();
     };
 
-    this.ws.onerror = () => {
+    this.ws.onerror = (ev) => {
+      console.error('[DirectorAI] WebSocket onerror:', ev);
+      this.emit({
+        id: String(_idSeq++),
+        ts: Date.now(),
+        type: 'error',
+        error: `WebSocket error: ${(ev as Event & { message?: string }).message ?? 'unknown'}`,
+      });
       this.setState('error');
     };
+
+    console.info('[DirectorAI] Connecting WebSocket to', this.url);
 
     this.ws.onmessage = (ev) => {
       this.machine.onMessage();

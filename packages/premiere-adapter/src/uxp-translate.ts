@@ -49,19 +49,64 @@ export async function translateTrack(track: PProTrack, index: number): Promise<T
   };
 }
 
+/**
+ * Tolerate two failure modes for UXP API methods:
+ *   - the method exists but the promise rejects
+ *   - the method doesn't exist at all (TypeError synchronously)
+ * Premiere 26's UXP surface changed in non-backwards-compatible ways from
+ * the betas — some `.getX()` accessors became plain properties or vice versa.
+ */
+/**
+ * Premiere 26's UXP API returns `guid` as a Guid object with a string-valued
+ * property, not a plain string. Our IPC layer assumes string IDs, so flatten.
+ */
+function stringifyGuid(guid: unknown): string {
+  if (typeof guid === 'string') return guid;
+  if (guid && typeof guid === 'object') {
+    const g = guid as { asString?: () => string; toString?: () => string };
+    if (typeof g.asString === 'function') return g.asString();
+    if (typeof g.toString === 'function') {
+      const s = g.toString();
+      if (s && s !== '[object Object]') return s;
+    }
+  }
+  return String(guid);
+}
+
+async function safeAsync<T>(call: () => T | Promise<T>, fallback: () => T): Promise<T> {
+  try {
+    const v = call();
+    if (v && typeof (v as Promise<T>).then === 'function') {
+      return await (v as Promise<T>);
+    }
+    return v as T;
+  } catch {
+    return fallback();
+  }
+}
+
 export async function translateTrackItem(
   item: PProTrackItem,
   trackId: string,
   trackKind: Track['kind']
 ): Promise<Clip> {
   const [name, startT, endT, inT, outT, mediaType, projItem] = await Promise.all([
-    item.getName().catch(() => item.name),
+    safeAsync(
+      () => item.getName(),
+      () => item.name ?? 'Untitled'
+    ),
     item.getStartTime(),
     item.getEndTime(),
     item.getInPoint(),
     item.getOutPoint(),
-    item.getMediaType().catch(() => (trackKind === 'video' ? 'Video' : 'Audio')),
-    item.getProjectItem().catch(() => null),
+    safeAsync(
+      () => item.getMediaType(),
+      () => (trackKind === 'video' ? 'Video' : 'Audio')
+    ),
+    safeAsync(
+      () => item.getProjectItem(),
+      () => null
+    ),
   ]);
 
   let sourcePath = '';
@@ -141,7 +186,7 @@ export async function translateMarker(m: PProMarker): Promise<Marker> {
     WebLink: 'web',
   };
   return {
-    id: m.guid,
+    id: stringifyGuid(m.guid),
     time: tickToSeconds(start),
     duration: tickToSeconds(duration),
     kind: kindMap[m.type] ?? 'comment',
@@ -153,11 +198,26 @@ export async function translateMarker(m: PProMarker): Promise<Marker> {
 
 export async function translateSequence(seq: PProSequence): Promise<Sequence> {
   const [name, endTime, vCount, aCount, settings] = await Promise.all([
-    seq.getName().catch(() => seq.name),
-    seq.getEndTime().catch(() => null),
-    seq.getVideoTrackCount(),
-    seq.getAudioTrackCount(),
-    seq.getSettings().catch(() => null),
+    safeAsync(
+      () => seq.getName(),
+      () => seq.name ?? 'Untitled'
+    ),
+    safeAsync(
+      () => seq.getEndTime(),
+      () => null
+    ),
+    safeAsync(
+      () => seq.getVideoTrackCount(),
+      () => 0
+    ),
+    safeAsync(
+      () => seq.getAudioTrackCount(),
+      () => 0
+    ),
+    safeAsync(
+      () => seq.getSettings(),
+      () => null
+    ),
   ]);
 
   const tracks: Track[] = [];
@@ -187,17 +247,19 @@ export async function translateSequence(seq: PProSequence): Promise<Sequence> {
   }
 
   const duration = endTime ? tickToSeconds(endTime) : seconds(0);
-  const sequenceSettings: Sequence['settings'] = settings
-    ? {
-        width: settings.videoFrameWidth,
-        height: settings.videoFrameHeight,
-        frameRate: { numerator: Math.round(1 / settings.videoFrameRate.seconds), denominator: 1 },
-        sampleRate: settings.audioSampleRate,
-      }
-    : { width: 1920, height: 1080, frameRate: FPS_30, sampleRate: 48000 };
+  // Settings shape varies across Premiere UXP API revisions — be defensive
+  // about every field instead of assuming the whole object is well-formed.
+  const sequenceSettings: Sequence['settings'] = {
+    width: settings?.videoFrameWidth ?? 1920,
+    height: settings?.videoFrameHeight ?? 1080,
+    frameRate: settings?.videoFrameRate?.seconds
+      ? { numerator: Math.round(1 / settings.videoFrameRate.seconds), denominator: 1 }
+      : FPS_30,
+    sampleRate: settings?.audioSampleRate ?? 48000,
+  };
 
   return {
-    id: seq.guid,
+    id: stringifyGuid(seq.guid),
     name,
     duration,
     settings: sequenceSettings,
