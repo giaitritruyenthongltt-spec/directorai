@@ -10,6 +10,7 @@ import {
 } from '@directorai/core';
 import type {
   PProMarker,
+  PProProjectItem,
   PProSequence,
   PProTrack,
   PProTrackItem,
@@ -142,9 +143,42 @@ export async function translateTrackItem(
   let sourcePath = '';
   let sourceDuration: Seconds = seconds(0);
   if (projItem) {
-    try {
-      sourcePath = await projItem.getMediaFilePath();
-    } catch {
+    // O1/O2 — Premiere 26 sometimes returns empty string from
+    // getMediaFilePath() or throws altogether. Try every known accessor
+    // before falling back to bare name (which is useless for the sidecar
+    // because it needs an absolute path to read frames from disk).
+    const pi = projItem as PProProjectItem & {
+      mediaFilePath?: string;
+      filePath?: string;
+      path?: string;
+      getMediaPath?: () => Promise<string>;
+      getFilePath?: () => Promise<string>;
+    };
+    const tryers: { label: string; fn: () => Promise<string> | string }[] = [
+      { label: 'getMediaFilePath', fn: () => pi.getMediaFilePath() },
+      { label: 'getMediaPath', fn: () => pi.getMediaPath?.() ?? '' },
+      { label: 'getFilePath', fn: () => pi.getFilePath?.() ?? '' },
+      { label: 'mediaFilePath', fn: () => pi.mediaFilePath ?? '' },
+      { label: 'filePath', fn: () => pi.filePath ?? '' },
+      { label: 'path', fn: () => pi.path ?? '' },
+    ];
+    for (const t of tryers) {
+      try {
+        const v = await t.fn();
+        if (typeof v === 'string' && v.length > 0 && v !== projItem.name) {
+          // Accept only an absolute-looking path (has separator).
+          if (v.includes('/') || v.includes('\\')) {
+            sourcePath = v;
+            break;
+          }
+        }
+      } catch {
+        // try next accessor
+      }
+    }
+    if (!sourcePath) {
+      // Last-resort: bare name. Sidecar will fail on this — at least the
+      // ops log will show the path was empty so we know why.
       sourcePath = projItem.name;
     }
     try {

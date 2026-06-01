@@ -15,9 +15,20 @@
 import type { Logger } from '@directorai/shared';
 import { director, type ToolDispatcher } from '@directorai/llm-client';
 import { PlanHistoryStore, type PlanHistoryEntry } from './director-history-store.js';
+import { opsLog } from './ops-log.js';
 
 type Plan = director.Plan;
 type PlanProgress = director.PlanProgress;
+
+/** O1 — truncate a result value for ops-log preview (keeps log lean). */
+function previewValue(v: unknown): unknown {
+  if (v === null || v === undefined) return v;
+  if (typeof v === 'object') {
+    const s = JSON.stringify(v);
+    return s.length > 500 ? `${s.slice(0, 500)}…(+${s.length - 500})` : v;
+  }
+  return v;
+}
 
 interface RouterDeps {
   readonly logger: Logger;
@@ -242,20 +253,48 @@ export class DirectorRouter {
     if (!params.plan) throw new Error('plan is required');
     const parsed = director.parsePlan(params.plan);
     if (!parsed.ok) throw new Error(`Plan schema invalid: ${parsed.error}`);
+    // O1 — capture planId for ops log via a mutable ref so callbacks
+    // (closures) see it after exec is constructed.
+    const planRef: { id: string } = { id: '' };
     const exec = new director.PlanExecutor(parsed.plan, this.deps.toolDispatch, {
+      onStart: (plan) => {
+        opsLog.record({
+          event: 'plan.start',
+          planId: planRef.id,
+          title: plan.title,
+          steps: plan.steps.length,
+          persona: plan.persona,
+        });
+      },
       onStepDone: (step, r) => {
         this.deps.logger.info(
           { stepId: step.id, tool: step.tool, ok: r.ok, elapsedMs: r.elapsedMs },
           'plan step done'
         );
+        opsLog.record({
+          event: r.ok ? 'plan.step.end' : 'plan.step.error',
+          planId: planRef.id,
+          stepId: step.id,
+          tool: step.tool,
+          elapsedMs: r.elapsedMs,
+          ...(r.ok ? { resultPreview: previewValue(r.result) } : { error: r.error }),
+        });
       },
       onFinish: (snapshot) => {
         this.updateHistory(snapshot.planId, {
           status: snapshot.status,
           finishedAt: snapshot.finishedAt ?? Date.now(),
         });
+        opsLog.record({
+          event: 'plan.end',
+          planId: snapshot.planId,
+          status: snapshot.status,
+          totalSteps: snapshot.totalSteps,
+          stepsDone: snapshot.stepResults.length,
+        });
       },
     });
+    planRef.id = exec.snapshot().planId;
     const planId = exec.snapshot().planId;
     this.executors.set(planId, exec);
     // P3-1 — track in history so director.listPlans can surface it.
