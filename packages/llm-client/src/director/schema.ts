@@ -31,7 +31,7 @@ export const PlanStepSchema = z.object({
   /** MCP tool name e.g. 'context.scanClips', 'timeline.cutClip'. */
   tool: z.string().min(1),
   /** Tool parameters. Loosely typed — the tool's own schema validates. */
-  params: z.record(z.unknown()).default({}),
+  params: z.record(z.string(), z.unknown()).default({}),
   /** One-line natural-language explanation shown in the UI. */
   why: z.string().min(1),
   /** If true, the executor pauses for user confirmation after this step. */

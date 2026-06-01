@@ -55,6 +55,7 @@ export class PlanExecutor {
       }
       this.currentIdx = i;
       const step = this.plan.steps[i];
+      if (!step) break; // unreachable under strict noUncheckedIndexedAccess
       const t0 = Date.now();
       try {
         const result = await this.dispatch(step);

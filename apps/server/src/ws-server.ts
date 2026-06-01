@@ -40,6 +40,8 @@ export interface WsServerOptions {
   onTelemetry?: TelemetryHandler;
   /** Optional handler for `firstRun.*` RPC methods (wizard state, P4.31). */
   onFirstRun?: FirstRunHandler;
+  /** Optional handler for `director.*` RPC methods (Sprint H.2 AI Director). */
+  onDirector?: (method: string, params: unknown) => Promise<unknown>;
 }
 
 export interface RunningWsServer {
@@ -159,6 +161,36 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
           error: {
             code: RpcErrorCode.ADAPTER_ERROR,
             message: err instanceof Error ? err.message : 'style call failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
+      return;
+    }
+
+    // Special: director.* methods → AI Director (Sprint H.2)
+    if (req.method.startsWith('director.')) {
+      if (!opts.onDirector) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.METHOD_NOT_FOUND,
+            message: 'director router unavailable — set GEMINI_API_KEY or ANTHROPIC_API_KEY',
+          },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      try {
+        const result = await opts.onDirector(req.method, req.params);
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        opts.logger.warn({ method: req.method, err }, 'director RPC error');
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message: err instanceof Error ? err.message : 'director call failed',
           },
         } satisfies JsonRpcErrorResponse);
       }

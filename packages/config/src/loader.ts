@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { existsSync } from 'node:fs';
+
 import { config as loadDotenv } from 'dotenv';
 import { ConfigError } from '@directorai/shared';
 import { AppConfigSchema, type AppConfig } from './schema.js';
@@ -7,11 +10,33 @@ export interface LoadConfigOptions {
   overrides?: Partial<AppConfig>;
 }
 
+/**
+ * Walk up from `start` looking for a .env file. Each workspace app runs
+ * from its own subdirectory (e.g. apps/server), so the monorepo root
+ * .env wouldn't be found by dotenv's default cwd search.
+ */
+function findEnvFile(start: string): string | undefined {
+  let dir = start;
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, '.env');
+    if (existsSync(candidate)) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return undefined;
+}
+
 export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   if (options.envPath) {
     loadDotenv({ path: options.envPath });
   } else {
-    loadDotenv();
+    const found = findEnvFile(process.cwd());
+    if (found) {
+      loadDotenv({ path: found });
+    } else {
+      loadDotenv();
+    }
   }
 
   // Treat empty strings the same as undefined so an inherited but-empty env

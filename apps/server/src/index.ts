@@ -16,6 +16,7 @@ import { CheckpointStore } from './checkpoint-store.js';
 import { initSentry } from './sentry.js';
 import { createTelemetryRouter } from './telemetry-router.js';
 import { createFirstRunRouter } from './first-run-router.js';
+import { DirectorRouter } from './director-router.js';
 import { loadAllPlugins, deactivateAll } from './plugin-loader.js';
 import path from 'node:path';
 import { ConsentStore, InMemorySink, TelemetryClient } from '@directorai/telemetry';
@@ -107,6 +108,25 @@ async function main(): Promise<void> {
     logger.warn('ANTHROPIC_API_KEY not set — nl.query disabled');
   }
 
+  // Sprint H.2 — Director router (LLM-driven plan generation + execution).
+  // Loaded from env (GEMINI_API_KEY / ANTHROPIC_API_KEY) — returns null if
+  // no key is set, in which case the WS server replies with a friendly
+  // METHOD_NOT_FOUND for director.* calls.
+  const directorRouter = DirectorRouter.fromEnv({
+    logger,
+    toolDispatch: async (step) => {
+      // For now route every tool call through the routed adapter via RPC.
+      // The adapter handles routing to either the UXP panel or the mock
+      // fallback. Tool-name → adapter-method translation is 1:1.
+      if (!routedAdapterRef.current) throw new Error('Adapter not ready');
+      const { dispatchRpc } = await import('./rpc-dispatcher.js');
+      return dispatchRpc(step.tool, step.params, routedAdapterRef.current);
+    },
+  });
+  if (directorRouter) {
+    logger.info({ methods: directorRouter.listMethods().length }, 'Director router wired');
+  }
+
   const wsServer = await startWebSocketServer({
     host: config.server.host,
     port: config.server.wsPort,
@@ -123,6 +143,9 @@ async function main(): Promise<void> {
     onCheckpoint: (method, params) => checkpointRouter.dispatch(method, params),
     onTelemetry: (method, params) => telemetryRouter.dispatch(method, params),
     onFirstRun: (method, params) => firstRunRouter.dispatch(method, params),
+    onDirector: directorRouter
+      ? (method, params) => directorRouter.dispatch(method, params)
+      : undefined,
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 
