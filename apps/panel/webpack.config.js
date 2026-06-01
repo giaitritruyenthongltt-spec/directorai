@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 // P4.11 — only require @sentry/webpack-plugin when SENTRY_AUTH_TOKEN is
 // present so dev builds and CI without the secret don't fail.
@@ -62,6 +63,12 @@ module.exports = (env, argv) => ({
     new HtmlWebpackPlugin({
       template: './src/index.html',
       filename: 'index.html',
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: 'manifest.json', to: 'manifest.json' },
+        { from: 'icons', to: 'icons', noErrorOnMissing: true },
+      ],
     }),
     ...(argv.mode === 'production' ? [maybeSentryPlugin()].filter(Boolean) : []),
   ],
