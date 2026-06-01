@@ -8,10 +8,10 @@ interface Props {
 }
 
 const STATE_LABEL: Record<ConnectionState, string> = {
-  disconnected: '● Disconnected',
-  connecting: '● Connecting…',
-  connected: '● Connected',
-  error: '● Error',
+  disconnected: '● Mất kết nối',
+  connecting: '● Đang kết nối…',
+  connected: '● Đã kết nối',
+  error: '● Lỗi kết nối',
 };
 
 const STATE_COLOR: Record<ConnectionState, string> = {
@@ -25,8 +25,8 @@ export function Header({ connState, onReconnect }: Props): React.ReactElement {
   return (
     <header className="header">
       <div className="header-left">
-        <span className="logo">DirectorAI</span>
-        <span className="version">v0.2</span>
+        <span className="logo">🎬 DirectorAI</span>
+        <span className="version">v2.1</span>
       </div>
       <div className="header-right">
         <span className="conn-state" style={{ color: STATE_COLOR[connState] }}>
@@ -34,7 +34,7 @@ export function Header({ connState, onReconnect }: Props): React.ReactElement {
         </span>
         {connState !== 'connected' && (
           <button className="reconnect-btn" onClick={onReconnect}>
-            Reconnect
+            Kết nối lại
           </button>
         )}
       </div>

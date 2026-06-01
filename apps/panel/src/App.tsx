@@ -18,6 +18,14 @@ import './App.css';
 
 export type ActiveTab = 'director' | 'chat' | 'style' | 'context';
 
+/** Nhãn tab tiếng Việt. */
+const TAB_LABELS: Record<ActiveTab, string> = {
+  director: '🎬 Đạo diễn',
+  chat: '💬 Trò chuyện',
+  style: '🎨 Phong cách',
+  context: '📊 Phân tích',
+};
+
 /** Restore a checkpoint into the chat log if it was created recently (< 5 min). */
 const RECENT_CHECKPOINT_MS = 5 * 60_000;
 
@@ -176,7 +184,7 @@ export function App(): React.ReactElement {
             className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab}
+            {TAB_LABELS[tab]}
           </button>
         ))}
       </nav>

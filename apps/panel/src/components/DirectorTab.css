@@ -33,6 +33,67 @@
   color: var(--ui-text-secondary, #969696);
 }
 
+/* Hàng nhãn + nút hướng dẫn */
+.director-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.director-label-row label,
+.director-label-row h3 {
+  margin: 0;
+}
+
+/* Lưới chọn phong cách dạng thẻ */
+.director-persona-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.director-persona-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--ui-border, #3e3e3e);
+  background: var(--ui-bg-secondary, #2d2d2d);
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.director-persona-card:hover:not(:disabled) {
+  border-color: #818cf8;
+}
+
+.director-persona-card.active {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.14);
+}
+
+.director-persona-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.director-persona-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ui-text, #d4d4d4);
+}
+
+.director-persona-tip {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ui-text-secondary, #969696);
+}
+
 .director-section select,
 .director-section textarea {
   background: var(--ui-bg-secondary, #2d2d2d);
@@ -159,10 +220,10 @@
 
 .director-step {
   display: grid;
-  grid-template-columns: 24px auto 1fr auto;
+  grid-template-columns: 24px 1fr auto;
   gap: 8px;
-  align-items: baseline;
-  padding: 4px 6px;
+  align-items: start;
+  padding: 6px 6px;
   border-radius: 4px;
   font-size: 12px;
 }
@@ -179,22 +240,40 @@
 .director-step-id {
   color: var(--ui-text-secondary, #969696);
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+}
+
+.director-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .director-step-tool {
   color: #93c5fd;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .director-step-why {
-  color: var(--ui-text, #d4d4d4);
+  color: var(--ui-text-secondary, #969696);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.director-step-err {
+  color: #fca5a5;
+  font-size: 11px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  word-break: break-word;
+  margin-top: 2px;
 }
 
 .director-step-cp {
   color: #c4b5fd;
-  font-size: 10px;
-  text-transform: uppercase;
+  font-size: 13px;
 }
 
 /* P3-2 — Live step status colors */
