@@ -452,54 +452,61 @@ Tiết kiệm:      80% user effort, 75% wall-clock
 
 ---
 
-## 10. QUYẾT ĐỊNH CẦN BẠN CHỐT
+## 10. QUYẾT ĐỊNH ĐÃ CHỐT (FINAL)
 
-### ❶ Solution chọn?
+### ❶ Solution: **C — Hybrid** ✅
 
-- [x] **C — Hybrid** (recommended)
-- [ ] A / B / D / E
+- Vision/audio: Python sidecar local (RTX 2060)
+- LLM director: Claude Opus cloud (multimodal)
+- Edit dispatch: UXP adapter local
 
-### ❷ Voice input?
+### ❷ Voice input: **KHÔNG** ✅
 
-- [x] **KHÔNG** (đã confirm)
-- [ ] Có (+1 tuần build)
+Text only. Tiết kiệm 1 tuần build.
 
-### ❸ Timeline commit?
+### ❸ Timeline: **8-10 tuần kỹ với buffer** ✅
 
-- [x] **8-10 tuần kỹ** (đã confirm)
-- [ ] POC 2 tuần trước
-- [ ] Nhanh 4 tuần cắt scope
+Full Sprint A-H, không cắt scope.
 
-### ❹ Branch strategy?
+### ❹ Branch strategy: **Direct trên `main`** ✅
 
-- [ ] Feature branches → PR → main (safe)
-- [ ] Direct trên main (fast)
-- [ ] Branch v3-dev chung (balanced) ← chưa chốt
+Tôi commit + push thẳng main mỗi sub-task xong.
+Bạn thấy progress real-time qua GitHub commits.
 
-### ❺ Workflow nào CRITICAL với bạn? (pick top 1-2)
+### ❺ Critical workflow: **WF1 — Auto rough cut từ raw footage** ✅
 
-- [ ] Workflow 1: Auto rough cut từ raw
-- [ ] Workflow 2: Chat ad-hoc command
-- [ ] Workflow 3: Semantic search clips
-- [ ] Workflow 4: Auto color matching
-- [ ] Workflow 5: Style learning + reuse
-- [ ] Workflow 6: Multi-step plan với checkpoint
-- [ ] Khác (mô tả)
+- Sprint E system prompt focus vào WF1 trước
+- Các workflow khác (chat command, search, color match, style learning)
+  vẫn build nhưng test acceptance trên WF1 trước
 
-### ❻ Capability nào CẮT được nếu cần?
+### ❻ Capability cuts: **KHÔNG cắt — full power plugin** ✅
 
-- [ ] Color grading (Mục tiêu 4)
-- [ ] Style learning
-- [ ] Semantic search
-- [ ] Visual context (LLM thấy thumbnail)
-- [ ] Multi-persona (chỉ 1 persona default)
-- [ ] Khác
+- Giữ tất cả 5 capabilities (CV + Audio + Effect + Director + Color)
+- Giữ semantic search, style learning, multi-persona
+- Plugin mạnh mẽ xử lý nhiều vấn đề video
 
 ---
 
-## 11. ĐỪNG VỘI CODE — VALIDATE PLAN TRƯỚC
+## 11. SẴN SÀNG BẮT ĐẦU SPRINT A
 
-Tôi đã viết 4 docs scattered. Tài liệu này là **single source of truth** từ giờ.
+Tất cả 6 decision đã chốt. Plan validated.
+
+**Sprint A — Python Sidecar Foundation (Tuần 1-2)** starts next:
+
+- A.1 Python project structure (uv + pyproject + mypy)
+- A.2 WS bridge protocol (FastAPI + websockets)
+- A.3 Storage layer (ChromaDB + SQLite)
+- A.4 Job queue (RQ/Celery-lite)
+- A.5 Hardware probe (CUDA detect)
+- A.6 Logging + telemetry
+
+**Deliverable end of week 2**:
+
+- `pnpm sidecar:start` boots Python service
+- Smoke test: server ↔ sidecar ping/pong
+- Hardware report khi start
+- Unit tests 80%+
+
 4 docs cũ giữ trong `docs/architecture/_archive/` nếu cần reference.
 
 **Bước tiếp theo**:
