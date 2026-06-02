@@ -13,7 +13,7 @@
  *   context.scanClips      → listClips + persist metadata to SQLite
  */
 
-import { promises as fs } from 'node:fs';
+import { promises as fs, type Dirent } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Logger } from '@directorai/shared';
@@ -153,6 +153,8 @@ export class CompositeTools {
         return { modules: listModuleInfos() };
       case 'context.activeSequenceClips':
         return this.activeSequenceClips(params as { sequenceId?: string });
+      case 'context.resolveFromFolders':
+        return this.resolveFromFolders(params as { folders: string[]; sequenceId?: string });
       case 'fcpxml.export':
         return this.exportFcpxml(params as { timeline: FcpTimeline; fileName?: string });
       case 'safe.previewPlan':
@@ -205,6 +207,7 @@ export class CompositeTools {
       'context.clusterClips',
       'context.qualityReport',
       'context.activeSequenceClips',
+      'context.resolveFromFolders',
       'module.list',
       'fcpxml.export',
       'safe.previewPlan',
@@ -285,6 +288,67 @@ export class CompositeTools {
       total: out.length,
       withFullPath: out.filter((c) => c.hasFullPath).length,
     };
+  }
+
+  // ─── context.resolveFromFolders (D4 — map tên clip → path đầy đủ) ─────
+
+  /**
+   * D4 — Premiere 26 chỉ cho plugin biết TÊN clip, không cho đường dẫn đầy
+   * đủ. Người dùng chỉ định các THƯ MỤC gốc (video/music/fx ở nhiều folder)
+   * 1 lần → server quét đệ quy, map basename → path tuyệt đối cho clip của
+   * sequence đang mở. Nhờ vậy AI đọc được file mà KHÔNG cần nhập từng path.
+   */
+  async resolveFromFolders(params: { folders: string[]; sequenceId?: string }): Promise<{
+    resolved: { name: string; fullPath: string }[];
+    unresolved: string[];
+    foldersScanned: number;
+    filesIndexed: number;
+  }> {
+    if (!params.folders?.length) throw new Error('folders required (non-empty)');
+    // Index mọi file trong các thư mục (đệ quy, giới hạn để khỏi treo).
+    const index = new Map<string, string>(); // basename(lower) → fullpath
+    let filesIndexed = 0;
+    const MAX_FILES = 200_000;
+    const walk = async (dir: string, depth: number): Promise<void> => {
+      if (depth > 8 || filesIndexed >= MAX_FILES) return;
+      let entries: Dirent[];
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+      } catch {
+        return; // thư mục không đọc được → bỏ qua
+      }
+      for (const e of entries) {
+        if (filesIndexed >= MAX_FILES) return;
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          await walk(full, depth + 1);
+        } else if (e.isFile()) {
+          const key = e.name.toLowerCase();
+          if (!index.has(key)) index.set(key, full); // ưu tiên file gặp trước
+          filesIndexed++;
+        }
+      }
+    };
+    for (const f of params.folders) await walk(f, 0);
+
+    // Lấy clip của sequence đang mở.
+    const seqClips = await this.activeSequenceClips({ sequenceId: params.sequenceId });
+    const resolved: { name: string; fullPath: string }[] = [];
+    const unresolved: string[] = [];
+    const seenName = new Set<string>();
+    for (const c of seqClips.clips) {
+      const base = (c.name.split(/[\\/]/).pop() ?? c.name).toLowerCase();
+      if (seenName.has(base)) continue; // tránh trùng (1 file dùng nhiều lần)
+      seenName.add(base);
+      const hit = index.get(base);
+      if (hit) resolved.push({ name: c.name, fullPath: hit });
+      else unresolved.push(c.name);
+    }
+    this.deps.logger.info(
+      { foldersScanned: params.folders.length, filesIndexed, resolved: resolved.length },
+      'context.resolveFromFolders'
+    );
+    return { resolved, unresolved, foldersScanned: params.folders.length, filesIndexed };
   }
 
   // ─── context.filterBad (MOD-3 — CV prefilter → Vision subset) ─────────

@@ -118,6 +118,44 @@ export function AutoTab(): React.ReactElement {
     }
   };
 
+  // D4 — quét thư mục gốc → map tên clip → đường dẫn đầy đủ (cho AI đọc file).
+  const [folderText, setFolderText] = useState('');
+  const [scanInfo, setScanInfo] = useState<{
+    resolved: number;
+    unresolved: number;
+    files: number;
+  } | null>(null);
+
+  const scanFolders = async (): Promise<void> => {
+    const folders = parseClipPaths(folderText);
+    if (folders.length === 0) {
+      setError('Hãy nhập ít nhất 1 thư mục gốc (mỗi dòng 1 folder).');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await wsClient.call<{
+        resolved: { name: string; fullPath: string }[];
+        unresolved: string[];
+        filesIndexed: number;
+      }>('context.resolveFromFolders', { folders });
+      setClipText(r.resolved.map((c) => c.fullPath).join('\n'));
+      setScanInfo({
+        resolved: r.resolved.length,
+        unresolved: r.unresolved.length,
+        files: r.filesIndexed,
+      });
+      setSeqInfo(null);
+      setPreview(null);
+      setApplied(null);
+    } catch (e) {
+      setError(`Quét thư mục lỗi: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Tự nạp 1 lần khi mở tab (nếu WS đã kết nối). loadFromSequence ổn định.
   useEffect(() => {
     void loadFromSequence();
@@ -291,12 +329,49 @@ export function AutoTab(): React.ReactElement {
             ) : (
               <span className="auto-warn">
                 {' '}
-                · ⚠ chỉ có TÊN clip (Premiere ẩn path) → thao tác timeline OK, AI phân tích cần
-                đường dẫn gốc
+                · ⚠ chỉ có TÊN clip → thao tác timeline OK; muốn AI phân tích, quét thư mục gốc bên
+                dưới
               </span>
             )}
           </div>
         )}
+        <div className="auto-folderbox">
+          <div className="auto-folder-label">
+            📁 Thư mục gốc (cho AI đọc file — nhiều folder, mỗi dòng 1)
+            <HelpButton
+              title="Quét thư mục gốc"
+              lines={[
+                'Premiere không cho plugin đường dẫn file → bạn chỉ thư mục chứa video/music/fx.',
+                'Quét 1 lần, plugin tự map tên clip → đường dẫn đầy đủ để AI phân tích.',
+              ]}
+              example="E:\\T11"
+            />
+          </div>
+          <textarea
+            className="auto-cliptext"
+            placeholder={'Mỗi dòng 1 thư mục, vd:\nE:\\T11\nE:\\Music'}
+            value={folderText}
+            onChange={(e) => setFolderText(e.target.value)}
+            rows={2}
+          />
+          <button
+            type="button"
+            className="auto-template-btn"
+            disabled={loading}
+            onClick={() => void scanFolders()}
+            style={{ marginTop: 6 }}
+          >
+            {loading ? '⏳ Đang quét…' : '🔍 Quét thư mục → map đường dẫn'}
+          </button>
+          {scanInfo && (
+            <div className="auto-seqinfo" style={{ marginTop: 6 }}>
+              🔍 Quét {scanInfo.files} file → khớp <b>{scanInfo.resolved}</b> clip
+              {scanInfo.unresolved > 0 && (
+                <span className="auto-warn"> · {scanInfo.unresolved} chưa khớp</span>
+              )}
+            </div>
+          )}
+        </div>
         <textarea
           className="auto-cliptext"
           placeholder={'Tự nạp khi mở tab. Hoặc dán tay (mỗi dòng 1 path/tên):\nE:\\T11\\6.mp4'}
