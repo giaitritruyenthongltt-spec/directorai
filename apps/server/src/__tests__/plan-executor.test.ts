@@ -150,7 +150,7 @@ describe('safe.applyPlan — cổng duyệt', () => {
     expect(clip!.sourceRange.start).toBeCloseTo(1, 5);
   });
 
-  it('move → GHI THẬT (ripple-aware batch, không chồng lấn); transition DEFER', async () => {
+  it('move + transition → GHI THẬT (move ripple no-overlap; transition dissolve)', async () => {
     await ctx.adapter.importFile({ path: 'E:\\T11\\7.mp4' });
     const plan = planWith([
       {
@@ -165,7 +165,7 @@ describe('safe.applyPlan — cổng duyệt', () => {
         order: 2,
         action: 'transition',
         target_path: ctx.clipPath,
-        params: { kind: 'Cut' },
+        params: { kind: 'dissolve', duration_sec: 0.5 },
         reason: 'r',
         reversible: true,
       },
@@ -176,8 +176,8 @@ describe('safe.applyPlan — cổng duyệt', () => {
       dryRun: false,
       approved: true,
     });
-    expect(res.applied).toBe(1); // move
-    expect(res.deferred).toBe(1); // transition
+    expect(res.applied).toBe(2); // move + transition
+    expect(res.deferred).toBe(0);
     // không chồng lấn trên timeline sau move
     const clips = await ctx.adapter.listClips(ctx.seqId);
     const vid = clips
@@ -190,7 +190,7 @@ describe('safe.applyPlan — cổng duyệt', () => {
     }
   });
 
-  it('transition đơn → DEFER', async () => {
+  it('transition kind=Cut → applied (cắt thẳng, không thêm component)', async () => {
     const plan = planWith([
       {
         order: 1,
@@ -207,8 +207,8 @@ describe('safe.applyPlan — cổng duyệt', () => {
       dryRun: false,
       approved: true,
     });
-    expect(res.deferred).toBe(1);
-    expect(res.applied).toBe(0);
+    expect(res.applied).toBe(1);
+    expect(res.results[0]!.detail).toContain('cắt thẳng');
   });
 
   it('clip không tồn tại → skipped', async () => {

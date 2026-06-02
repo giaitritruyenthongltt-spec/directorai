@@ -79,12 +79,15 @@ export const MODULE_REGISTRY: readonly EditModuleDef[] = [
     name: 'Thêm chuyển cảnh',
     icon: '🎞️',
     feasibility: 'beta',
-    enabled: false,
-    goalHint: '',
+    enabled: true,
+    goalHint: 'Thêm chuyển cảnh mượt (dissolve) giữa các pha hành động.',
     help: {
-      title: 'Thêm chuyển cảnh',
-      lines: ['Thêm chuyển cảnh giữa các pha hành động.'],
-      example: 'Cross Dissolve 0.3s giữa 2 cảnh bắn.',
+      title: 'Thêm chuyển cảnh (beta)',
+      lines: [
+        'Thêm chuyển cảnh (dissolve/wipe/push…) ở đầu clip.',
+        'Dùng API Premiere 26 đã introspect thật; verify live còn chờ.',
+      ],
+      example: 'Additive Dissolve 0.3s giữa 2 cảnh bắn.',
     },
   },
   {

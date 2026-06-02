@@ -78,6 +78,23 @@ async function execStep(adapter: INLEAdapter, step: ResolvedStep): Promise<strin
       await adapter.setClipInOut(clipId, inSec as Seconds, outSec as Seconds);
       return `đã tỉa "${step.clipName}" còn ${inSec}–${outSec}s`;
     }
+    case 'transition': {
+      const kind = String(p.kind ?? 'dissolve').trim();
+      const durationSec = num(p.duration_sec) ?? 0.5;
+      // "Cut" = cắt thẳng → không cần component transition.
+      if (/^(cut|hard ?cut)$/i.test(kind)) {
+        return `cắt thẳng "${step.clipName}" (không thêm chuyển cảnh)`;
+      }
+      // Áp ở đầu clip mục tiêu (giữa clip trước và clip này). clipIdA=clipIdB
+      // vì đường Action-model chỉ dùng clip mục tiêu + applyToStart.
+      await adapter.applyTransition({
+        clipIdA: clipId,
+        clipIdB: clipId,
+        matchName: kind,
+        durationSec: durationSec as Seconds,
+      });
+      return `đã thêm chuyển cảnh ${kind} (${durationSec}s) tại "${step.clipName}"`;
+    }
     default:
       throw new Error(`execStep: action "${step.action}" không xử lý ở đây`);
   }

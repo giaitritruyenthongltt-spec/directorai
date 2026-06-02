@@ -24,14 +24,16 @@ import type { EditPlan, EditPlanStep, SafePlanAction } from './director-tools.js
  * - disable/trim/rename: map sạch, in-place, an toàn → bật.
  * - move: BẬT LẠI (C1) — giờ dùng re-pack ripple-aware (park-then-place)
  *   trên cùng 1 track video, không chồng lấn. Verify live còn chờ.
- * - transition: DEFER — API Premiere 26 chưa verify live.
+ * - transition: BẬT (C2) — dùng API ĐÃ INTROSPECT thật (createVideoTransition
+ *   + AddTransitionOptions + createAddVideoTransitionAction). Additive, có
+ *   approval-gate + undo. Verify live còn chờ.
  */
 export const EXECUTABLE_ACTIONS: Record<SafePlanAction, boolean> = {
   disable: true,
   trim: true,
   rename: true,
   move: true,
-  transition: false,
+  transition: true,
 };
 
 export interface ResolvedStep {

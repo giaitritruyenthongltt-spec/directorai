@@ -17,6 +17,29 @@ function resolveMogrtTemplatePath(override?: string): string | null {
   if (fromEnv && fromEnv.length > 0) return fromEnv;
   return null;
 }
+
+/**
+ * C2 — Map tên chuyển cảnh thân thiện → matchName ADBE hợp lệ trên Premiere
+ * 26 (lấy từ getVideoTransitionMatchNames() đã introspect). Nếu đã là tên
+ * ADBE/AE thì giữ nguyên.
+ */
+export function mapTransitionMatchName(kind: string): string {
+  const k = (kind ?? '').trim();
+  if (/^(ADBE|AE\.)/i.test(k)) return k; // đã là matchName thật
+  const m = k.toLowerCase();
+  if (/dip.*black/.test(m)) return 'AE.ADBE Dip To Black';
+  if (/dip.*white/.test(m)) return 'AE.ADBE Dip To White';
+  if (/film.*dissolve/.test(m)) return 'ADBE Film Dissolve';
+  if (/dissolve|cross|fade/.test(m)) return 'ADBE Additive Dissolve';
+  if (/wipe/.test(m)) return 'ADBE Wipe';
+  if (/push/.test(m)) return 'ADBE Push';
+  if (/slide/.test(m)) return 'ADBE Slide';
+  if (/zoom/.test(m)) return 'ADBE Cross Zoom';
+  if (/page/.test(m)) return 'ADBE Page Turn';
+  // "Cut" = không transition → vẫn trả 1 dissolve ngắn an toàn (caller quyết
+  // định bỏ qua nếu kind==='cut').
+  return 'ADBE Additive Dissolve';
+}
 import {
   seconds,
   type Project,
@@ -793,25 +816,34 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
    */
   async applyTransition(input: TransitionInput): Promise<void> {
     const durTicks = this.secondsToTick(input.durationSec);
+    const matchName = mapTransitionMatchName(input.matchName);
 
-    // Probe 0 — Action model (B9). Introspection trên Premiere 26 xác nhận
-    // trackItem CÓ `createAddVideoTransitionAction` (cùng họ với
-    // createSetDisabledAction đã verify). Đây là đường ĐÚNG mô hình Track A.
-    // Best-effort signature; nuốt lỗi để rơi xuống probe cũ. CHƯA verify live.
+    // C2 — Action model (signature ĐÃ INTROSPECT thật trên Premiere 26):
+    //   createVideoTransition(matchName)  // 1 arg
+    //   AddTransitionOptions: setDuration / setApplyToStart / setTransitionAlignment
+    //   item.createAddVideoTransitionAction(trans, options)  → executeTransaction
+    // Nuốt lỗi để rơi xuống probe cũ nếu host khác.
     try {
       const pp = this.ppro as unknown as {
-        TransitionFactory?: { createVideoTransition?: (name: string, dur?: TickTime) => unknown };
-        AddTransitionOptions?: new () => unknown;
+        TransitionFactory?: { createVideoTransition?: (name: string) => unknown };
+        AddTransitionOptions?: new () => {
+          setDuration?: (t: TickTime) => void;
+          setApplyToStart?: (b: boolean) => void;
+        };
       };
       const tf = pp.TransitionFactory;
       const { item } = await this.findTrackItem(input.clipIdB);
       if (tf?.createVideoTransition && typeof item.createAddVideoTransitionAction === 'function') {
-        const trans = await tf.createVideoTransition(input.matchName, durTicks);
-        let options: unknown;
-        try {
-          options = pp.AddTransitionOptions ? new pp.AddTransitionOptions() : undefined;
-        } catch {
-          options = undefined;
+        const trans = await tf.createVideoTransition(matchName);
+        const options = pp.AddTransitionOptions ? new pp.AddTransitionOptions() : undefined;
+        if (options) {
+          try {
+            options.setDuration?.(durTicks);
+            // Áp ở ĐẦU clip B → chuyển cảnh giữa clip trước và clip B.
+            options.setApplyToStart?.(true);
+          } catch {
+            /* setters tuỳ chọn */
+          }
         }
         this.invalidateClipCache();
         await this.runTransaction('Thêm chuyển cảnh', (compound) => {

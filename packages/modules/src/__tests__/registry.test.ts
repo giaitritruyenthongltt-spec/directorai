@@ -26,9 +26,10 @@ describe('module registry', () => {
     expect(getModule('reorder')?.enabled).toBe(true);
   });
 
-  it('transition + color là beta, enabled=false', () => {
+  it('transition beta nhưng tick được (C2); color_grade beta chưa bật', () => {
     expect(getModule('transition')?.feasibility).toBe('beta');
-    expect(getModule('transition')?.enabled).toBe(false);
+    expect(getModule('transition')?.enabled).toBe(true);
+    expect(getModule('color_grade')?.feasibility).toBe('beta');
     expect(getModule('color_grade')?.enabled).toBe(false);
   });
 
@@ -50,8 +51,8 @@ describe('module registry', () => {
     expect(goal).toContain('làm 45s');
   });
 
-  it('buildGoalFromModules bỏ qua module disabled (transition)', () => {
-    const goal = buildGoalFromModules(['transition']);
+  it('buildGoalFromModules bỏ qua module disabled (color_grade)', () => {
+    const goal = buildGoalFromModules(['color_grade']);
     expect(goal).toBe('');
   });
 
