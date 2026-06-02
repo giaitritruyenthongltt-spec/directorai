@@ -21,6 +21,7 @@ import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import type { Clip } from '@directorai/core';
 import { EFFECT_PRESETS, pickColorPresetForMood } from '@directorai/effect-library';
 import { listModuleInfos } from '@directorai/modules';
+import { buildFcpxml, type FcpTimeline } from '@directorai/fcpxml';
 import { resolvePlan, type PlanPreview } from './plan-resolver.js';
 import { applyResolvedPlan, type ApplyResult } from './plan-executor.js';
 import type { CheckpointStore } from './checkpoint-store.js';
@@ -150,6 +151,8 @@ export class CompositeTools {
         return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
       case 'module.list':
         return { modules: listModuleInfos() };
+      case 'fcpxml.export':
+        return this.exportFcpxml(params as { timeline: FcpTimeline; fileName?: string });
       case 'safe.previewPlan':
         return this.previewPlan(
           params as {
@@ -200,6 +203,7 @@ export class CompositeTools {
       'context.clusterClips',
       'context.qualityReport',
       'module.list',
+      'fcpxml.export',
       'safe.previewPlan',
       'safe.applyPlan',
       'timeline.cutOnBeats',
@@ -279,6 +283,32 @@ export class CompositeTools {
       clip_paths: params.clipPaths,
       max_distance: params.maxDistance ?? 6,
     });
+  }
+
+  // ─── fcpxml.export (B10 — Tầng 4: dựng-từ-đầu/split/speed/marker) ─────
+
+  /**
+   * B10 — Sinh FCPXML từ timeline (clip + in/out + speed + marker) và ghi
+   * ra ~/.directorai/exports/. Cho phép những thao tác Premiere 26 UXP KHÔNG
+   * ghi được; người dùng Import file này vào Premiere.
+   */
+  async exportFcpxml(params: {
+    timeline: FcpTimeline;
+    fileName?: string;
+  }): Promise<{ path: string; bytes: number; clips: number }> {
+    const tl = params.timeline;
+    if (!tl?.clips?.length) throw new Error('timeline.clips rỗng');
+    const xml = buildFcpxml(tl);
+    const dir = path.join(os.homedir(), '.directorai', 'exports');
+    await fs.mkdir(dir, { recursive: true });
+    const safe = (params.fileName ?? tl.name ?? 'sequence')
+      .replace(/[^\p{L}\p{N}._-]+/gu, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60);
+    const file = path.join(dir, `${safe || 'sequence'}.fcpxml`);
+    await fs.writeFile(file, xml, 'utf-8');
+    this.deps.logger.info({ path: file, clips: tl.clips.length }, 'fcpxml.export written');
+    return { path: file, bytes: Buffer.byteLength(xml, 'utf-8'), clips: tl.clips.length };
   }
 
   // ─── context.qualityReport (MOD-5 — báo cáo chất lượng) ───────────────

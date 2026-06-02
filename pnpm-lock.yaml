@@ -278,6 +278,9 @@ importers:
       '@directorai/effect-library':
         specifier: workspace:*
         version: link:../../packages/effect-library
+      '@directorai/fcpxml':
+        specifier: workspace:*
+        version: link:../../packages/fcpxml
       '@directorai/license':
         specifier: workspace:*
         version: link:../../packages/license
@@ -432,6 +435,15 @@ importers:
       '@directorai/shared':
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.6.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.2
+        version: 2.1.9(@types/node@22.19.19)(terser@5.47.1)
+
+  packages/fcpxml:
     devDependencies:
       typescript:
         specifier: ^5.6.2
