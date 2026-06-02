@@ -154,8 +154,17 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     { item: PProTrackItem; track: PProTrack; seq: PProSequence }
   > | null = null;
 
+  /**
+   * S1 — Cache kết quả `listClips` theo sequenceId. Luồng dựng phim gọi
+   * listClips 3 lần (activeSequenceClips → previewPlan → execMoveBatch) mà
+   * KHÔNG ghi gì ở giữa → trên 413 clip là ~60s lãng phí. Cache lại, xóa khi
+   * có BẤT KỲ mutation nào (invalidateClipCache) để không phục vụ dữ liệu cũ.
+   */
+  private clipListCache: Map<string, readonly Clip[]> | null = null;
+
   private invalidateClipCache(): void {
     this.clipCache = null;
+    this.clipListCache = null;
   }
 
   private async findTrackItem(clipId: string): Promise<{
@@ -395,6 +404,10 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   // ─── Timeline read ────────────────────────────────────────────────────────
 
   async listClips(sequenceId: string): Promise<readonly Clip[]> {
+    // S1 — phục vụ từ cache nếu chưa có mutation nào kể từ lần quét trước.
+    const cached = this.clipListCache?.get(sequenceId);
+    if (cached) return cached;
+
     const seq = await this.findSequence(sequenceId);
     const out: Clip[] = [];
     const vCount = await seq.getVideoTrackCount();
@@ -409,7 +422,9 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
       const items = await t.getTrackItems(1, false);
       for (const it of items) out.push(await translateTrackItem(it, `audio-${i}`, 'audio'));
     }
-    return out;
+    const frozen = Object.freeze(out);
+    (this.clipListCache ??= new Map()).set(sequenceId, frozen);
+    return frozen;
   }
 
   async getClip(clipId: string): Promise<Clip | null> {
