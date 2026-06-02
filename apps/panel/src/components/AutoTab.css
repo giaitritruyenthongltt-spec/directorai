@@ -29,6 +29,32 @@
   gap: 6px;
 }
 
+/* Templates (MOD-7) */
+.auto-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.auto-template-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.auto-template-btn:hover {
+  background: #2a3744;
+}
+.auto-template-icon {
+  font-size: 14px;
+}
+
 /* Modules checklist */
 .auto-modules {
   display: flex;

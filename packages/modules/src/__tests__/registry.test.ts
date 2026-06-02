@@ -6,6 +6,8 @@ import {
   buildGoalFromModules,
   moduleInfo,
   runModules,
+  NERF_TEMPLATES,
+  getTemplate,
   type EditModuleDef,
 } from '../index.js';
 
@@ -85,5 +87,20 @@ describe('module registry', () => {
     expect(steps.length).toBe(2);
     expect(steps[0]!.order).toBe(1);
     expect(steps[1]!.order).toBe(2);
+  });
+});
+
+describe('templates (MOD-7)', () => {
+  it('có template Nerf built-in', () => {
+    expect(NERF_TEMPLATES.length).toBeGreaterThanOrEqual(3);
+    expect(getTemplate('action_fast')?.builtin).toBe(true);
+  });
+
+  it('moduleIds của template đều tồn tại trong registry', () => {
+    const ids = new Set(MODULE_REGISTRY.map((m) => m.id));
+    for (const t of NERF_TEMPLATES) {
+      for (const mid of t.moduleIds) expect(ids.has(mid)).toBe(true);
+      expect(t.goal.length).toBeGreaterThan(0);
+    }
   });
 });

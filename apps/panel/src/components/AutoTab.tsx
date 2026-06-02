@@ -11,7 +11,12 @@
  */
 
 import React, { useState } from 'react';
-import { MODULE_REGISTRY, moduleInfo, buildGoalFromModules } from '@directorai/modules';
+import {
+  MODULE_REGISTRY,
+  moduleInfo,
+  buildGoalFromModules,
+  NERF_TEMPLATES,
+} from '@directorai/modules';
 import { wsClient } from '../bridge/ws-client.js';
 import { HelpButton } from './HelpButton.js';
 import './AutoTab.css';
@@ -64,6 +69,17 @@ export function AutoTab(): React.ReactElement {
       else next.add(id);
       return next;
     });
+    setPreview(null);
+    setApplied(null);
+  };
+
+  // MOD-7 — áp template: chỉ tích module enabled trong template.
+  const applyTemplate = (moduleIds: string[], goal: string): void => {
+    const enabledIds = MODULES.filter((m) => m.enabled && moduleIds.includes(m.id)).map(
+      (m) => m.id
+    );
+    setTicked(new Set(enabledIds));
+    setCustomGoal(goal);
     setPreview(null);
     setApplied(null);
   };
@@ -153,6 +169,31 @@ export function AutoTab(): React.ReactElement {
         </h2>
         <p className="auto-sub">AI hiểu nội dung như editor — luôn xem trước trước khi ghi.</p>
       </div>
+
+      <section className="auto-section">
+        <div className="auto-section-title">
+          🎯 Mẫu nhanh (1-click)
+          <HelpButton
+            title="Mẫu nhanh"
+            lines={['Bấm 1 nút để áp sẵn bộ module + mục tiêu tối ưu cho video Nerf.']}
+            example="'Bản action nhanh' → tích sẵn lọc/tỉa/xếp/đổi-tên + mục tiêu 45s gay cấn."
+          />
+        </div>
+        <div className="auto-templates">
+          {NERF_TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="auto-template-btn"
+              title={t.description}
+              onClick={() => applyTemplate(t.moduleIds, t.goal)}
+            >
+              <span className="auto-template-icon">{t.icon}</span>
+              {t.name}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className="auto-section">
         <div className="auto-section-title">
