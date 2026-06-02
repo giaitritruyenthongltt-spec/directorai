@@ -150,14 +150,14 @@ describe('safe.applyPlan — cổng duyệt', () => {
     expect(clip!.sourceRange.start).toBeCloseTo(1, 5);
   });
 
-  it('move + transition → DEFER (move chưa ripple-aware, transition chưa verify)', async () => {
+  it('move → GHI THẬT (ripple-aware batch, không chồng lấn); transition DEFER', async () => {
     await ctx.adapter.importFile({ path: 'E:\\T11\\7.mp4' });
     const plan = planWith([
       {
         order: 1,
         action: 'move',
-        target_path: ctx.clipPath,
-        params: { to_index: 1 },
+        target_path: ctx.clipPath, // clip đầu
+        params: { to_index: 1 }, // đưa xuống sau
         reason: 'r',
         reversible: true,
       },
@@ -176,8 +176,18 @@ describe('safe.applyPlan — cổng duyệt', () => {
       dryRun: false,
       approved: true,
     });
-    expect(res.deferred).toBe(2);
-    expect(res.applied).toBe(0);
+    expect(res.applied).toBe(1); // move
+    expect(res.deferred).toBe(1); // transition
+    // không chồng lấn trên timeline sau move
+    const clips = await ctx.adapter.listClips(ctx.seqId);
+    const vid = clips
+      .filter((c) => c.kind === 'video')
+      .sort((a, b) => a.timelineRange.start - b.timelineRange.start);
+    for (let i = 1; i < vid.length; i++) {
+      expect(vid[i]!.timelineRange.start).toBeGreaterThanOrEqual(
+        vid[i - 1]!.timelineRange.end - 1e-6
+      );
+    }
   });
 
   it('transition đơn → DEFER', async () => {

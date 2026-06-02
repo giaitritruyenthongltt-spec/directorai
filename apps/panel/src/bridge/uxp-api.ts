@@ -187,11 +187,65 @@ export async function introspectPremiereApi(): Promise<Record<string, unknown>> 
         const comp = await (
           chain as { getComponentAtIndex?: (i: number) => Promise<unknown> }
         ).getComponentAtIndex?.(0);
-        if (comp) out.firstComponent = listMembers(comp);
+        if (comp) {
+          out.firstComponent = listMembers(comp);
+          // C2/C3 — param API của component (để set exposure/màu).
+          try {
+            const c = comp as {
+              getMatchName?: () => Promise<string>;
+              getParamCount?: () => Promise<number>;
+              getParam?: (i: number) => Promise<unknown>;
+            };
+            out.firstComponentMatchName = await c.getMatchName?.();
+            const pc = await c.getParamCount?.();
+            out.firstComponentParamCount = pc ?? null;
+            if (pc && pc > 0) {
+              const param = await c.getParam?.(0);
+              if (param) {
+                out.firstParam = listMembers(param);
+                out.firstParamName = await (
+                  param as { getDisplayName?: () => Promise<string> }
+                ).getDisplayName?.();
+              }
+            }
+          } catch (e) {
+            out.paramErr = e instanceof Error ? e.message : String(e);
+          }
+        }
       }
     }
   } catch (e) {
     out.componentChainErr = e instanceof Error ? e.message : String(e);
+  }
+
+  // C2/C3 — danh sách matchName hợp lệ + AddTransitionOptions instance.
+  try {
+    const tf = pp.TransitionFactory as {
+      getVideoTransitionMatchNames?: () => Promise<string[]>;
+    };
+    out.transitionMatchNames = (await tf?.getVideoTransitionMatchNames?.())?.slice(0, 40);
+  } catch (e) {
+    out.transitionMatchNamesErr = e instanceof Error ? e.message : String(e);
+  }
+  try {
+    const vff = pp.VideoFilterFactory as {
+      getMatchNames?: () => Promise<string[]>;
+      getDisplayNames?: () => Promise<string[]>;
+    };
+    const names = (await vff?.getMatchNames?.()) ?? [];
+    const disp = (await vff?.getDisplayNames?.()) ?? [];
+    // Lọc các filter liên quan màu (Lumetri/Color) để dễ tìm.
+    out.filterColorMatchNames = names.filter((n) => /lumetri|color|colour/i.test(String(n)));
+    out.filterColorDisplayNames = disp.filter((n) => /lumetri|color|colour/i.test(String(n)));
+    out.filterCount = names.length;
+  } catch (e) {
+    out.filterMatchNamesErr = e instanceof Error ? e.message : String(e);
+  }
+  try {
+    const AddTO = pp.AddTransitionOptions as (new () => unknown) | undefined;
+    if (AddTO) out.addTransitionOptionsInstance = listMembers(new AddTO());
+  } catch (e) {
+    out.addTransitionOptionsErr = e instanceof Error ? e.message : String(e);
   }
 
   return out;

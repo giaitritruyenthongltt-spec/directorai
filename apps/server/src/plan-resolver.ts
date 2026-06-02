@@ -22,16 +22,15 @@ import type { EditPlan, EditPlanStep, SafePlanAction } from './director-tools.js
  * tình trạng preview hứa "ghi được" nhưng executor lại defer).
  *
  * - disable/trim/rename: map sạch, in-place, an toàn → bật.
- * - move: TẠM DEFER — computeMoveStart hiện đặt clip theo vị trí tuyệt đối,
- *   không ripple → gây chồng lấn; lại trộn track video+audio vào 1 index.
- *   Cần re-layout ripple-aware + lọc theo đúng track rồi mới bật.
+ * - move: BẬT LẠI (C1) — giờ dùng re-pack ripple-aware (park-then-place)
+ *   trên cùng 1 track video, không chồng lấn. Verify live còn chờ.
  * - transition: DEFER — API Premiere 26 chưa verify live.
  */
 export const EXECUTABLE_ACTIONS: Record<SafePlanAction, boolean> = {
   disable: true,
   trim: true,
   rename: true,
-  move: false,
+  move: true,
   transition: false,
 };
 

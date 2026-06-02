@@ -20,6 +20,7 @@ import type { Clip, Seconds } from '@directorai/core';
 import type { Logger } from '@directorai/shared';
 import type { SafePlanAction } from './director-tools.js';
 import { EXECUTABLE_ACTIONS, type PlanPreview, type ResolvedStep } from './plan-resolver.js';
+import { computeReorderOps, type MoveIntent } from './reorder.js';
 
 /**
  * Action executor thực sự ghi được = NGUỒN SỰ THẬT chung với resolver
@@ -30,15 +31,6 @@ export const EXECUTOR_SUPPORTED = EXECUTABLE_ACTIONS;
 function num(v: unknown): number | null {
   const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
   return Number.isFinite(n) ? n : null;
-}
-
-/** Tính newStart (giây) cho 1 bước move từ to_index, dựa trên thứ tự clip
- *  hiện tại trên timeline. Clamp an toàn trong [0, cuối timeline]. */
-function computeMoveStart(toIndex: number, sortedStarts: number[], sortedEnds: number[]): number {
-  if (sortedStarts.length === 0) return 0;
-  if (toIndex <= 0) return sortedStarts[0] ?? 0;
-  if (toIndex >= sortedStarts.length) return sortedEnds[sortedEnds.length - 1] ?? 0;
-  return sortedStarts[toIndex] ?? 0;
 }
 
 export type StepStatus = 'applied' | 'failed' | 'skipped' | 'deferred' | 'dry-run';
@@ -64,12 +56,8 @@ export interface ApplyResult {
   results: ApplyStepResult[];
 }
 
-interface ExecCtx {
-  sortedStarts: number[];
-  sortedEnds: number[];
-}
-
-async function execStep(adapter: INLEAdapter, step: ResolvedStep, ctx: ExecCtx): Promise<string> {
+/** Thực thi 1 bước KHÔNG-move (disable/rename/trim). move xử lý theo BATCH. */
+async function execStep(adapter: INLEAdapter, step: ResolvedStep): Promise<string> {
   const clipId = step.clipId as string; // đã đảm bảo resolved trước khi gọi
   const p = step.params ?? {};
   switch (step.action) {
@@ -90,16 +78,47 @@ async function execStep(adapter: INLEAdapter, step: ResolvedStep, ctx: ExecCtx):
       await adapter.setClipInOut(clipId, inSec as Seconds, outSec as Seconds);
       return `đã tỉa "${step.clipName}" còn ${inSec}–${outSec}s`;
     }
-    case 'move': {
-      const toIndex = num(p.to_index);
-      if (toIndex === null) throw new Error('move: thiếu to_index');
-      const newStart = computeMoveStart(Math.round(toIndex), ctx.sortedStarts, ctx.sortedEnds);
-      await adapter.moveClip({ clipId, newStart: newStart as Seconds });
-      return `đã chuyển "${step.clipName}" tới ~${newStart.toFixed(1)}s (index ${toIndex})`;
-    }
     default:
-      throw new Error(`execStep: action "${step.action}" chưa hỗ trợ`);
+      throw new Error(`execStep: action "${step.action}" không xử lý ở đây`);
   }
+}
+
+/**
+ * C1 — Thực thi TẤT CẢ bước move như 1 mẻ re-pack ripple-aware (không chồng
+ * lấn). Trả Map theo order-bước → kết quả. CHỈ re-pack clip VIDEO trên cùng
+ * track của clip move đầu tiên.
+ */
+async function execMoveBatch(
+  adapter: INLEAdapter,
+  sequenceId: string,
+  moveSteps: ResolvedStep[],
+  logger?: Logger
+): Promise<Map<number, { ok: boolean; detail: string }>> {
+  const out = new Map<number, { ok: boolean; detail: string }>();
+  try {
+    const clips: readonly Clip[] = await adapter.listClips(sequenceId);
+    // Track của clip move đầu tiên (chỉ re-pack track đó, clip video).
+    const firstClip = clips.find((c) => c.id === moveSteps[0]?.clipId);
+    const trackId = firstClip?.trackId;
+    const videoClips = clips.filter((c) => c.kind === 'video' && c.trackId === trackId);
+    const intents: MoveIntent[] = moveSteps.map((s) => ({
+      clipId: s.clipId as string,
+      toIndex: num(s.params?.to_index) ?? 0,
+    }));
+    const ops = computeReorderOps(videoClips, intents);
+    for (const op of ops) {
+      await adapter.moveClip({ clipId: op.clipId, newStart: op.newStart as Seconds });
+    }
+    logger?.info({ sequenceId, ops: ops.length, moves: moveSteps.length }, 'safe.apply move batch');
+    for (const s of moveSteps) {
+      out.set(s.order, { ok: true, detail: `đã sắp lại (re-pack ${ops.length} thao tác an toàn)` });
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger?.warn({ sequenceId, error: msg }, 'safe.apply move batch failed');
+    for (const s of moveSteps) out.set(s.order, { ok: false, detail: `lỗi sắp lại: ${msg}` });
+  }
+  return out;
 }
 
 /**
@@ -113,19 +132,13 @@ export async function applyResolvedPlan(
 ): Promise<ApplyResult> {
   const results: ApplyStepResult[] = [];
 
-  // Cho move: cần thứ tự clip hiện tại để map to_index → newStart (giây).
-  // Chỉ tải khi sẽ GHI THẬT và có bước move executable.
-  let ctx: ExecCtx = { sortedStarts: [], sortedEnds: [] };
-  const hasMove = preview.steps.some(
-    (s) => s.action === 'move' && s.resolved && EXECUTOR_SUPPORTED.move
+  // C1 — Gom bước move (resolved, executable) → thực thi 1 mẻ ripple-aware.
+  const moveSteps = preview.steps.filter(
+    (s) => s.action === 'move' && s.resolved && !!s.clipId && EXECUTOR_SUPPORTED.move
   );
-  if (!opts.dryRun && hasMove) {
-    const clips: readonly Clip[] = await adapter.listClips(preview.sequenceId);
-    const sorted = [...clips].sort((a, b) => a.timelineRange.start - b.timelineRange.start);
-    ctx = {
-      sortedStarts: sorted.map((c) => c.timelineRange.start),
-      sortedEnds: sorted.map((c) => c.timelineRange.end),
-    };
+  let moveOutcome: Map<number, { ok: boolean; detail: string }> | null = null;
+  if (!opts.dryRun && moveSteps.length > 0) {
+    moveOutcome = await execMoveBatch(adapter, preview.sequenceId, moveSteps, opts.logger);
   }
 
   for (const step of preview.steps) {
@@ -159,9 +172,19 @@ export async function applyResolvedPlan(
       results.push({ ...base, status: 'dry-run', detail: `(dry-run) sẽ: ${step.description}` });
       continue;
     }
-    // 4) Ghi thật.
+    // 4a) move → đọc kết quả từ mẻ batch (C1).
+    if (step.action === 'move') {
+      const o = moveOutcome?.get(step.order);
+      results.push({
+        ...base,
+        status: o?.ok ? 'applied' : 'failed',
+        detail: o?.detail ?? 'move: không có kết quả batch',
+      });
+      continue;
+    }
+    // 4b) Ghi thật (disable/rename/trim).
     try {
-      const detail = await execStep(adapter, step, ctx);
+      const detail = await execStep(adapter, step);
       results.push({ ...base, status: 'applied', detail });
       opts.logger?.info(
         { order: step.order, action: step.action, clipId: step.clipId },
