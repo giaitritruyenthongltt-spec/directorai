@@ -101,6 +101,14 @@ class EditPlanRequest(BaseModel):
     sample_interval_sec: float | None = None
 
 
+class FilterBadRequest(BaseModel):
+    """MOD-3 — Request lọc clip kém (CV prefilter → Vision subset)."""
+
+    clip_paths: list[str]
+    threshold: float = 0.5
+    sample_interval_sec: float | None = None
+
+
 class VisionTag(BaseModel):
     """A single frame analysis result."""
 

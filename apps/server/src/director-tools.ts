@@ -138,6 +138,10 @@ export class CompositeTools {
         return this.buildVideoMap(
           params as { clipPaths: string[]; goal?: string; frames?: number }
         );
+      case 'context.filterBad':
+        return this.filterBad(
+          params as { clipPaths: string[]; threshold?: number; frames?: number }
+        );
       case 'context.buildEditPlan':
         return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
       case 'module.list':
@@ -188,6 +192,7 @@ export class CompositeTools {
       'context.understandClip',
       'context.buildVideoMap',
       'context.buildEditPlan',
+      'context.filterBad',
       'module.list',
       'safe.previewPlan',
       'safe.applyPlan',
@@ -222,6 +227,31 @@ export class CompositeTools {
     const interval = params.frames ? 1.0 / params.frames : 0.33;
     return sidecarPost('/vision/understand_clip', {
       media_path: params.clipPath,
+      sample_interval_sec: interval,
+    });
+  }
+
+  // ─── context.filterBad (MOD-3 — CV prefilter → Vision subset) ─────────
+
+  /**
+   * MOD-3 — Lọc clip kém tiết kiệm: CV thô chấm HẾT clip, chỉ clip nghi
+   * ngờ kém mới đẩy lên Vision (Gemini) phân xử keep/review/discard. Trả
+   * thống kê chi phí (cv_scanned vs vision_calls) để minh bạch.
+   */
+  async filterBad(params: { clipPaths: string[]; threshold?: number; frames?: number }): Promise<{
+    keep: { clip_path: string; reason: string; by: string }[];
+    review: { clip_path: string; reason: string; by: string }[];
+    discard: { clip_path: string; reason: string; by: string }[];
+    cv_scanned: number;
+    suspects: number;
+    vision_calls: number;
+    prefilter: unknown[];
+  }> {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const interval = params.frames ? 1.0 / params.frames : 0.33;
+    return sidecarPost('/vision/filter_bad', {
+      clip_paths: params.clipPaths,
+      threshold: params.threshold ?? 0.5,
       sample_interval_sec: interval,
     });
   }

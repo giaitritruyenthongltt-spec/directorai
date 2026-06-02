@@ -20,6 +20,7 @@ from directorai_context.models import (
     EditPlanRequest,
     EmbedRequest,
     EmbedResult,
+    FilterBadRequest,
     IngestRequest,
     IngestResult,
     SceneRequest,
@@ -373,6 +374,26 @@ def create_app() -> FastAPI:
             "clips_failed": len(errors),
             "errors": errors,
         }
+
+    @app.post("/vision/filter_bad")
+    async def post_filter_bad(req: FilterBadRequest) -> dict[str, object]:
+        """MOD-3 — Lọc clip kém: CV chấm hết → Vision chỉ xem clip nghi →
+        keep/review/discard. Tiết kiệm chi phí Gemini (chỉ gọi trên subset)."""
+        from directorai_context.modules.prefilter import filter_bad
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        frames = None
+        try:
+            if req.sample_interval_sec and req.sample_interval_sec > 0:
+                frames = max(1, min(8, round(1.0 / req.sample_interval_sec)))
+        except (TypeError, ValueError):
+            frames = None
+        try:
+            return filter_bad(req.clip_paths, threshold=req.threshold, frames=frames)
+        except Exception as e:  # noqa: BLE001
+            log.error("filter_bad_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.post("/scenes/classify")
     async def post_scene_classify(req: VisionRequest) -> dict[str, object]:
