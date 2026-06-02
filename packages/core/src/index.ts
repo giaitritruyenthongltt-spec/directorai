@@ -4,5 +4,6 @@ export * from './types/clip.js';
 export * from './types/track.js';
 export * from './types/effect.js';
 export * from './types/marker.js';
+export * from './types/narrative.js';
 export * from './types/time.js';
 export * from './types/context.js';
