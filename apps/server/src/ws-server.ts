@@ -160,6 +160,32 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       return;
     }
 
+    // Composite tools (safe.*, module.*, composite context.*/timeline.*) —
+    // probed BEFORE all namespace routers + panel-forward. maybeHandle
+    // returns null on miss → fall through (real context.*/timeline.* still
+    // reach their routers / the panel). Composites run in-server and may
+    // issue primitive calls back through the panel adapter.
+    if (opts.onComposite) {
+      try {
+        const handled = await opts.onComposite(req.method, req.params);
+        if (handled !== null) {
+          send(ws, { jsonrpc: '2.0', id: req.id, result: handled } satisfies JsonRpcSuccess);
+          return;
+        }
+      } catch (err) {
+        opts.logger.warn({ method: req.method, err }, 'composite RPC error');
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message: err instanceof Error ? err.message : 'composite call failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+    }
+
     // Special: style.* methods → server-side planner+executor
     if (req.method.startsWith('style.')) {
       if (!opts.onStyle) {
@@ -324,31 +350,6 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
         } satisfies JsonRpcErrorResponse);
       }
       return;
-    }
-
-    // Composite tools (safe.*, composite context.*/timeline.*) — tried
-    // BEFORE panel-forward. maybeHandle returns null on miss → fall through
-    // to panel/primitive dispatch below. Composites run in-server and may
-    // issue primitive calls back through the panel adapter.
-    if (opts.onComposite) {
-      try {
-        const handled = await opts.onComposite(req.method, req.params);
-        if (handled !== null) {
-          send(ws, { jsonrpc: '2.0', id: req.id, result: handled } satisfies JsonRpcSuccess);
-          return;
-        }
-      } catch (err) {
-        opts.logger.warn({ method: req.method, err }, 'composite RPC error');
-        send(ws, {
-          jsonrpc: '2.0',
-          id: req.id,
-          error: {
-            code: RpcErrorCode.ADAPTER_ERROR,
-            message: err instanceof Error ? err.message : 'composite call failed',
-          },
-        } satisfies JsonRpcErrorResponse);
-        return;
-      }
     }
 
     // If a panel is connected and this is a tool call, forward to panel.

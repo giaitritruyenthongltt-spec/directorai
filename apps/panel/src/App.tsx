@@ -14,18 +14,20 @@ import { StylePicker } from './components/StylePicker.js';
 import { ContextTab } from './components/ContextTab.js';
 import { DirectorTab } from './components/DirectorTab.js';
 import { AutoTab } from './components/AutoTab.js';
+import { AnalysisTab } from './components/AnalysisTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import './App.css';
 
-export type ActiveTab = 'auto' | 'director' | 'chat' | 'style' | 'context';
+export type ActiveTab = 'auto' | 'director' | 'analysis' | 'chat' | 'style' | 'context';
 
 /** Nhãn tab tiếng Việt. */
 const TAB_LABELS: Record<ActiveTab, string> = {
   auto: '⚡ Tự động',
   director: '🎬 Đạo diễn',
+  analysis: '🔍 Báo cáo',
   chat: '💬 Trò chuyện',
   style: '🎨 Phong cách',
-  context: '📊 Phân tích',
+  context: '📊 Ngữ cảnh',
 };
 
 /** Restore a checkpoint into the chat log if it was created recently (< 5 min). */
@@ -180,19 +182,22 @@ export function App(): React.ReactElement {
     <div className="app">
       <Header connState={connState} onReconnect={() => wsClient.connect()} />
       <nav className="tabs">
-        {(['auto', 'director', 'chat', 'style', 'context'] as ActiveTab[]).map((tab) => (
-          <button
-            key={tab}
-            className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
+        {(['auto', 'director', 'analysis', 'chat', 'style', 'context'] as ActiveTab[]).map(
+          (tab) => (
+            <button
+              key={tab}
+              className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {TAB_LABELS[tab]}
+            </button>
+          )
+        )}
       </nav>
       <main className="main-content">
         {activeTab === 'auto' && <AutoTab />}
         {activeTab === 'director' && <DirectorTab />}
+        {activeTab === 'analysis' && <AnalysisTab />}
         {activeTab === 'chat' && <ChatLog entries={logs} />}
         {activeTab === 'style' && <StylePicker />}
         {activeTab === 'context' && <ContextTab />}

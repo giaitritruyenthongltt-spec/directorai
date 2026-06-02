@@ -144,6 +144,8 @@ export class CompositeTools {
         );
       case 'context.clusterClips':
         return this.clusterClips(params as { clipPaths: string[]; maxDistance?: number });
+      case 'context.qualityReport':
+        return this.qualityReport(params as { clipPaths: string[]; threshold?: number });
       case 'context.buildEditPlan':
         return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
       case 'module.list':
@@ -196,6 +198,7 @@ export class CompositeTools {
       'context.buildEditPlan',
       'context.filterBad',
       'context.clusterClips',
+      'context.qualityReport',
       'module.list',
       'safe.previewPlan',
       'safe.applyPlan',
@@ -276,6 +279,99 @@ export class CompositeTools {
       clip_paths: params.clipPaths,
       max_distance: params.maxDistance ?? 6,
     });
+  }
+
+  // ─── context.qualityReport (MOD-5 — báo cáo chất lượng) ───────────────
+
+  /**
+   * MOD-5 — Báo cáo chất lượng (read-only): gộp CV prefilter + cụm hoá →
+   * bảng từng clip (composite/blur/suspect) + tóm tắt + xuất CSV/HTML ra
+   * ~/.directorai/reports/. KHÔNG ghi gì lên timeline. Rẻ — không gọi Gemini.
+   */
+  async qualityReport(params: { clipPaths: string[]; threshold?: number }): Promise<{
+    rows: {
+      clip_path: string;
+      composite: number;
+      blur: number;
+      suspect_score: number;
+      is_suspect: boolean;
+    }[];
+    summary: { total: number; suspects: number; clusters: number; reduction: number };
+    csvPath: string;
+    htmlPath: string;
+  }> {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const threshold = params.threshold ?? 0.5;
+    // CV prefilter (rẻ) — không gọi Gemini.
+    const pf = await sidecarPost<{
+      prefilter: {
+        clip_path: string;
+        composite: number;
+        blur: number;
+        suspect_score: number;
+        is_suspect: boolean;
+      }[];
+      suspects: number;
+    }>('/vision/filter_bad', {
+      clip_paths: params.clipPaths,
+      threshold,
+      sample_interval_sec: 0.33,
+    });
+    const cl = await this.clusterClips({ clipPaths: params.clipPaths });
+    const rows = pf.prefilter ?? [];
+    const summary = {
+      total: params.clipPaths.length,
+      suspects: pf.suspects ?? rows.filter((r) => r.is_suspect).length,
+      clusters: cl.n_clusters,
+      reduction: cl.reduction,
+    };
+    const { csvPath, htmlPath } = await this.writeQualityReportFiles(rows, summary);
+    return { rows, summary, csvPath, htmlPath };
+  }
+
+  /** MOD-5 — Ghi báo cáo chất lượng CSV + HTML ra ~/.directorai/reports/. */
+  private async writeQualityReportFiles(
+    rows: {
+      clip_path: string;
+      composite: number;
+      blur: number;
+      suspect_score: number;
+      is_suspect: boolean;
+    }[],
+    summary: { total: number; suspects: number; clusters: number; reduction: number }
+  ): Promise<{ csvPath: string; htmlPath: string }> {
+    const dir = path.join(os.homedir(), '.directorai', 'reports');
+    await fs.mkdir(dir, { recursive: true });
+    const csv = [
+      'clip,composite,blur,suspect_score,is_suspect',
+      ...rows.map(
+        (r) =>
+          `"${r.clip_path}",${r.composite},${r.blur},${r.suspect_score},${r.is_suspect ? 1 : 0}`
+      ),
+    ].join('\n');
+    const csvPath = path.join(dir, 'quality-report.csv');
+    await fs.writeFile(csvPath, csv, 'utf-8');
+
+    const htmlRows = rows
+      .map(
+        (r) =>
+          `<tr class="${r.is_suspect ? 'bad' : 'ok'}"><td>${r.clip_path}</td><td>${r.composite}</td><td>${r.blur}</td><td>${r.suspect_score}</td><td>${r.is_suspect ? '⚠ nghi' : '✓ tốt'}</td></tr>`
+      )
+      .join('\n');
+    const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<title>Báo cáo chất lượng — DirectorAI</title>
+<style>body{font-family:system-ui;margin:24px;color:#222}h1{font-size:18px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px 8px;font-size:13px}
+th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-child{color:#3a3}
+.sum{margin:8px 0 16px;color:#555}</style></head><body>
+<h1>📊 Báo cáo chất lượng clip (DirectorAI)</h1>
+<div class="sum">Tổng ${summary.total} clip · nghi kém ${summary.suspects} · cụm ${summary.clusters} (giảm ${Math.round(summary.reduction * 100)}% gọi Vision)</div>
+<table><thead><tr><th>Clip</th><th>Composite</th><th>Blur</th><th>Nghi-ngờ</th><th>Đánh giá</th></tr></thead>
+<tbody>${htmlRows}</tbody></table></body></html>`;
+    const htmlPath = path.join(dir, 'quality-report.html');
+    await fs.writeFile(htmlPath, html, 'utf-8');
+    this.deps.logger.info({ csvPath, htmlPath, rows: rows.length }, 'qualityReport written');
+    return { csvPath, htmlPath };
   }
 
   // ─── context.buildVideoMap (AI-2 — Tầng 3) ────────────────────────────
