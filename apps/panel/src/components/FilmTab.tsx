@@ -59,8 +59,14 @@ export function FilmTab(): React.ReactElement {
   const tpl: EditTemplate | undefined = LONG_TEMPLATES.find((t) => t.id === tplId);
   const clipPaths = clips.filter((c) => c.hasFullPath && c.path).map((c) => c.path as string);
 
+  // Theo dõi trạng thái kết nối WS (tránh gọi RPC khi chưa kết nối).
+  const [conn, setConn] = useState(wsClient.state);
+  useEffect(() => wsClient.onStateChange(setConn), []);
+
   // ── Nạp clip từ sequence đang mở ──────────────────────────────────────────
   const loadFromSequence = async (): Promise<void> => {
+    // Chưa kết nối → đợi (không báo lỗi đỏ; sẽ tự nạp khi connected).
+    if (wsClient.state !== 'connected') return;
     setBusy('load');
     setError(null);
     try {
@@ -89,9 +95,10 @@ export function FilmTab(): React.ReactElement {
     }
   };
 
+  // Tự nạp KHI đã kết nối (kể cả lần đầu connect sau khi mount).
   useEffect(() => {
-    void loadFromSequence();
-  }, []);
+    if (conn === 'connected') void loadFromSequence();
+  }, [conn]);
 
   // ── Quét thư mục gốc → map full path ──────────────────────────────────────
   const scanFolders = async (): Promise<void> => {
@@ -250,6 +257,12 @@ export function FilmTab(): React.ReactElement {
 
         {clips.length > 0 ? (
           <ClipTable clips={clips} />
+        ) : conn !== 'connected' ? (
+          <EmptyState
+            icon="🔌"
+            title="Đang kết nối Premiere…"
+            hint="Chờ panel kết nối máy chủ rồi tự nạp clip. Nếu lâu, bấm Nạp lại."
+          />
         ) : (
           <EmptyState
             icon="📭"

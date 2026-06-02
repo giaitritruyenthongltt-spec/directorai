@@ -95,7 +95,11 @@ export function AutoTab(): React.ReactElement {
   } | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const [conn, setConn] = useState(wsClient.state);
+  useEffect(() => wsClient.onStateChange(setConn), []);
+
   const loadFromSequence = async (): Promise<void> => {
+    if (wsClient.state !== 'connected') return; // chưa kết nối → đợi, không báo lỗi
     setLoading(true);
     setError(null);
     try {
@@ -156,10 +160,10 @@ export function AutoTab(): React.ReactElement {
     }
   };
 
-  // Tự nạp 1 lần khi mở tab (nếu WS đã kết nối). loadFromSequence ổn định.
+  // Tự nạp khi đã kết nối (kể cả connect sau khi mount). Tránh lỗi "Not connected".
   useEffect(() => {
-    void loadFromSequence();
-  }, []);
+    if (conn === 'connected') void loadFromSequence();
+  }, [conn]);
 
   const buildGoal = (): string => buildGoalFromModules(Array.from(ticked), customGoal);
 
