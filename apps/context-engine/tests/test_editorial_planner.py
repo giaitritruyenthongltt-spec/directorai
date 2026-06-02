@@ -1,4 +1,4 @@
-"""LF1–LF3 — Test logic thuần của editorial_planner (không gọi Gemini).
+"""LF1-LF3 — Test logic thuần của editorial_planner (không gọi Gemini).
 
 Khóa hành vi: chỉ thị long-form sinh đúng từ tham số, sanitize giữ chương hợp
 lệ + loại step không an toàn, và chương rỗng clip bị bỏ.

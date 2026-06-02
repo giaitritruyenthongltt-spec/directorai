@@ -334,7 +334,7 @@ def build_edit_plan(
     `video_map`: output AI-2 (build_video_map). `goal`: mục tiêu edit.
     LF1 — tham số phim dài (optional, không truyền → hành vi short-form cũ):
       `target_duration_sec` thời lượng bản dựng mục tiêu; `keep_ratio` tỉ lệ
-      giữ clip (0–1); `pacing_profile` nhịp tổng; `structure` 3act|chapters|recap.
+      giữ clip (0..1); `pacing_profile` nhịp tổng; `structure` 3act|chapters|recap.
     """
     cfg = get_settings()
     if not cfg.gemini_api_key:
