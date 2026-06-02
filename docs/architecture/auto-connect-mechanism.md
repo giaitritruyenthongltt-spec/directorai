@@ -57,10 +57,21 @@ transition/color (C2/C3). Việc còn thiếu: UI **tự nạp clip** thay vì n
 
 ## 5. Việc cần làm
 
-| #   | Việc                                                                       | Trạng thái          |
-| --- | -------------------------------------------------------------------------- | ------------------- |
-| D1  | Chẩn đoán raw path (introspect) → biết (A) hay (B)                         | đã thêm, cần reload |
-| D2  | Composite `context.activeSequenceClips` → trả clip + path từ active seq    | làm                 |
-| D3  | AutoTab/AnalysisTab TỰ nạp clip khi mở (bỏ nhập tay; giữ ô làm "nâng cao") | làm                 |
-| D4  | Nếu (B): UI chọn **thư mục gốc** (nhiều folder) → map basename→full        | tuỳ kết quả D1      |
-| D5  | Sửa StatusBar "Mock Project" (panel tự-hỏi-mình rơi mock)                  | làm                 |
+## 6. KẾT LUẬN (đã xác minh live trên "tap 11" + E:/T11)
+
+- **Kịch bản (B) ĐÚNG**: Premiere 26 ẩn full path — `context.activeSequenceClips`
+  trả 413 clip nhưng `withFullPath: 0` (toàn basename). Đây là giới hạn nền tảng
+  của Adobe, KHÔNG phải bug lọc.
+- **Lời giải = folder-scan (D4)**: user chỉ thư mục gốc 1 lần → `context.resolveFromFolders`
+  quét đệ quy, map basename→full. Verified: quét `E:/T11` index 946 file →
+  **171/171 clip khớp, 0 sót**. Không còn nhập path tay.
+- **Điều khiển timeline** dùng được luôn (disable/trim/move/rename + transition/color)
+  vì các action định danh clip bằng tên/clip-id, KHÔNG cần full path.
+
+| #   | Việc                                                                    | Trạng thái                 |
+| --- | ----------------------------------------------------------------------- | -------------------------- |
+| D1  | Chẩn đoán raw path (introspect) → biết (A) hay (B)                      | ✅ xong → (B) Premiere ẩn  |
+| D2  | Composite `context.activeSequenceClips` → trả clip + path từ active seq | ✅ xong (live 413 clip)    |
+| D3  | AutoTab TỰ nạp clip khi mở (bỏ nhập tay; giữ ô làm "nâng cao")          | ✅ xong (cần reload panel) |
+| D4  | UI chọn **thư mục gốc** (nhiều folder) → map basename→full              | ✅ xong (live 171/171)     |
+| D5  | Sửa StatusBar "Mock Project" (panel tự-hỏi-mình rơi mock)               | ⏳ còn lại                 |
