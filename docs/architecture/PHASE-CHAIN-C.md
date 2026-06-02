@@ -38,18 +38,18 @@
 
 ## TRẠNG THÁI (cập nhật)
 
-| Phase                     | Trạng thái                                                                                                |
-| ------------------------- | --------------------------------------------------------------------------------------------------------- |
-| C1 move ripple-aware      | ✅ XONG — 5 test no-overlap, 107 test server pass                                                         |
-| C5 FCPXML NTSC + producer | ✅ XONG — 9 test (NTSC nguyên + auto-build)                                                               |
-| C6 validate params        | ✅ XONG — trim/move bậy bị loại                                                                           |
-| C7 cluster flat-frame     | ✅ XONG — std guard                                                                                       |
-| C8 dọn trùng lặp          | ✅ XONG — clip-paths util chung                                                                           |
-| C2 transition             | 🟡 adapter path sẵn (B9); cần introspect matchNames + verify live                                         |
-| C3 color Lumetri          | 🟡 đường ghi đã rõ; cần introspect param API + verify live                                                |
-| C4 module behavior        | ⏸ QUYẾT ĐỊNH: trí tuệ ở sidecar (1 nguồn); khung module = điểm mở rộng SDK/plugin, KHÔNG nhân bản sidecar |
-| C9 live verify            | 🔴 cần bạn mở sequence test nhỏ                                                                           |
+| Phase                     | Trạng thái                                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C1 move ripple-aware      | ✅ XONG — 5 test no-overlap, 107 test server pass                                                                                                |
+| C5 FCPXML NTSC + producer | ✅ XONG — 9 test (NTSC nguyên + auto-build)                                                                                                      |
+| C6 validate params        | ✅ XONG — trim/move bậy bị loại                                                                                                                  |
+| C7 cluster flat-frame     | ✅ XONG — std guard                                                                                                                              |
+| C8 dọn trùng lặp          | ✅ XONG — clip-paths util chung                                                                                                                  |
+| C2 transition             | ✅ XONG — createVideoTransition + AddTransitionOptions + createAddVideoTransitionAction (API introspect thật); executor bật; verify live còn chờ |
+| C3 color Lumetri          | ✅ XONG — VideoFilterFactory.createComponent + createAppendComponentAction + param.createSetValueAction; verify live còn chờ                     |
+| C4 module behavior        | ✅ QUYẾT ĐỊNH (ghi doc): trí tuệ ở sidecar (1 nguồn); hook signals/judge/execute = điểm mở rộng SDK/plugin                                       |
+| C9 live verify            | 🟢 smoke + script SẴN (`pnpm smoke:live-write`); cần bạn mở sequence test nhỏ + chạy                                                             |
 
-**Còn lại để "full" thật sự**: C2/C3 cần **reload panel 1 lần nữa** (lấy
-matchNames + param API tôi vừa thêm vào introspect), rồi tôi viết adapter
-ghi màu/transition; C9 cần sequence test để verify ghi live.
+**9/9 phase C — code XONG hết.** Còn lại thuần verify-live: reload panel 1
+lần nữa (lấy C2/C3 transition/color vào bundle panel) + mở sequence test →
+chạy `pnpm smoke:live-write`. Code màu/transition grounded API introspect thật.
