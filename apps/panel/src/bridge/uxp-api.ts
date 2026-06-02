@@ -33,6 +33,32 @@ export function getActiveSequenceName(): string {
   return seq?.name ?? 'No sequence';
 }
 
+/**
+ * D5 — Đọc THẲNG active project + sequence từ UXP trong panel (không qua
+ * server). Premiere 26 trả Promise nên phải await; bản sync ở trên luôn cho
+ * "No project". Dùng đúng `Project.getActiveProject()` như adapter. Trả null
+ * khi không ở UXP (caller sẽ fallback sang WS hoặc hiện "giả lập").
+ */
+export async function readActiveContext(): Promise<{
+  project: string;
+  sequence: string;
+} | null> {
+  if (!ppro) return null;
+  let project = 'Chưa có dự án';
+  let sequence = 'Chưa có sequence';
+  try {
+    const proj = await ppro.Project?.getActiveProject?.();
+    if (proj) {
+      project = proj.name ?? project;
+      const seq = await proj.getActiveSequence?.();
+      if (seq) sequence = seq.name ?? sequence;
+    }
+  } catch {
+    return null;
+  }
+  return { project, sequence };
+}
+
 export async function evalExtendScript(script: string): Promise<string> {
   if (!ppro) return `[mock] would eval: ${script}`;
   // ppro.evaluateExtendScript is available in some versions

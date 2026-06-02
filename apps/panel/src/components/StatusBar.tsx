@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ConnectionState } from '../bridge/ws-client.js';
 import { wsClient } from '../bridge/ws-client.js';
-import { isInUXP } from '../bridge/uxp-api.js';
+import { isInUXP, readActiveContext } from '../bridge/uxp-api.js';
 import './StatusBar.css';
 
 interface Props {
@@ -25,6 +25,19 @@ export function StatusBar({ connState }: Props): React.ReactElement {
     }
     let alive = true;
     const poll = async (): Promise<void> => {
+      // D5 — Trong UXP: đọc THẲNG active project/sequence từ panel (server
+      // không tự-forward về chính panel đang hỏi → trước đây rơi "mock").
+      if (isInUXP) {
+        const ctx = await readActiveContext();
+        if (ctx) {
+          if (alive) {
+            setProject(ctx.project);
+            setSequence(ctx.sequence);
+          }
+          return;
+        }
+        // readActiveContext null → ngã sang WS bên dưới.
+      }
       try {
         const seq = await wsClient.call<{ name?: string } | null>('project.getActiveSequence');
         if (alive) setSequence(seq?.name ?? 'Chưa có sequence');
