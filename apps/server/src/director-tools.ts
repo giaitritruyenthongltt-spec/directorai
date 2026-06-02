@@ -71,11 +71,32 @@ export interface EditPlanOutOfScope {
   why: string;
 }
 
+/** LF3 — Lớp tự sự: một CHƯƠNG của phim dài (mô tả, không thực thi). */
+export interface EditPlanChapter {
+  name: string;
+  purpose: string;
+  pacing: string;
+  target_duration_sec: number;
+  clip_paths: string[];
+}
+
+/** LF1 — Tham số định hướng phim dài cho planner (tất cả optional). */
+export interface LongformOptions {
+  targetDurationSec?: number;
+  keepRatio?: number;
+  pacingProfile?: string;
+  structure?: 'three_act' | '3act' | 'chapters' | 'recap';
+}
+
 export interface EditPlan {
   goal_understanding: string;
   strategy: string;
   steps: EditPlanStep[];
   out_of_scope: EditPlanOutOfScope[];
+  /** LF3 — chương tự sự (phim dài); rỗng cho short-form. */
+  chapters?: EditPlanChapter[];
+  total_target_duration_sec?: number;
+  estimated_kept_clips?: number;
   estimated_impact: string;
   requires_preview: boolean;
   rejected_unsafe_steps?: number;
@@ -148,7 +169,9 @@ export class CompositeTools {
       case 'context.qualityReport':
         return this.qualityReport(params as { clipPaths: string[]; threshold?: number });
       case 'context.buildEditPlan':
-        return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
+        return this.buildEditPlan(
+          params as { clipPaths: string[]; goal: string; frames?: number } & LongformOptions
+        );
       case 'module.list':
         return { modules: listModuleInfos() };
       case 'context.activeSequenceClips':
@@ -165,7 +188,7 @@ export class CompositeTools {
             clipPaths?: string[];
             goal?: string;
             frames?: number;
-          }
+          } & LongformOptions
         );
       case 'safe.applyPlan':
         return this.applyPlan(
@@ -178,7 +201,7 @@ export class CompositeTools {
             dryRun?: boolean;
             approved?: boolean;
             reportOnly?: boolean;
-          }
+          } & LongformOptions
         );
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
@@ -569,18 +592,26 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
    * tác đã verify ghi được; double-guard phía server loại mọi bước lọt
    * lưới dùng op chưa ghi được. KHÔNG tự chạy — đi vào Tầng an toàn.
    */
-  async buildEditPlan(params: {
-    clipPaths: string[];
-    goal: string;
-    frames?: number;
-  }): Promise<EditPlanResult> {
+  async buildEditPlan(
+    params: {
+      clipPaths: string[];
+      goal: string;
+      frames?: number;
+    } & LongformOptions
+  ): Promise<EditPlanResult> {
     if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
     if (!params.goal?.trim()) throw new Error('goal required');
     const interval = params.frames ? 1.0 / params.frames : 0.33;
+    // LF1 — chuẩn hóa structure về tên sidecar mong đợi ("3act").
+    const structure = params.structure === 'three_act' ? '3act' : (params.structure ?? undefined);
     const res = await sidecarPost<EditPlanResult>('/vision/build_edit_plan', {
       clip_paths: params.clipPaths,
       goal: params.goal,
       sample_interval_sec: interval,
+      target_duration_sec: params.targetDurationSec,
+      keep_ratio: params.keepRatio,
+      pacing_profile: params.pacingProfile,
+      structure,
     });
     return this.guardEditPlan(res);
   }
@@ -629,13 +660,15 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
    *
    * Nhận sẵn `editPlan`, hoặc tự dựng từ `clipPaths + goal`.
    */
-  async previewPlan(params: {
-    sequenceId?: string;
-    editPlan?: EditPlan;
-    clipPaths?: string[];
-    goal?: string;
-    frames?: number;
-  }): Promise<PlanPreview & { plan: EditPlan }> {
+  async previewPlan(
+    params: {
+      sequenceId?: string;
+      editPlan?: EditPlan;
+      clipPaths?: string[];
+      goal?: string;
+      frames?: number;
+    } & LongformOptions
+  ): Promise<PlanPreview & { plan: EditPlan }> {
     // 1) Lấy kế hoạch (qua guard an toàn).
     let plan = params.editPlan;
     if (!plan) {
@@ -646,6 +679,10 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
         clipPaths: params.clipPaths,
         goal: params.goal,
         frames: params.frames,
+        targetDurationSec: params.targetDurationSec,
+        keepRatio: params.keepRatio,
+        pacingProfile: params.pacingProfile,
+        structure: params.structure,
       });
       plan = built.edit_plan;
     } else {
@@ -695,16 +732,18 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
    * - `reportOnly: true` → ép dry-run + xuất kế hoạch ra file báo cáo.
    * - Ghi thật cần `approved: true`; nếu không sẽ tự hạ dry-run + báo.
    */
-  async applyPlan(params: {
-    sequenceId?: string;
-    editPlan?: EditPlan;
-    clipPaths?: string[];
-    goal?: string;
-    frames?: number;
-    dryRun?: boolean;
-    approved?: boolean;
-    reportOnly?: boolean;
-  }): Promise<
+  async applyPlan(
+    params: {
+      sequenceId?: string;
+      editPlan?: EditPlan;
+      clipPaths?: string[];
+      goal?: string;
+      frames?: number;
+      dryRun?: boolean;
+      approved?: boolean;
+      reportOnly?: boolean;
+    } & LongformOptions
+  ): Promise<
     ApplyResult & {
       plan: EditPlan;
       requiredApproval: boolean;
@@ -719,6 +758,10 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       clipPaths: params.clipPaths,
       goal: params.goal,
       frames: params.frames,
+      targetDurationSec: params.targetDurationSec,
+      keepRatio: params.keepRatio,
+      pacingProfile: params.pacingProfile,
+      structure: params.structure,
     });
 
     // CỔNG DUYỆT: ghi thật chỉ khi dryRun=false, approved=true, KHÔNG reportOnly.

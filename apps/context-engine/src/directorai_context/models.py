@@ -99,6 +99,11 @@ class EditPlanRequest(BaseModel):
     clip_paths: list[str]
     goal: str
     sample_interval_sec: float | None = None
+    # LF1 — tham số phim dài (optional → không truyền thì giữ hành vi cũ).
+    target_duration_sec: float | None = None
+    keep_ratio: float | None = None
+    pacing_profile: str | None = None
+    structure: str | None = None  # "3act" | "chapters" | "recap"
 
 
 class FilterBadRequest(BaseModel):

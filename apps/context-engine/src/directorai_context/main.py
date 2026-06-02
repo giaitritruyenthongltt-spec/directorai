@@ -363,7 +363,14 @@ def create_app() -> FastAPI:
 
         try:
             video_map = build_video_map(understandings, goal=req.goal)
-            edit_plan = build_edit_plan(video_map, goal=req.goal)
+            edit_plan = build_edit_plan(
+                video_map,
+                goal=req.goal,
+                target_duration_sec=req.target_duration_sec,
+                keep_ratio=req.keep_ratio,
+                pacing_profile=req.pacing_profile,
+                structure=req.structure,
+            )
         except Exception as e:  # noqa: BLE001
             log.error("build_edit_plan_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
