@@ -8,6 +8,7 @@
 
 import React, { useState } from 'react';
 import { wsClient } from '../bridge/ws-client.js';
+import { parseClipPaths, basename } from '../bridge/clip-paths.js';
 import { HelpButton } from './HelpButton.js';
 import './AnalysisTab.css';
 
@@ -31,10 +32,7 @@ export function AnalysisTab(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportResult | null>(null);
 
-  const clipPaths = clipText
-    .split(/[\n;]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const clipPaths = parseClipPaths(clipText);
 
   const run = async (): Promise<void> => {
     setError(null);
@@ -53,7 +51,7 @@ export function AnalysisTab(): React.ReactElement {
     }
   };
 
-  const fname = (p: string): string => p.split(/[\\/]/).pop() ?? p;
+  const fname = basename;
 
   return (
     <div className="analysis-tab">

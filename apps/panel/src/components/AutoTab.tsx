@@ -18,6 +18,7 @@ import {
   NERF_TEMPLATES,
 } from '@directorai/modules';
 import { wsClient } from '../bridge/ws-client.js';
+import { parseClipPaths } from '../bridge/clip-paths.js';
 import { HelpButton } from './HelpButton.js';
 import './AutoTab.css';
 
@@ -84,10 +85,7 @@ export function AutoTab(): React.ReactElement {
     setApplied(null);
   };
 
-  const clipPaths = clipText
-    .split(/[\n;]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const clipPaths = parseClipPaths(clipText);
 
   const buildGoal = (): string => buildGoalFromModules(Array.from(ticked), customGoal);
 
