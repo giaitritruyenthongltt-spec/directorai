@@ -17,6 +17,7 @@ from directorai_context.storage import repositories as store
 from directorai_context.models import (
     BeatRequest,
     BeatResult,
+    ClusterRequest,
     EditPlanRequest,
     EmbedRequest,
     EmbedResult,
@@ -374,6 +375,20 @@ def create_app() -> FastAPI:
             "clips_failed": len(errors),
             "errors": errors,
         }
+
+    @app.post("/vision/cluster_clips")
+    async def post_cluster_clips(req: ClusterRequest) -> dict[str, object]:
+        """COST-1 — Gom clip gần giống bằng perceptual hash → chỉ cần hiểu
+        1 đại diện/cụm, giảm số lần gọi Gemini."""
+        from directorai_context.modules.cluster import cluster_clips
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        try:
+            return cluster_clips(req.clip_paths, max_distance=req.max_distance)
+        except Exception as e:  # noqa: BLE001
+            log.error("cluster_clips_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.post("/vision/filter_bad")
     async def post_filter_bad(req: FilterBadRequest) -> dict[str, object]:

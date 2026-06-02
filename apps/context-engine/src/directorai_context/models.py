@@ -109,6 +109,13 @@ class FilterBadRequest(BaseModel):
     sample_interval_sec: float | None = None
 
 
+class ClusterRequest(BaseModel):
+    """COST-1 — Request gom clip gần giống (perceptual hash)."""
+
+    clip_paths: list[str]
+    max_distance: int = 6
+
+
 class VisionTag(BaseModel):
     """A single frame analysis result."""
 

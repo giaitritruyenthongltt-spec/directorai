@@ -142,6 +142,8 @@ export class CompositeTools {
         return this.filterBad(
           params as { clipPaths: string[]; threshold?: number; frames?: number }
         );
+      case 'context.clusterClips':
+        return this.clusterClips(params as { clipPaths: string[]; maxDistance?: number });
       case 'context.buildEditPlan':
         return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
       case 'module.list':
@@ -193,6 +195,7 @@ export class CompositeTools {
       'context.buildVideoMap',
       'context.buildEditPlan',
       'context.filterBad',
+      'context.clusterClips',
       'module.list',
       'safe.previewPlan',
       'safe.applyPlan',
@@ -253,6 +256,25 @@ export class CompositeTools {
       clip_paths: params.clipPaths,
       threshold: params.threshold ?? 0.5,
       sample_interval_sec: interval,
+    });
+  }
+
+  // ─── context.clusterClips (COST-1 — gom clip gần giống) ───────────────
+
+  /**
+   * COST-1 — Gom clip gần giống bằng perceptual hash → chỉ cần hiểu 1 đại
+   * diện/cụm bằng Vision, suy ra cả cụm. Giảm số lần gọi Gemini.
+   */
+  async clusterClips(params: { clipPaths: string[]; maxDistance?: number }): Promise<{
+    clusters: { representative: string; members: string[] }[];
+    n_clips: number;
+    n_clusters: number;
+    reduction: number;
+  }> {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    return sidecarPost('/vision/cluster_clips', {
+      clip_paths: params.clipPaths,
+      max_distance: params.maxDistance ?? 6,
     });
   }
 
