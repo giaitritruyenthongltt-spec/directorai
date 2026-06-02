@@ -16,12 +16,21 @@ from directorai_context.logger import log
 from directorai_context.modules import frame_sampler as fs
 
 
-def _ahash(image_bgr: np.ndarray) -> int:
-    """Average-hash 64-bit từ 1 khung BGR."""
+# Ngưỡng độ lệch chuẩn (trên thang 0-255) coi 1 khung là "phẳng" (đen/trắng/
+# mờ đều) → KHÔNG đáng tin để gom cụm bằng aHash.
+_FLAT_STD_THRESHOLD = 6.0
+
+
+def _ahash(image_bgr: np.ndarray) -> int | None:
+    """Average-hash 64-bit từ 1 khung BGR. Trả None nếu khung quá phẳng
+    (đen/trắng đều) → aHash vô nghĩa (mọi khung phẳng đều ra hash 0, sẽ gom
+    NHẦM các clip lỗi tối đen vào 1 cụm)."""
     import cv2
 
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     small = cv2.resize(gray, (8, 8), interpolation=cv2.INTER_AREA)
+    if float(small.std()) < _FLAT_STD_THRESHOLD:
+        return None  # khung phẳng → không gom (để xét riêng từng clip)
     mean = float(small.mean())
     bits = (small > mean).flatten()
     h = 0

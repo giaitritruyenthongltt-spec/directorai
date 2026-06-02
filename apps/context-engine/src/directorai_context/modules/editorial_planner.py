@@ -108,36 +108,84 @@ def _gemini_text_request(prompt: str, payload: str, model: str, api_key: str) ->
         ) from e
 
 
+def _valid_params(action: str, params: dict) -> tuple[bool, str]:
+    """C6 — Kiểm tham số của 1 step (LLM có thể sinh bậy). Trả (hợp_lệ, lý_do)."""
+
+    def _num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    if action == "trim":
+        a, b = _num(params.get("in_sec")), _num(params.get("out_sec"))
+        if a is None or b is None:
+            return False, "trim thiếu in_sec/out_sec"
+        if a < 0 or b <= a:
+            return False, f"trim in/out không hợp lệ ({a}/{b})"
+    elif action == "move":
+        if _num(params.get("to_index")) is None:
+            return False, "move thiếu to_index hợp lệ"
+    elif action == "rename":
+        if not str(params.get("new_name", "")).strip():
+            return False, "rename thiếu new_name"
+    elif action == "transition":
+        if not str(params.get("kind", "")).strip():
+            # không chặn — cho phép kind mặc định
+            params["kind"] = "Cross Dissolve"
+    return True, ""
+
+
 def _sanitize_plan(plan: dict) -> dict:
-    """Bảo hiểm cuối: loại mọi step dùng thao tác chưa ghi được, dù prompt
-    đã cấm. Step bị loại → chuyển sang out_of_scope để minh bạch."""
-    steps = plan.get("steps") or []
+    """Bảo hiểm cuối: loại mọi step dùng thao tác chưa ghi được HOẶC tham số
+    bậy (C6). Step bị loại → chuyển sang out_of_scope để minh bạch."""
+    steps = plan.get("steps")
+    if not isinstance(steps, list):
+        steps = []
     kept: list[dict] = []
     rejected: list[dict] = []
+    bad_params: list[dict] = []
     for s in steps:
+        if not isinstance(s, dict):
+            continue
         action = str(s.get("action", "")).lower().strip()
-        if action in SAFE_ACTIONS:
-            s["action"] = action
-            s["reversible"] = True
-            kept.append(s)
-        else:
+        if action not in SAFE_ACTIONS:
             rejected.append(s)
+            continue
+        params = s.get("params") if isinstance(s.get("params"), dict) else {}
+        ok, why = _valid_params(action, params)
+        if not ok:
+            s["_reject_reason"] = why
+            bad_params.append(s)
+            continue
+        s["action"] = action
+        s["params"] = params
+        s["reversible"] = True
+        kept.append(s)
     plan["steps"] = kept
-    if rejected:
-        oos = plan.get("out_of_scope") or []
-        for r in rejected:
-            oos.append(
-                {
-                    "want": f"{r.get('action')} trên {r.get('target_path')}",
-                    "needs": "FCPXML (Premiere 26 chưa cho plugin ghi)",
-                    "why": r.get("reason", ""),
-                }
-            )
+    oos = plan.get("out_of_scope") or []
+    for r in rejected:
+        oos.append(
+            {
+                "want": f"{r.get('action')} trên {r.get('target_path')}",
+                "needs": "FCPXML (Premiere 26 chưa cho plugin ghi)",
+                "why": r.get("reason", ""),
+            }
+        )
+    for r in bad_params:
+        oos.append(
+            {
+                "want": f"{r.get('action')} trên {r.get('target_path')}",
+                "needs": "tham số hợp lệ",
+                "why": r.get("_reject_reason", "tham số không hợp lệ"),
+            }
+        )
+    if rejected or bad_params:
         plan["out_of_scope"] = oos
-        log.info("edit_plan_sanitized", rejected=len(rejected))
+        log.info("edit_plan_sanitized", rejected=len(rejected), bad_params=len(bad_params))
     # luôn bắt buộc preview
     plan["requires_preview"] = True
-    plan["rejected_unsafe_steps"] = len(rejected)
+    plan["rejected_unsafe_steps"] = len(rejected) + len(bad_params)
     return plan
 
 
