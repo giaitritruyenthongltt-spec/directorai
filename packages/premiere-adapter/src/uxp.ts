@@ -794,6 +794,37 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   async applyTransition(input: TransitionInput): Promise<void> {
     const durTicks = this.secondsToTick(input.durationSec);
 
+    // Probe 0 — Action model (B9). Introspection trên Premiere 26 xác nhận
+    // trackItem CÓ `createAddVideoTransitionAction` (cùng họ với
+    // createSetDisabledAction đã verify). Đây là đường ĐÚNG mô hình Track A.
+    // Best-effort signature; nuốt lỗi để rơi xuống probe cũ. CHƯA verify live.
+    try {
+      const pp = this.ppro as unknown as {
+        TransitionFactory?: { createVideoTransition?: (name: string, dur?: TickTime) => unknown };
+        AddTransitionOptions?: new () => unknown;
+      };
+      const tf = pp.TransitionFactory;
+      const { item } = await this.findTrackItem(input.clipIdB);
+      if (tf?.createVideoTransition && typeof item.createAddVideoTransitionAction === 'function') {
+        const trans = await tf.createVideoTransition(input.matchName, durTicks);
+        let options: unknown;
+        try {
+          options = pp.AddTransitionOptions ? new pp.AddTransitionOptions() : undefined;
+        } catch {
+          options = undefined;
+        }
+        this.invalidateClipCache();
+        await this.runTransaction('Thêm chuyển cảnh', (compound) => {
+          const make = item.createAddVideoTransitionAction!;
+          const act = options !== undefined ? make(trans, options) : make(trans);
+          compound.addAction(act);
+        });
+        return;
+      }
+    } catch {
+      // fall through to legacy probes
+    }
+
     const factory = (
       this.ppro as unknown as {
         TransitionFactory?: {

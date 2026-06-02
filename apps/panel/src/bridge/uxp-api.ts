@@ -145,5 +145,54 @@ export async function introspectPremiereApi(): Promise<Record<string, unknown>> 
     out.note = 'no active sequence';
   }
 
+  // B8/B9 — deep-dump color + transition factories (static class members).
+  const pp = ppro as Record<string, unknown>;
+  const dumpStatic = (name: string): void => {
+    try {
+      const cls = pp[name];
+      if (cls) out[`static_${name}`] = listMembers(cls);
+    } catch (e) {
+      out[`static_${name}_err`] = e instanceof Error ? e.message : String(e);
+    }
+  };
+  for (const n of [
+    'TransitionFactory',
+    'AddTransitionOptions',
+    'VideoTransition',
+    'VideoFilterFactory',
+    'VideoComponentChain',
+    'VideoFilterComponent',
+    'Color',
+    'ComponentFactory',
+  ]) {
+    dumpStatic(n);
+  }
+
+  // getComponentChain() of the first track item → chain + first component members.
+  try {
+    const seq2 = await proj.getActiveSequence?.();
+    const track = await seq2?.getVideoTrack?.(0);
+    const items = await track?.getTrackItems?.(1, false);
+    const item = items?.[0];
+    const chain = await (
+      item as { getComponentChain?: () => Promise<unknown> }
+    )?.getComponentChain?.();
+    if (chain) {
+      out.componentChain = listMembers(chain);
+      const count = await (
+        chain as { getComponentCount?: () => Promise<number> }
+      ).getComponentCount?.();
+      out.componentCount = count ?? null;
+      if (count && count > 0) {
+        const comp = await (
+          chain as { getComponentAtIndex?: (i: number) => Promise<unknown> }
+        ).getComponentAtIndex?.(0);
+        if (comp) out.firstComponent = listMembers(comp);
+      }
+    }
+  } catch (e) {
+    out.componentChainErr = e instanceof Error ? e.message : String(e);
+  }
+
   return out;
 }

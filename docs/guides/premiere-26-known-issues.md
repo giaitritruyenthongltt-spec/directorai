@@ -6,6 +6,34 @@
 
 ---
 
+## 🔬 Introspection findings (2026-06-02, B8/B9) — CORRECTIONS
+
+Live `_debug.introspect` on the running panel revealed:
+
+- **Transition IS writable** (earlier "API removed" note was WRONG). The
+  trackItem exposes the Action factory **`createAddVideoTransitionAction`**
+  (+ `createRemoveVideoTransitionAction`), same family as the verified
+  `createSetDisabledAction`. The module also has `TransitionFactory`,
+  `VideoTransition`, `AddTransitionOptions`. → B9 implements a probe-0
+  Action-model path in `applyTransition`; needs ONE live verify (signature
+  of `createVideoTransition` / `AddTransitionOptions`).
+- **Color/Lumetri path exists**: module has `VideoFilterFactory`,
+  `VideoComponentChain`, `VideoFilterComponent`, `ComponentFactory`,
+  `Color`; trackItem has **`getComponentChain`**. The old hang was from
+  the wrong `Component.create` call — the real path is
+  `item.getComponentChain()` → add a `VideoFilterComponent` via
+  `VideoFilterFactory`. → B8 keeps color **beta** pending a deep introspect
+  (panel reload required to run the extended dump) + live verify.
+
+> Action factories confirmed on Premiere 26 trackItem:
+> `createSetDisabledAction` ✅, `createSetInPointAction` ✅,
+> `createSetOutPointAction` ✅, `createSetStartAction` ✅,
+> `createSetEndAction` ✅, `createSetNameAction` ✅, `createMoveAction` ✅,
+> `createAddVideoTransitionAction` 🟡 (path ready, verify pending),
+> `createRemoveVideoTransitionAction` 🟡.
+
+---
+
 ## ✅ What works (live verified 2026-06-01)
 
 ### Read operations
