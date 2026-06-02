@@ -7,10 +7,25 @@
 
 import type { FcpTimeline, FcpClip, FcpMarker } from './types.js';
 
-/** Đổi giây → thời gian hữu tỉ FCPXML "N/Ds" theo fps (khung). */
+/**
+ * Thời lượng 1 khung dạng hữu tỉ NGUYÊN (FCPXML yêu cầu num/den nguyên).
+ * NTSC (29.97/59.94/23.976) → 1001/timebase; còn lại → 1/fps.
+ */
+export function frameDuration(fps: number): { num: number; den: number } {
+  const f = Math.round(fps * 1000) / 1000;
+  if (f === 29.97) return { num: 1001, den: 30000 };
+  if (f === 59.94) return { num: 1001, den: 60000 };
+  if (f === 23.976) return { num: 1001, den: 24000 };
+  if (f === 47.952) return { num: 1001, den: 48000 };
+  const fi = Math.round(fps);
+  return { num: 1, den: fi }; // 24/25/30/50/60 integer
+}
+
+/** Đổi giây → thời gian hữu tỉ FCPXML "N/Ds" NGUYÊN theo fps (= frames × frameDur). */
 export function secondsToRational(sec: number, fps: number): string {
-  const frames = Math.round(sec * fps);
-  return `${frames}/${fps}s`;
+  const fd = frameDuration(fps);
+  const frames = Math.round(sec * (fd.den / fd.num)); // số khung
+  return `${frames * fd.num}/${fd.den}s`;
 }
 
 function xmlEscape(s: string): string {
@@ -64,7 +79,8 @@ function clipXml(clip: FcpClip, assetId: string, fps: number): string {
  */
 export function buildFcpxml(timeline: FcpTimeline): string {
   const fps = timeline.fps;
-  const fd = secondsToRational(1 / fps, fps);
+  const fdRat = frameDuration(fps);
+  const fd = `${fdRat.num}/${fdRat.den}s`;
 
   // Gom asset theo path (1 asset/file dù dùng nhiều lần).
   const assetIdByPath = new Map<string, string>();
@@ -110,6 +126,38 @@ ${spine}
   </library>
 </fcpxml>
 `;
+}
+
+/**
+ * C5 — Producer: dựng timeline auto-build từ danh sách clip theo thứ tự,
+ * dán liền nhau (contiguous). Dùng cho use case "dựng từ đầu".
+ */
+export function buildContiguousTimeline(
+  name: string,
+  clips: {
+    assetPath: string;
+    name: string;
+    durationSec: number;
+    sourceInSec?: number;
+    speed?: number;
+  }[],
+  opts: { fps?: number; width?: number; height?: number } = {}
+): FcpTimeline {
+  const fps = opts.fps ?? 30;
+  let cursor = 0;
+  const out: FcpClip[] = clips.map((c) => {
+    const clip: FcpClip = {
+      assetPath: c.assetPath,
+      name: c.name,
+      timelineStartSec: cursor,
+      sourceInSec: c.sourceInSec ?? 0,
+      durationSec: c.durationSec,
+      speed: c.speed,
+    };
+    cursor += c.durationSec;
+    return clip;
+  });
+  return { name, fps, width: opts.width ?? 1920, height: opts.height ?? 1080, clips: out };
 }
 
 /** Tiện ích: tách 1 clip thành 2 tại mốc giây (split). Trả 2 FcpClip. */

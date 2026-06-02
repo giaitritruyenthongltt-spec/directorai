@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   buildFcpxml,
   secondsToRational,
+  frameDuration,
   pathToFileUri,
   splitClip,
+  buildContiguousTimeline,
   type FcpTimeline,
   type FcpClip,
 } from '../index.js';
@@ -25,6 +27,25 @@ describe('fcpxml generate', () => {
   it('secondsToRational dùng fps frames', () => {
     expect(secondsToRational(1, 30)).toBe('30/30s');
     expect(secondsToRational(0.5, 30)).toBe('15/30s');
+  });
+
+  it('NTSC 29.97 → rational nguyên 1001/30000 (không "1/29.97s" sai)', () => {
+    expect(frameDuration(29.97)).toEqual({ num: 1001, den: 30000 });
+    // 1s @ 29.97 ≈ 30 khung → 30*1001/30000
+    expect(secondsToRational(1, 29.97)).toBe('30030/30000s');
+    const xml = buildFcpxml({ ...tl([baseClip]), fps: 29.97 });
+    expect(xml).toContain('frameDuration="1001/30000s"');
+    expect(xml).not.toMatch(/\/29\.97s/); // không có denominator thập phân
+  });
+
+  it('buildContiguousTimeline dán liền (auto-build)', () => {
+    const t = buildContiguousTimeline('Auto', [
+      { assetPath: 'a.mp4', name: 'a', durationSec: 3 },
+      { assetPath: 'b.mp4', name: 'b', durationSec: 2 },
+    ]);
+    expect(t.clips[0]!.timelineStartSec).toBe(0);
+    expect(t.clips[1]!.timelineStartSec).toBe(3); // dán liền sau a
+    expect(t.fps).toBe(30);
   });
 
   it('pathToFileUri xử lý Windows path', () => {
