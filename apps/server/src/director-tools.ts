@@ -607,6 +607,7 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       clipPaths: string[];
       goal: string;
       frames?: number;
+      maxVisionClips?: number;
     } & LongformOptions
   ): Promise<EditPlanResult> {
     if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
@@ -618,6 +619,8 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       clip_paths: params.clipPaths,
       goal: params.goal,
       sample_interval_sec: interval,
+      // LF8 — cap Vision cho phim dài (400+ clip): mặc định 150, lấy mẫu đều.
+      max_vision_clips: params.maxVisionClips ?? 150,
       target_duration_sec: params.targetDurationSec,
       keep_ratio: params.keepRatio,
       pacing_profile: params.pacingProfile,

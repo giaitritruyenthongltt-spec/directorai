@@ -295,9 +295,16 @@ def create_app() -> FastAPI:
         except (TypeError, ValueError):
             frames = None
 
+        # LF8 — cap chi phí Vision: lấy mẫu đều nếu mẻ quá lớn.
+        from directorai_context.modules.vision_budget import sample_for_vision
+
+        vision_paths, dropped = sample_for_vision(req.clip_paths, req.max_vision_clips)
+        if dropped:
+            log.info("video_map_vision_sampled", kept=len(vision_paths), dropped=dropped)
+
         understandings: list[dict[str, object]] = []
         errors: list[dict[str, str]] = []
-        for path in req.clip_paths:
+        for path in vision_paths:
             try:
                 understandings.append(understand_clip(path, frames=frames))
             except Exception as e:  # noqa: BLE001
@@ -348,9 +355,16 @@ def create_app() -> FastAPI:
         except (TypeError, ValueError):
             frames = None
 
+        # LF8 — cap chi phí Vision cho phim dài (413 clip → lấy mẫu đều).
+        from directorai_context.modules.vision_budget import sample_for_vision
+
+        vision_paths, dropped = sample_for_vision(req.clip_paths, req.max_vision_clips)
+        if dropped:
+            log.info("edit_plan_vision_sampled", kept=len(vision_paths), dropped=dropped)
+
         understandings: list[dict[str, object]] = []
         errors: list[dict[str, str]] = []
-        for path in req.clip_paths:
+        for path in vision_paths:
             try:
                 understandings.append(understand_clip(path, frames=frames))
             except Exception as e:  # noqa: BLE001

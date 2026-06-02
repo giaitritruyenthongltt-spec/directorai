@@ -91,6 +91,8 @@ class VideoMapRequest(BaseModel):
     clip_paths: list[str]
     goal: str | None = None
     sample_interval_sec: float | None = None
+    # LF8 — cap số clip gọi Vision (lấy mẫu đều khi vượt). None = không giới hạn.
+    max_vision_clips: int | None = None
 
 
 class EditPlanRequest(BaseModel):
@@ -104,6 +106,8 @@ class EditPlanRequest(BaseModel):
     keep_ratio: float | None = None
     pacing_profile: str | None = None
     structure: str | None = None  # "3act" | "chapters" | "recap"
+    # LF8 — cap số clip gọi Vision (lấy mẫu đều khi vượt). None = không giới hạn.
+    max_vision_clips: int | None = None
 
 
 class DeadAirRequest(BaseModel):
