@@ -16,6 +16,7 @@ import { DirectorTab } from './components/DirectorTab.js';
 import { AutoTab } from './components/AutoTab.js';
 import { AnalysisTab } from './components/AnalysisTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
+import './styles/tokens.css';
 import './App.css';
 
 export type ActiveTab = 'auto' | 'director' | 'analysis' | 'chat' | 'style' | 'context';

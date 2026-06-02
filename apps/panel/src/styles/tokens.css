@@ -1,0 +1,58 @@
+/**
+ * UI1 — Design tokens (chuẩn hóa giao diện).
+ *
+ * Màu CƠ BẢN (--bg/--surface/--accent/--text…) định nghĩa ở index.html :root
+ * để có ngay lúc cold-start (tránh nháy). File này THÊM phần còn lại của hệ
+ * thống và quan trọng nhất: ALIAS các biến --ui-* (mà DirectorTab/HelpButton/
+ * WorkflowDiagram đang dùng kèm fallback hardcode) về token chuẩn → cả panel
+ * ăn theo 1 nguồn màu, themeable (chuẩn bị cho UI8 đồng bộ theme Premiere).
+ */
+
+:root {
+  /* ── Alias --ui-* → token chuẩn (bỏ hardcode rải rác) ─────────────── */
+  --ui-text: var(--text);
+  --ui-text-secondary: var(--text-dim);
+  --ui-bg-secondary: var(--surface);
+  --ui-bg-tertiary: var(--bg);
+  --ui-bg-hover: #383838;
+  --ui-border: var(--border);
+
+  /* ── Accent phụ (gom các hex #818cf8/#93c5fd/#6366f1 rải rác) ─────── */
+  --accent-soft: #93c5fd;
+  --accent-strong: #6366f1;
+  --accent-done-a: #10b981;
+  --accent-done-b: #34d399;
+
+  /* ── Thang KHOẢNG CÁCH (gốc 4px) ─────────────────────────────────── */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 20px;
+  --sp-8: 24px;
+
+  /* ── Thang CHỮ ───────────────────────────────────────────────────── */
+  --fs-xs: 10px;
+  --fs-sm: 11px;
+  --fs-md: 12px;
+  --fs-base: 13px;
+  --fs-lg: 14px;
+  --fs-xl: 16px;
+  --fs-2xl: 20px;
+
+  /* ── Bo góc ──────────────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 16px;
+
+  /* ── Đổ bóng + lớp phủ (nhất quán modal/popover) ─────────────────── */
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --overlay: rgba(0, 0, 0, 0.55);
+
+  /* ── Nhịp chuyển động ────────────────────────────────────────────── */
+  --t-fast: 0.15s;
+}
