@@ -10,7 +10,7 @@
  * approved:true. Không bao giờ ghi khi chưa xem trước + duyệt.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MODULE_REGISTRY,
   moduleInfo,
@@ -86,6 +86,42 @@ export function AutoTab(): React.ReactElement {
   };
 
   const clipPaths = parseClipPaths(clipText);
+
+  // Auto-connect — TỰ nạp clip từ sequence đang mở (không nhập tay).
+  const [seqInfo, setSeqInfo] = useState<{
+    name: string;
+    total: number;
+    withFullPath: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const loadFromSequence = async (): Promise<void> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await wsClient.call<{
+        sequenceName: string;
+        clips: { name: string; path: string; hasFullPath: boolean }[];
+        total: number;
+        withFullPath: number;
+      }>('context.activeSequenceClips', {});
+      // Ưu tiên path đầy đủ (AI đọc được); nếu không có path thì dùng tên.
+      const lines = r.clips.map((c) => (c.hasFullPath ? c.path : c.name));
+      setClipText(lines.join('\n'));
+      setSeqInfo({ name: r.sequenceName, total: r.total, withFullPath: r.withFullPath });
+      setPreview(null);
+      setApplied(null);
+    } catch (e) {
+      setError(`Không nạp được clip từ sequence: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Tự nạp 1 lần khi mở tab (nếu WS đã kết nối). loadFromSequence ổn định.
+  useEffect(() => {
+    void loadFromSequence();
+  }, []);
 
   const buildGoal = (): string => buildGoalFromModules(Array.from(ticked), customGoal);
 
@@ -228,28 +264,51 @@ export function AutoTab(): React.ReactElement {
 
       <section className="auto-section">
         <div className="auto-section-title">
-          2. File gốc cần xử lý
+          2. Clip từ sequence đang mở
           <HelpButton
-            title="Vì sao phải dán đường dẫn file?"
+            title="Tự nạp clip"
             lines={[
-              'Premiere 26 không cho plugin đọc đường dẫn đầy đủ của clip trên timeline.',
-              'Nên bạn dán đường dẫn file gốc — AI sẽ khớp với clip trên timeline theo tên.',
+              'Plugin TỰ lấy clip từ sequence bạn đang mở trong Premiere — không cần nhập tay.',
+              'Bấm "Nạp lại" sau khi đổi sequence. Nếu Premiere không cho đường dẫn đầy đủ,',
+              'AI vẫn khớp clip theo tên để thao tác timeline (tắt/đổi tên/tỉa/xếp).',
             ]}
-            example="E:\\T11\\6.mp4"
           />
         </div>
+        <button
+          type="button"
+          className="auto-template-btn"
+          disabled={loading}
+          onClick={() => void loadFromSequence()}
+          style={{ marginBottom: 8 }}
+        >
+          {loading ? '⏳ Đang nạp…' : '🔄 Nạp lại clip từ sequence'}
+        </button>
+        {seqInfo && (
+          <div className="auto-seqinfo">
+            📺 <b>{seqInfo.name || '(sequence đang mở)'}</b> — {seqInfo.total} clip
+            {seqInfo.withFullPath > 0 ? (
+              <span> · {seqInfo.withFullPath} có đường dẫn đầy đủ (AI đọc được)</span>
+            ) : (
+              <span className="auto-warn">
+                {' '}
+                · ⚠ chỉ có TÊN clip (Premiere ẩn path) → thao tác timeline OK, AI phân tích cần
+                đường dẫn gốc
+              </span>
+            )}
+          </div>
+        )}
         <textarea
           className="auto-cliptext"
-          placeholder={'Mỗi dòng 1 đường dẫn file, ví dụ:\nE:\\T11\\6.mp4\nE:\\T11\\7.mp4'}
+          placeholder={'Tự nạp khi mở tab. Hoặc dán tay (mỗi dòng 1 path/tên):\nE:\\T11\\6.mp4'}
           value={clipText}
           onChange={(e) => {
             setClipText(e.target.value);
             setPreview(null);
             setApplied(null);
           }}
-          rows={5}
+          rows={4}
         />
-        <div className="auto-clipcount">{clipPaths.length} file</div>
+        <div className="auto-clipcount">{clipPaths.length} mục</div>
       </section>
 
       <section className="auto-section">

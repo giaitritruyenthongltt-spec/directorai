@@ -122,6 +122,18 @@
   color: var(--text-dim);
   text-align: right;
 }
+.auto-seqinfo {
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  margin-bottom: 6px;
+}
+.auto-warn {
+  color: var(--warn);
+}
 
 /* Actions */
 .auto-actions {

@@ -151,6 +151,8 @@ export class CompositeTools {
         return this.buildEditPlan(params as { clipPaths: string[]; goal: string; frames?: number });
       case 'module.list':
         return { modules: listModuleInfos() };
+      case 'context.activeSequenceClips':
+        return this.activeSequenceClips(params as { sequenceId?: string });
       case 'fcpxml.export':
         return this.exportFcpxml(params as { timeline: FcpTimeline; fileName?: string });
       case 'safe.previewPlan':
@@ -202,6 +204,7 @@ export class CompositeTools {
       'context.filterBad',
       'context.clusterClips',
       'context.qualityReport',
+      'context.activeSequenceClips',
       'module.list',
       'fcpxml.export',
       'safe.previewPlan',
@@ -239,6 +242,49 @@ export class CompositeTools {
       media_path: params.clipPath,
       sample_interval_sec: interval,
     });
+  }
+
+  // ─── context.activeSequenceClips (auto-connect: tự lấy clip) ──────────
+
+  /**
+   * Auto-connect — Plugin TỰ lấy clip từ sequence ĐANG MỞ (không nhập tay).
+   * Trả clip kèm path tốt nhất lấy được + cờ hasFullPath (path tuyệt đối,
+   * đọc được bởi sidecar AI) hay chỉ basename. UI dùng để nạp sẵn box file.
+   */
+  async activeSequenceClips(params: { sequenceId?: string }): Promise<{
+    sequenceId: string;
+    sequenceName: string;
+    clips: { id: string; name: string; path: string; hasFullPath: boolean; kind: string }[];
+    total: number;
+    withFullPath: number;
+  }> {
+    let sequenceId = params.sequenceId;
+    let sequenceName = '';
+    if (!sequenceId) {
+      const seq = await this.deps.adapter.getActiveSequence();
+      if (!seq) throw new Error('Không có sequence đang mở trong Premiere');
+      sequenceId = seq.id;
+      sequenceName = seq.name;
+    }
+    const clips = await this.deps.adapter.listClips(sequenceId);
+    const hasSep = (p?: string): boolean => !!p && /[\\/]/.test(p);
+    const out = clips.map((c) => {
+      const path = c.source?.path ?? '';
+      return {
+        id: c.id,
+        name: c.name,
+        path,
+        hasFullPath: hasSep(path),
+        kind: c.kind,
+      };
+    });
+    return {
+      sequenceId,
+      sequenceName,
+      clips: out,
+      total: out.length,
+      withFullPath: out.filter((c) => c.hasFullPath).length,
+    };
   }
 
   // ─── context.filterBad (MOD-3 — CV prefilter → Vision subset) ─────────

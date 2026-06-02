@@ -248,6 +248,43 @@ export async function introspectPremiereApi(): Promise<Record<string, unknown>> 
     out.addTransitionOptionsErr = e instanceof Error ? e.message : String(e);
   }
 
+  // ĐƯỜNG DẪN FILE — chẩn đoán giá trị THẬT từng accessor trên 1 clip thật.
+  // Quyết định liệu plugin có TỰ lấy được path (khỏi nhập tay) hay không.
+  try {
+    const seqP = await proj.getActiveSequence?.();
+    const trk = await seqP?.getVideoTrack?.(0);
+    const its = await trk?.getTrackItems?.(1, false);
+    const it0 = its?.[0];
+    const pji = await (it0 as { getProjectItem?: () => Promise<unknown> })?.getProjectItem?.();
+    if (pji) {
+      const pi = pji as Record<string, unknown> & {
+        name?: string;
+        getMediaFilePath?: () => Promise<string> | string;
+        getMediaPath?: () => Promise<string> | string;
+        getFilePath?: () => Promise<string> | string;
+      };
+      out.projItemName = pi.name;
+      out.projItemMembers = listMembers(pji);
+      const tryRaw = async (label: string, fn?: () => Promise<string> | string): Promise<void> => {
+        if (typeof fn !== 'function') {
+          out[`path_${label}`] = '(no method)';
+          return;
+        }
+        try {
+          out[`path_${label}`] = await fn();
+        } catch (e) {
+          out[`path_${label}`] = `ERR: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      };
+      await tryRaw('getMediaFilePath', pi.getMediaFilePath?.bind(pi));
+      await tryRaw('getMediaPath', pi.getMediaPath?.bind(pi));
+      await tryRaw('getFilePath', pi.getFilePath?.bind(pi));
+      out.path_mediaFilePath_prop = (pi as { mediaFilePath?: unknown }).mediaFilePath ?? '(none)';
+    }
+  } catch (e) {
+    out.pathDiagErr = e instanceof Error ? e.message : String(e);
+  }
+
   // C3 — tạo (chưa gắn) 1 Lumetri component để dump tên param (displayName).
   try {
     const vff = pp.VideoFilterFactory as {
