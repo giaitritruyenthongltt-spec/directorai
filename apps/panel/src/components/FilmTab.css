@@ -1,0 +1,124 @@
+/* UI4 — Tab Phim dài. */
+
+.film-tab {
+  padding: var(--sp-5) var(--sp-6) 40px;
+  color: var(--text);
+  font-size: var(--fs-base);
+  overflow-y: auto;
+}
+.film-intro h2 {
+  font-size: var(--fs-xl);
+  margin: 0 0 2px;
+}
+.film-sub {
+  margin: 0 0 var(--sp-6);
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+}
+
+.film-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+/* Thư mục gốc */
+.film-folder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.film-folderbox {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  resize: vertical;
+}
+.film-folderbox:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Template */
+.film-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.film-tpl {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-md);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.film-tpl:hover {
+  border-color: var(--accent);
+}
+.film-tpl.on {
+  border-color: var(--accent);
+  background: #2a3744;
+}
+.film-tpl-icon {
+  font-size: var(--fs-xl);
+}
+.film-tpl-desc {
+  margin: var(--sp-3) 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+}
+
+/* Dead-air + plan summary */
+.film-deadair {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  margin: var(--sp-4) 0;
+  font-size: var(--fs-md);
+}
+.film-plan {
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  margin-top: var(--sp-3);
+}
+.film-plan-strategy {
+  font-size: var(--fs-md);
+  line-height: 1.5;
+}
+.film-plan-count {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+/* Result */
+.film-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-md);
+}
+.film-note {
+  margin-top: var(--sp-3);
+  color: var(--warn);
+  font-size: var(--fs-sm);
+}

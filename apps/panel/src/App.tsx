@@ -14,15 +14,17 @@ import { StylePicker } from './components/StylePicker.js';
 import { ContextTab } from './components/ContextTab.js';
 import { DirectorTab } from './components/DirectorTab.js';
 import { AutoTab } from './components/AutoTab.js';
+import { FilmTab } from './components/FilmTab.js';
 import { AnalysisTab } from './components/AnalysisTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import './styles/tokens.css';
 import './App.css';
 
-export type ActiveTab = 'auto' | 'director' | 'analysis' | 'chat' | 'style' | 'context';
+export type ActiveTab = 'film' | 'auto' | 'director' | 'analysis' | 'chat' | 'style' | 'context';
 
 /** Nhãn tab tiếng Việt. */
 const TAB_LABELS: Record<ActiveTab, string> = {
+  film: '🎞️ Phim dài',
   auto: '⚡ Tự động',
   director: '🎬 Đạo diễn',
   analysis: '🔍 Báo cáo',
@@ -45,7 +47,7 @@ interface CheckpointPayload {
 export function App(): React.ReactElement {
   const [connState, setConnState] = useState<ConnectionState>('disconnected');
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('director');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('film');
 
   // L1 — Send mount lifecycle + global error events to server log
   // so we can debug panel render failures without UDT DevTools.
@@ -183,7 +185,7 @@ export function App(): React.ReactElement {
     <div className="app">
       <Header connState={connState} onReconnect={() => wsClient.connect()} />
       <nav className="tabs">
-        {(['auto', 'director', 'analysis', 'chat', 'style', 'context'] as ActiveTab[]).map(
+        {(['film', 'auto', 'director', 'analysis', 'chat', 'style', 'context'] as ActiveTab[]).map(
           (tab) => (
             <button
               key={tab}
@@ -196,6 +198,7 @@ export function App(): React.ReactElement {
         )}
       </nav>
       <main className="main-content">
+        {activeTab === 'film' && <FilmTab />}
         {activeTab === 'auto' && <AutoTab />}
         {activeTab === 'director' && <DirectorTab />}
         {activeTab === 'analysis' && <AnalysisTab />}

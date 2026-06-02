@@ -1,0 +1,148 @@
+/* UI2 — Style component dùng chung. Chỉ dùng design token (UI1). */
+
+.ui-section {
+  margin-bottom: var(--sp-6);
+}
+.ui-section-title {
+  font-weight: 600;
+  margin-bottom: var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-base);
+}
+
+/* Button */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--text);
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.ui-btn:hover:not(:disabled) {
+  background: var(--ui-bg-hover);
+}
+.ui-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ui-btn-full {
+  width: 100%;
+}
+.ui-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ui-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.ui-btn-ghost {
+  background: none;
+  border-color: transparent;
+}
+
+/* Spinner */
+.ui-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ui-spin 0.7s linear infinite;
+}
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Badge */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--sp-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  border: 1px solid;
+}
+.ui-badge-neutral {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+.ui-badge-accent {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.ui-badge-success {
+  color: var(--success);
+  border-color: var(--success);
+}
+.ui-badge-warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.ui-badge-error {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+/* ErrorBox */
+.ui-error {
+  color: var(--error);
+  background: #3a2020;
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4) var(--sp-5);
+  margin-bottom: var(--sp-5);
+  font-size: var(--fs-md);
+}
+
+/* EmptyState */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-8) var(--sp-5);
+  color: var(--text-dim);
+  text-align: center;
+}
+.ui-empty-icon {
+  font-size: 28px;
+  opacity: 0.7;
+}
+.ui-empty-title {
+  font-size: var(--fs-lg);
+  color: var(--text);
+}
+.ui-empty-hint {
+  font-size: var(--fs-md);
+}
+
+/* Field */
+.ui-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.ui-field-label {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.ui-field-hint {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
