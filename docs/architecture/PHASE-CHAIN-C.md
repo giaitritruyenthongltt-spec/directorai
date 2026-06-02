@@ -36,6 +36,20 @@
 | **C9** | #1  | **LIVE verify ghi thật** — runbook + smoke ghi 1 clip (rename, reversible) trên sequence test                                 | 🔴 cần bạn                |
 | —      | #9  | Gemini billing (project Google)                                                                                               | 🔴 cần bạn                |
 
-**Đường tới hành**: C1→C2→C3 (3 thao tác còn lại: move/transition/color) →
-C4 (khung module sống) → C5 (FCPXML thật) → C6/C7/C8 (chất lượng) → C9 (live).
-Mỗi phase unit-test + 1 commit; trung thực code-vs-verify.
+## TRẠNG THÁI (cập nhật)
+
+| Phase                     | Trạng thái                                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| C1 move ripple-aware      | ✅ XONG — 5 test no-overlap, 107 test server pass                                                         |
+| C5 FCPXML NTSC + producer | ✅ XONG — 9 test (NTSC nguyên + auto-build)                                                               |
+| C6 validate params        | ✅ XONG — trim/move bậy bị loại                                                                           |
+| C7 cluster flat-frame     | ✅ XONG — std guard                                                                                       |
+| C8 dọn trùng lặp          | ✅ XONG — clip-paths util chung                                                                           |
+| C2 transition             | 🟡 adapter path sẵn (B9); cần introspect matchNames + verify live                                         |
+| C3 color Lumetri          | 🟡 đường ghi đã rõ; cần introspect param API + verify live                                                |
+| C4 module behavior        | ⏸ QUYẾT ĐỊNH: trí tuệ ở sidecar (1 nguồn); khung module = điểm mở rộng SDK/plugin, KHÔNG nhân bản sidecar |
+| C9 live verify            | 🔴 cần bạn mở sequence test nhỏ                                                                           |
+
+**Còn lại để "full" thật sự**: C2/C3 cần **reload panel 1 lần nữa** (lấy
+matchNames + param API tôi vừa thêm vào introspect), rồi tôi viết adapter
+ghi màu/transition; C9 cần sequence test để verify ghi live.
