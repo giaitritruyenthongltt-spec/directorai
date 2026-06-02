@@ -47,6 +47,7 @@
     "smoke:mvp": "tsx tools/smoke-mvp.ts",
     "smoke:plan-a": "tsx tools/smoke-plan-a.ts",
     "smoke:safe-dryrun": "tsx tools/smoke-safe-dryrun.ts",
+    "smoke:live-write": "tsx tools/smoke-live-write.ts",
     "ops:tail": "tsx tools/tail-ops.ts",
     "prepare": "husky"
   },
