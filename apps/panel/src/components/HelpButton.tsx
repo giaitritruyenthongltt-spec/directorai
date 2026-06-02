@@ -24,7 +24,13 @@ export function HelpButton({ title, lines, example }: Props): React.ReactElement
       <button
         type="button"
         className={`help-btn ${open ? 'open' : ''}`}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          // Chặn bubble: nếu HelpButton nằm trong <label> (vd thẻ module ở
+          // AutoTab), click "?" KHÔNG được toggle checkbox của label đó.
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
         aria-label={`Hướng dẫn: ${title}`}
         title="Xem hướng dẫn"
       >

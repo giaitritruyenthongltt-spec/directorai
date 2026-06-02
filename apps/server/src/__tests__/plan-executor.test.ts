@@ -150,8 +150,7 @@ describe('safe.applyPlan — cổng duyệt', () => {
     expect(clip!.sourceRange.start).toBeCloseTo(1, 5);
   });
 
-  it('approved=true → GHI THẬT move (tính newStart từ to_index)', async () => {
-    // cần >1 clip để move có ý nghĩa
+  it('move + transition → DEFER (move chưa ripple-aware, transition chưa verify)', async () => {
     await ctx.adapter.importFile({ path: 'E:\\T11\\7.mp4' });
     const plan = planWith([
       {
@@ -162,6 +161,14 @@ describe('safe.applyPlan — cổng duyệt', () => {
         reason: 'r',
         reversible: true,
       },
+      {
+        order: 2,
+        action: 'transition',
+        target_path: ctx.clipPath,
+        params: { kind: 'Cut' },
+        reason: 'r',
+        reversible: true,
+      },
     ]);
     const res = await ctx.tools.applyPlan({
       sequenceId: ctx.seqId,
@@ -169,11 +176,11 @@ describe('safe.applyPlan — cổng duyệt', () => {
       dryRun: false,
       approved: true,
     });
-    expect(res.applied).toBe(1);
-    expect(res.failed).toBe(0);
+    expect(res.deferred).toBe(2);
+    expect(res.applied).toBe(0);
   });
 
-  it('transition → DEFER (API Premiere 26 chưa verify)', async () => {
+  it('transition đơn → DEFER', async () => {
     const plan = planWith([
       {
         order: 1,

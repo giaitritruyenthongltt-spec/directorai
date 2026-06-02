@@ -16,14 +16,23 @@
 import type { Clip } from '@directorai/core';
 import type { EditPlan, EditPlanStep, SafePlanAction } from './director-tools.js';
 
-/** Action nào có method adapter thực sự ghi được (Track A). Cả 5 đều có
- *  method sau khi bổ sung renameClip (SAFE-1b, createSetNameAction). */
+/**
+ * NGUỒN SỰ THẬT DUY NHẤT: action nào executor THỰC SỰ ghi được an toàn
+ * NGAY BÂY GIỜ (cả resolver-preview lẫn executor đọc chung hằng này, tránh
+ * tình trạng preview hứa "ghi được" nhưng executor lại defer).
+ *
+ * - disable/trim/rename: map sạch, in-place, an toàn → bật.
+ * - move: TẠM DEFER — computeMoveStart hiện đặt clip theo vị trí tuyệt đối,
+ *   không ripple → gây chồng lấn; lại trộn track video+audio vào 1 index.
+ *   Cần re-layout ripple-aware + lọc theo đúng track rồi mới bật.
+ * - transition: DEFER — API Premiere 26 chưa verify live.
+ */
 export const EXECUTABLE_ACTIONS: Record<SafePlanAction, boolean> = {
   disable: true,
   trim: true,
-  move: true,
-  transition: true,
   rename: true,
+  move: false,
+  transition: false,
 };
 
 export interface ResolvedStep {

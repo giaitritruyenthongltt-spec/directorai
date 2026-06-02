@@ -39,15 +39,17 @@ function clipXml(clip: FcpClip, assetId: string, fps: number): string {
   const lines: string[] = [
     `        <asset-clip ref="${assetId}" offset="${offset}" name="${xmlEscape(clip.name)}" start="${start}" duration="${duration}" tcFormat="NDF">`,
   ];
-  // Speed (retime) — timeMap: 0 → start, durationSec → start + sourceLen*speed.
+  // Speed (retime) — timeMap: thời gian timeline 0→duration ánh xạ source
+  // sourceIn → sourceIn + (duration*speed). speed=0.5 (slow-mo) tiêu thụ ÍT
+  // source hơn; speed=2 (nhanh) tiêu thụ NHIỀU hơn (đúng nghĩa hệ số phát).
   if (clip.speed && clip.speed !== 1) {
-    const srcLen = clip.durationSec * clip.speed; // độ dài nguồn tiêu thụ
+    const srcLen = clip.durationSec * clip.speed;
     lines.push(`          <timeMap>`);
     lines.push(
-      `            <timept time="0s" value="${secondsToRational(clip.sourceInSec, fps)}" interp="smooth2"/>`
+      `            <timept time="0s" value="${secondsToRational(clip.sourceInSec, fps)}" interp="linear"/>`
     );
     lines.push(
-      `            <timept time="${duration}" value="${secondsToRational(clip.sourceInSec + srcLen, fps)}" interp="smooth2"/>`
+      `            <timept time="${duration}" value="${secondsToRational(clip.sourceInSec + srcLen, fps)}" interp="linear"/>`
     );
     lines.push(`          </timeMap>`);
   }

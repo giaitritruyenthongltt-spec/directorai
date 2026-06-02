@@ -12,13 +12,18 @@ import {
 } from '../index.js';
 
 describe('module registry', () => {
-  it('có đủ module Tầng 1 verified', () => {
+  it('module Tầng 1 ghi-thật-được là verified', () => {
     const ids = MODULE_REGISTRY.map((m) => m.id);
-    for (const id of ['filter_bad', 'trim', 'reorder', 'rename']) {
+    for (const id of ['filter_bad', 'trim', 'rename']) {
       expect(ids).toContain(id);
       expect(getModule(id)?.feasibility).toBe('verified');
       expect(getModule(id)?.enabled).toBe(true);
     }
+  });
+
+  it('reorder(move) beta nhưng vẫn tick được (xem-trước hoãn khi ghi)', () => {
+    expect(getModule('reorder')?.feasibility).toBe('beta');
+    expect(getModule('reorder')?.enabled).toBe(true);
   });
 
   it('transition + color là beta, enabled=false', () => {

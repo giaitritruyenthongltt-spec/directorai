@@ -620,8 +620,18 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
         ? 'Cần approved=true để ghi thật — đã tự hạ về dry-run để bạn xem trước.'
         : undefined;
 
-    // SAFE-2 — CHECKPOINT tự động NGAY TRƯỚC khi ghi thật (để khôi phục/undo).
+    // SAFE-2 — CHECKPOINT tự động NGAY TRƯỚC khi ghi thật.
+    // LƯU Ý: checkpoint chỉ lưu metadata sequence (audit + crash-recovery
+    // panel), KHÔNG tự khôi phục timeline — hoàn tác thật là Ctrl-Z trong
+    // Premiere (mỗi bước = 1 undo step).
     let checkpointId: string | undefined;
+    if (!effectiveDryRun && !this.deps.checkpoints) {
+      // Ghi thật mà KHÔNG có kho checkpoint → cảnh báo rõ (không ghi lén).
+      this.deps.logger.warn(
+        { sequenceId: preview.sequenceId },
+        'safe.applyPlan GHI THẬT mà KHÔNG có checkpoint store — chỉ dựa vào Undo'
+      );
+    }
     if (!effectiveDryRun && this.deps.checkpoints) {
       try {
         const cp = await this.deps.checkpoints.snapshot(

@@ -19,7 +19,13 @@ import type { INLEAdapter } from '@directorai/premiere-adapter';
 import type { Clip, Seconds } from '@directorai/core';
 import type { Logger } from '@directorai/shared';
 import type { SafePlanAction } from './director-tools.js';
-import type { PlanPreview, ResolvedStep } from './plan-resolver.js';
+import { EXECUTABLE_ACTIONS, type PlanPreview, type ResolvedStep } from './plan-resolver.js';
+
+/**
+ * Action executor thực sự ghi được = NGUỒN SỰ THẬT chung với resolver
+ * (EXECUTABLE_ACTIONS). Trùng khớp 100% nên preview không bao giờ hứa sai.
+ */
+export const EXECUTOR_SUPPORTED = EXECUTABLE_ACTIONS;
 
 function num(v: unknown): number | null {
   const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
@@ -34,15 +40,6 @@ function computeMoveStart(toIndex: number, sortedStarts: number[], sortedEnds: n
   if (toIndex >= sortedStarts.length) return sortedEnds[sortedEnds.length - 1] ?? 0;
   return sortedStarts[toIndex] ?? 0;
 }
-
-/** Thao tác có map tham số SẠCH sang adapter ngay bây giờ (an toàn ghi). */
-export const EXECUTOR_SUPPORTED: Record<SafePlanAction, boolean> = {
-  disable: true,
-  rename: true,
-  trim: true, // SAFE-1e: setClipInOut — tỉa in/out tại chỗ, không dịch vị trí
-  move: true, // SAFE-1e: moveClip(newStart) tính từ to_index
-  transition: false, // API transition Premiere 26 CHƯA verify → vẫn defer
-};
 
 export type StepStatus = 'applied' | 'failed' | 'skipped' | 'deferred' | 'dry-run';
 

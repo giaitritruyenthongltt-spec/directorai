@@ -51,7 +51,7 @@ describe('fcpxml generate', () => {
   it('speed sinh timeMap', () => {
     const xml = buildFcpxml(tl([{ ...baseClip, speed: 0.5 }]));
     expect(xml).toContain('<timeMap>');
-    expect(xml).toContain('interp="smooth2"');
+    expect(xml).toContain('interp="linear"');
   });
 
   it('marker sinh đúng', () => {
