@@ -248,5 +248,29 @@ export async function introspectPremiereApi(): Promise<Record<string, unknown>> 
     out.addTransitionOptionsErr = e instanceof Error ? e.message : String(e);
   }
 
+  // C3 — tạo (chưa gắn) 1 Lumetri component để dump tên param (displayName).
+  try {
+    const vff = pp.VideoFilterFactory as {
+      createComponent?: (n: string) => Promise<unknown>;
+    };
+    const lum = await vff?.createComponent?.('AE.ADBE Lumetri');
+    if (lum) {
+      const c = lum as {
+        getParamCount?: () => Promise<number>;
+        getParam?: (i: number) => Promise<unknown>;
+      };
+      const pcount = (await c.getParamCount?.()) ?? 0;
+      out.lumetriParamCount = pcount;
+      const names: string[] = [];
+      for (let i = 0; i < Math.min(pcount, 60); i++) {
+        const param = (await c.getParam?.(i)) as { getDisplayName?: () => Promise<string> } | null;
+        names.push((await param?.getDisplayName?.()) ?? `#${i}`);
+      }
+      out.lumetriParamNames = names;
+    }
+  } catch (e) {
+    out.lumetriParamErr = e instanceof Error ? e.message : String(e);
+  }
+
   return out;
 }

@@ -73,6 +73,7 @@ import {
   type PProTrack,
   type PProTrackItem,
   type PProCompoundAction,
+  type PProAction,
   type TickTime,
 } from './uxp-ppro.js';
 import {
@@ -627,6 +628,46 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
    * Unknown preset keys throw — caller should validate against
    * LUMETRI_PRESET_KEYS first.
    */
+  /**
+   * C3 — Đảm bảo có Lumetri component trên clip, dùng API ĐÃ INTROSPECT:
+   *   getComponentChain → getComponentCount/getComponentAtIndex (tìm)
+   *   VideoFilterFactory.createComponent("AE.ADBE Lumetri") (tạo)
+   *   chain.createAppendComponentAction(comp) qua executeTransaction (gắn)
+   * Thay HOÀN TOÀN đường cũ `Component.create`/`insertComponent` (treo trên 26).
+   */
+  private async ensureLumetri(item: PProTrackItem): Promise<{ chain: unknown; comp: unknown }> {
+    const chain = (await item.getComponentChain()) as {
+      getComponentCount?: () => Promise<number>;
+      getComponentAtIndex?: (i: number) => Promise<unknown>;
+      createAppendComponentAction?: (c: unknown) => PProAction;
+    };
+    const count = (await chain.getComponentCount?.()) ?? 0;
+    for (let i = 0; i < count; i++) {
+      const c = (await chain.getComponentAtIndex?.(i)) as {
+        getMatchName?: () => Promise<string>;
+      } | null;
+      const mn = (await c?.getMatchName?.()) ?? '';
+      if (mn.toLowerCase().includes('lumetri')) return { chain, comp: c };
+    }
+    const factory = (
+      this.ppro as unknown as {
+        VideoFilterFactory?: { createComponent?: (n: string) => Promise<unknown> };
+      }
+    ).VideoFilterFactory;
+    if (!factory?.createComponent || typeof chain.createAppendComponentAction !== 'function') {
+      throw new AdapterError(
+        'UXP',
+        'C3: thiếu VideoFilterFactory/createAppendComponentAction trên host'
+      );
+    }
+    const comp = await factory.createComponent('AE.ADBE Lumetri');
+    this.invalidateClipCache();
+    await this.runTransaction('Thêm Lumetri', (compound) => {
+      compound.addAction(chain.createAppendComponentAction!(comp));
+    });
+    return { chain, comp };
+  }
+
   async applyColorPreset(clipId: string, presetName: string): Promise<void> {
     const recipe = getLumetriRecipe(presetName);
     if (!recipe) {
@@ -635,57 +676,56 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
         `Unknown Lumetri preset "${presetName}". Valid keys: ${LUMETRI_PRESET_KEYS.join(', ')}`
       );
     }
-    await this.mutate('applyColorPreset', async () => {
-      const { item } = await this.findTrackItem(clipId);
-      const chain = await item.getComponentChain();
-      const comps = await chain.getComponents();
-      let lumetri = comps.find((c) => c.matchName.toLowerCase().includes('lumetri'));
-      if (!lumetri && this.ppro.Component) {
-        lumetri = await this.ppro.Component.create('AE.ADBE Lumetri');
-        await chain.insertComponent(lumetri, 1);
-      }
-      if (!lumetri) throw new AdapterError('UXP', 'Lumetri component unavailable');
-    });
     await this.setColorParams({ clipId, ...recipe });
   }
 
   async setColorParams(input: ColorParamsInput): Promise<void> {
-    await this.mutate('setColorParams', async () => {
-      const { item } = await this.findTrackItem(input.clipId);
-      const chain = await item.getComponentChain();
-      const comps = await chain.getComponents();
-      let lumetri = comps.find((c) => c.matchName.toLowerCase().includes('lumetri'));
-      if (!lumetri && this.ppro.Component) {
-        lumetri = await this.ppro.Component.create('AE.ADBE Lumetri');
-        await chain.insertComponent(lumetri, 1);
+    const { item } = await this.findTrackItem(input.clipId);
+    const { comp } = await this.ensureLumetri(item);
+    const lumetri = comp as {
+      getParamCount?: () => Promise<number>;
+      getParam?: (i: number) => Promise<unknown>;
+    };
+    // Map giá trị mong muốn theo tên slider (khớp displayName, không phân biệt hoa/thường).
+    const wanted: Record<string, number | undefined> = {
+      exposure: input.exposure,
+      contrast: input.contrast,
+      highlights: input.highlights,
+      shadows: input.shadows,
+      whites: input.whites,
+      blacks: input.blacks,
+      saturation: input.saturation,
+      vibrance: input.vibrance,
+      temperature: input.temperature,
+    };
+    const pc = (await lumetri.getParamCount?.()) ?? 0;
+    const actions: PProAction[] = [];
+    for (let i = 0; i < pc; i++) {
+      const param = (await lumetri.getParam?.(i)) as {
+        getDisplayName?: () => Promise<string>;
+        createKeyframe?: (v: number) => Promise<unknown> | unknown;
+        createSetValueAction?: (kf: unknown) => PProAction;
+      } | null;
+      if (!param?.createSetValueAction || !param.createKeyframe) continue;
+      const dn = ((await param.getDisplayName?.()) ?? '').toLowerCase();
+      // Khớp tên: "exposure", "color temperature"→temperature, …
+      const key = Object.keys(wanted).find(
+        (k) => wanted[k] !== undefined && (dn === k || dn.includes(k))
+      );
+      if (!key) continue;
+      try {
+        const kf = await param.createKeyframe(wanted[key] as number);
+        actions.push(param.createSetValueAction(kf));
+      } catch {
+        // bỏ qua param không set được
       }
-      if (!lumetri) throw new AdapterError('UXP', 'Lumetri component unavailable');
-      const setIfPresent = async (paramName: string, v: number | undefined): Promise<void> => {
-        if (v === undefined) return;
-        try {
-          const p = await lumetri!.getParam(paramName);
-          await p.setValue(v, true);
-        } catch {
-          // skip
-        }
-      };
-      // V4 — Adobe Lumetri Basic Correction param names. We try multiple
-      // candidate names per slider because Premiere 26 sometimes uses
-      // 'Color Temperature' for what older builds called 'Temperature'.
-      // setIfPresent silently swallows missing-param errors so the call
-      // is a no-op when the install differs.
-      await setIfPresent('Exposure', input.exposure);
-      await setIfPresent('Contrast', input.contrast);
-      await setIfPresent('Highlights', input.highlights);
-      await setIfPresent('Shadows', input.shadows);
-      await setIfPresent('Whites', input.whites);
-      await setIfPresent('Blacks', input.blacks);
-      await setIfPresent('Saturation', input.saturation);
-      await setIfPresent('Vibrance', input.vibrance);
-      // Try modern Adobe name first, then legacy.
-      await setIfPresent('Color Temperature', input.temperature);
-      await setIfPresent('Temperature', input.temperature);
-    });
+    }
+    if (actions.length > 0) {
+      this.invalidateClipCache();
+      await this.runTransaction('Sửa màu Lumetri', (compound) => {
+        for (const a of actions) compound.addAction(a);
+      });
+    }
   }
 
   // ─── Audio ────────────────────────────────────────────────────────────────
