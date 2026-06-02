@@ -49,6 +49,16 @@ export function App(): React.ReactElement {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [activeTab, setActiveTab] = useState<ActiveTab>('film');
 
+  // UI8 — Đồng bộ theme với host Premiere (sáng/tối). Đọc 1 lần khi mở.
+  useEffect(() => {
+    void import('./bridge/uxp-api.js').then(({ getHostTheme }) => {
+      const t = getHostTheme();
+      if (t && typeof document !== 'undefined') {
+        document.documentElement.setAttribute('data-theme', t);
+      }
+    });
+  }, []);
+
   // L1 — Send mount lifecycle + global error events to server log
   // so we can debug panel render failures without UDT DevTools.
   useEffect(() => {

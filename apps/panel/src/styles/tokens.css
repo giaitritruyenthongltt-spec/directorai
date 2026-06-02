@@ -56,3 +56,34 @@
   /* ── Nhịp chuyển động ────────────────────────────────────────────── */
   --t-fast: 0.15s;
 }
+
+/**
+ * UI8 — Đồng bộ theme với host Premiere (học từ SADESIGN: panel "dính" host).
+ * Premiere UXP có thể honor prefers-color-scheme; ngoài ra App.tsx set
+ * [data-theme] thủ công nếu đọc được độ sáng host. Khi sáng → đảo palette.
+ */
+:root[data-theme='light'],
+:root.theme-light {
+  --bg: #f3f3f3;
+  --surface: #ffffff;
+  --border: #d0d0d0;
+  --accent: #2f6fb0;
+  --accent-hover: #255a91;
+  --text: #1f1f1f;
+  --text-dim: #6a6a6a;
+  --ui-bg-hover: #e8e8e8;
+}
+
+@media (prefers-color-scheme: light) {
+  /* Chỉ áp khi KHÔNG ép theme thủ công (data-theme rỗng). */
+  :root:not([data-theme]) {
+    --bg: #f3f3f3;
+    --surface: #ffffff;
+    --border: #d0d0d0;
+    --accent: #2f6fb0;
+    --accent-hover: #255a91;
+    --text: #1f1f1f;
+    --text-dim: #6a6a6a;
+    --ui-bg-hover: #e8e8e8;
+  }
+}

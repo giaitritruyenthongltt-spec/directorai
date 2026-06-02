@@ -26,6 +26,43 @@ export function getProjectName(): string {
   return proj?.name ?? 'No project';
 }
 
+/**
+ * UI8 — Đọc độ sáng theme của host (Premiere) để panel đồng bộ. UXP lộ theme
+ * qua vài đường khác nhau tùy phiên bản; thử lần lượt, trả 'light'|'dark'|null.
+ */
+export function getHostTheme(): 'light' | 'dark' | null {
+  try {
+    // (a) UXP host theme (một số bản: require('uxp').host.uiTheme / theme).
+    const uxp =
+      typeof require === 'function'
+        ? (() => {
+            try {
+              return require('uxp');
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+    const raw =
+      uxp?.host?.uiTheme ??
+      uxp?.host?.theme ??
+      (typeof document !== 'undefined'
+        ? getComputedStyle(document.body).getPropertyValue('--uxp-host-theme')
+        : '');
+    const s = String(raw ?? '').toLowerCase();
+    if (s.includes('light')) return 'light';
+    if (s.includes('dark')) return 'dark';
+    // (b) prefers-color-scheme (UXP/CEF có thể honor).
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    }
+  } catch {
+    // bỏ qua — không chặn render
+  }
+  return null;
+}
+
 export function getActiveSequenceName(): string {
   if (!ppro) return '(mock)';
   const proj = ppro.getActiveProject?.();
