@@ -46,16 +46,16 @@ metadata. Cần cho phim có cốt truyện.
 
 Nguồn: agent #1 + #2. Định hướng lại planner + template cho phim điện ảnh.
 
-| Phase   | Việc                                                      | Trạng thái                                                                 |
-| ------- | --------------------------------------------------------- | -------------------------------------------------------------------------- |
-| **LF1** | Schema request planner (duration/keep/pacing/structure)   | ✅ XONG — models+endpoint+composite+preview/apply, LongformOptions         |
-| **LF2** | Prompt planner điện ảnh (3 hồi, mạch nhân vật, ngân sách) | ✅ XONG — giữ ràng buộc safe ops                                           |
-| **LF3** | Output lớp tự sự `chapters` (chương→clip)                 | ✅ XONG — \_sanitize_chapters, EditPlan.chapters, 6 pytest                 |
-| **LF4** | Module **cắt dead-air/khoảng lặng tự động**               | ⬜ TIẾP — hero feature; biến detectSilences thành plan trim theo loại đoạn |
-| **LF5** | Nhịp theo nội dung (pacing curve)                         | ⬜ chờ                                                                     |
-| **LF6** | Sửa cut cho clip dài                                      | ⬜ chờ                                                                     |
-| **LF7** | Template điện ảnh Nerf (3 hồi/recap/chương)               | ✅ XONG — 3 template long-form mang LongformOptions, 11 test               |
-| **LF8** | Scale Vision 413 clip                                     | ⬜ chờ                                                                     |
+| Phase   | Việc                                                      | Trạng thái                                                                       |
+| ------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **LF1** | Schema request planner (duration/keep/pacing/structure)   | ✅ XONG — models+endpoint+composite+preview/apply, LongformOptions               |
+| **LF2** | Prompt planner điện ảnh (3 hồi, mạch nhân vật, ngân sách) | ✅ XONG — giữ ràng buộc safe ops                                                 |
+| **LF3** | Output lớp tự sự `chapters` (chương→clip)                 | ✅ XONG — \_sanitize_chapters, EditPlan.chapters, 6 pytest                       |
+| **LF4** | Module **cắt dead-air/khoảng lặng tự động**               | ✅ XONG — dead_air.py + /audio/dead_air + context.planDeadAir→EditPlan, 6 pytest |
+| **LF5** | Nhịp theo nội dung (pacing curve)                         | ⬜ chờ                                                                           |
+| **LF6** | Sửa cut cho clip dài                                      | ⬜ chờ                                                                           |
+| **LF7** | Template điện ảnh Nerf (3 hồi/recap/chương)               | ✅ XONG — 3 template long-form mang LongformOptions, 11 test                     |
+| **LF8** | Scale Vision 413 clip                                     | ⬜ chờ                                                                           |
 
 ## Nhóm UI — Chuẩn hóa + timeline (lộ ra năng lực long-form)
 

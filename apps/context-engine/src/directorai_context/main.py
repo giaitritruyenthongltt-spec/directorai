@@ -18,6 +18,7 @@ from directorai_context.models import (
     BeatRequest,
     BeatResult,
     ClusterRequest,
+    DeadAirRequest,
     EditPlanRequest,
     EmbedRequest,
     EmbedResult,
@@ -471,6 +472,30 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
             log.error("silences_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/audio/dead_air")
+    async def post_dead_air(req: DeadAirRequest) -> dict[str, object]:
+        """LF4 — Cắt dead-air/khoảng lặng đầu-cuối từng clip.
+
+        Trả `steps` đúng định dạng EditPlanStep (trim/disable) để cắm thẳng
+        vào luồng an toàn (preview → duyệt → ghi). Chỉ cắt khoảng lặng ở RÌA.
+        """
+        from directorai_context.modules.dead_air import plan_dead_air
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        try:
+            return plan_dead_air(
+                req.clip_paths,
+                min_silence_sec=req.min_silence_sec,
+                keep_padding_sec=req.keep_padding_sec,
+                threshold_db=req.threshold_db,
+                disable_if_silent_ratio=req.disable_if_silent_ratio,
+                min_kept_sec=req.min_kept_sec,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.error("dead_air_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.post("/vision", response_model=VisionResult)

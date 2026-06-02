@@ -106,6 +106,17 @@ class EditPlanRequest(BaseModel):
     structure: str | None = None  # "3act" | "chapters" | "recap"
 
 
+class DeadAirRequest(BaseModel):
+    """LF4 — Request cắt dead-air/khoảng lặng đầu-cuối từng clip."""
+
+    clip_paths: list[str]
+    min_silence_sec: float = 1.0
+    keep_padding_sec: float = 0.25
+    threshold_db: float = -40.0
+    disable_if_silent_ratio: float = 0.85
+    min_kept_sec: float = 0.5
+
+
 class FilterBadRequest(BaseModel):
     """MOD-3 — Request lọc clip kém (CV prefilter → Vision subset)."""
 

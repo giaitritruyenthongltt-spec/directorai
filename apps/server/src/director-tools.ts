@@ -148,6 +148,15 @@ export class CompositeTools {
         return this.detectBeats(params as { audioPath: string });
       case 'context.detectSilences':
         return this.detectSilences(params as { audioPath: string });
+      case 'context.planDeadAir':
+        return this.planDeadAir(
+          params as {
+            clipPaths: string[];
+            minSilenceSec?: number;
+            keepPaddingSec?: number;
+            thresholdDb?: number;
+          }
+        );
       case 'context.listEffects':
         return this.listEffects(params as { category?: string });
       case 'context.analyzeColor':
@@ -220,6 +229,7 @@ export class CompositeTools {
       'context.scoreQuality',
       'context.detectBeats',
       'context.detectSilences',
+      'context.planDeadAir',
       'context.listEffects',
       'context.analyzeColor',
       'context.classifyScene',
@@ -1124,6 +1134,82 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       'context.detectSilences complete'
     );
     return { silences: r.silences };
+  }
+
+  // ─── context.planDeadAir (LF4 — cắt dead-air → EditPlan) ──────────────
+
+  /**
+   * LF4 — Sinh kế hoạch cắt dead-air/khoảng lặng đầu-cuối từng clip. Trả về
+   * một EditPlan (chỉ chứa trim/disable — safe ops) để cắm thẳng vào luồng
+   * an toàn: `safe.previewPlan({editPlan})` → duyệt → `safe.applyPlan`.
+   *
+   * Đây là việc dựng phim dài hay làm nhất: bỏ "khoảng chết" (chờ/nạp đạn)
+   * ở rìa clip mà KHÔNG cần người dùng nghe lại từng clip.
+   */
+  async planDeadAir(params: {
+    clipPaths: string[];
+    minSilenceSec?: number;
+    keepPaddingSec?: number;
+    thresholdDb?: number;
+  }): Promise<
+    EditPlanResult & {
+      total_trims: number;
+      total_disables: number;
+      estimated_saved_sec: number;
+    }
+  > {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const r = await sidecarPost<{
+      steps: EditPlanStep[];
+      analyzed: number;
+      errors: { clip_path: string; error: string }[];
+      total_trims: number;
+      total_disables: number;
+      estimated_saved_sec: number;
+    }>('/audio/dead_air', {
+      clip_paths: params.clipPaths,
+      min_silence_sec: params.minSilenceSec ?? 1.0,
+      keep_padding_sec: params.keepPaddingSec ?? 0.25,
+      threshold_db: params.thresholdDb ?? -40.0,
+    });
+
+    const mins = Math.floor(r.estimated_saved_sec / 60);
+    const secs = Math.round(r.estimated_saved_sec % 60);
+    const savedLabel = mins ? `${mins} phút ${secs} giây` : `${secs} giây`;
+    const edit_plan: EditPlan = {
+      goal_understanding: 'Cắt khoảng lặng/dead-air ở đầu-cuối từng clip.',
+      strategy:
+        `Phân tích ${r.analyzed} clip → tỉa ${r.total_trims} clip + ẩn ` +
+        `${r.total_disables} clip im lặng. Ước tính bỏ ~${savedLabel} thời lượng chết.`,
+      steps: r.steps,
+      out_of_scope: [],
+      estimated_impact: `Giảm ~${savedLabel} dead-air, giữ phần có tiếng/hành động.`,
+      requires_preview: true,
+      confidence: 0.7,
+    };
+    // Đi qua guard (steps đã chỉ là trim/disable — guard là lằn an toàn cuối).
+    const guarded = this.guardEditPlan({
+      edit_plan,
+      video_map: null,
+      clips_understood: r.analyzed,
+      clips_failed: r.errors.length,
+      errors: r.errors,
+    });
+    this.deps.logger.info(
+      {
+        analyzed: r.analyzed,
+        trims: r.total_trims,
+        disables: r.total_disables,
+        savedSec: r.estimated_saved_sec,
+      },
+      'context.planDeadAir complete'
+    );
+    return {
+      ...guarded,
+      total_trims: r.total_trims,
+      total_disables: r.total_disables,
+      estimated_saved_sec: r.estimated_saved_sec,
+    };
   }
 
   // ─── timeline.cutOnBeats ──────────────────────────────────────────────
