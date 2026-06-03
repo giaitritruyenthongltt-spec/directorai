@@ -343,6 +343,24 @@ export async function introspectPremiereApi(): Promise<Record<string, unknown>> 
       await tryRaw('getMediaPath', pi.getMediaPath?.bind(pi));
       await tryRaw('getFilePath', pi.getFilePath?.bind(pi));
       out.path_mediaFilePath_prop = (pi as { mediaFilePath?: unknown }).mediaFilePath ?? '(none)';
+
+      // PATH-FIX — đường ĐÚNG: cast ProjectItem → ClipProjectItem rồi gọi
+      // getMediaFilePath() (sync). Đây là cái ta kỳ vọng trả FULL PATH.
+      try {
+        const CPI = pp.ClipProjectItem as { cast?: (it: unknown) => unknown } | undefined;
+        out.has_ClipProjectItem_cast = typeof CPI?.cast === 'function';
+        const clip = CPI?.cast?.(pji) as
+          | { getMediaFilePath?: () => unknown; getMembers?: unknown }
+          | null
+          | undefined;
+        out.cast_ok = !!clip;
+        if (clip) {
+          out.cast_members = listMembers(clip);
+          out.cast_getMediaFilePath = clip.getMediaFilePath?.();
+        }
+      } catch (e) {
+        out.castErr = e instanceof Error ? e.message : String(e);
+      }
     }
   } catch (e) {
     out.pathDiagErr = e instanceof Error ? e.message : String(e);

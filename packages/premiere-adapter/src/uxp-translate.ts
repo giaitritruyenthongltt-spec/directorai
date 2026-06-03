@@ -16,7 +16,33 @@ import type {
   PProTrackItem,
   TickTime,
   PProComponent,
+  PProModule,
 } from './uxp-ppro.js';
+
+/**
+ * PATH-FIX — Lấy đường dẫn media TUYỆT ĐỐI của 1 ProjectItem.
+ * Nguyên nhân gốc bug "chỉ basename": `getMediaFilePath()` KHÔNG có trên
+ * ProjectItem thô — nó nằm trên ClipProjectItem. Phải cast trước, rồi gọi
+ * (đồng bộ, theo tài liệu Adobe). Trả '' nếu không lấy được (synthetic/offline).
+ */
+export function resolveMediaPath(projItem: PProProjectItem, ppro?: PProModule): string {
+  // (1) Đường ĐÚNG: cast → ClipProjectItem.getMediaFilePath() (sync, full path).
+  try {
+    const clip = ppro?.ClipProjectItem?.cast?.(projItem);
+    const v = clip?.getMediaFilePath?.();
+    if (typeof v === 'string' && (v.includes('/') || v.includes('\\'))) return v;
+  } catch {
+    // ngã sang (2)
+  }
+  // (2) Dự phòng: 1 số bản có getMediaFilePath ngay trên item (sync/promise bỏ qua).
+  try {
+    const raw = (projItem as { getMediaFilePath?: () => unknown }).getMediaFilePath?.();
+    if (typeof raw === 'string' && (raw.includes('/') || raw.includes('\\'))) return raw;
+  } catch {
+    // bỏ
+  }
+  return '';
+}
 
 export function tickToSeconds(t: TickTime): Seconds {
   return seconds(t.seconds);
@@ -24,7 +50,11 @@ export function tickToSeconds(t: TickTime): Seconds {
 
 const VIDEO_MEDIA = 'Video';
 
-export async function translateTrack(track: PProTrack, index: number): Promise<Track> {
+export async function translateTrack(
+  track: PProTrack,
+  index: number,
+  ppro?: PProModule
+): Promise<Track> {
   const [mediaType, muted, locked, items] = await Promise.all([
     track.getMediaType(),
     track.isMuted(),
@@ -36,7 +66,7 @@ export async function translateTrack(track: PProTrack, index: number): Promise<T
   const trackId = `${trackKind}-${index}`;
   const clips: Clip[] = [];
   for (const item of items) {
-    clips.push(await translateTrackItem(item, trackId, trackKind));
+    clips.push(await translateTrackItem(item, trackId, trackKind, ppro));
   }
 
   return {
@@ -119,7 +149,8 @@ function resolveTrackItemId(
 export async function translateTrackItem(
   item: PProTrackItem,
   trackId: string,
-  trackKind: Track['kind']
+  trackKind: Track['kind'],
+  ppro?: PProModule
 ): Promise<Clip> {
   const [name, startT, endT, inT, outT, mediaType, projItem] = await Promise.all([
     safeAsync(
@@ -143,44 +174,10 @@ export async function translateTrackItem(
   let sourcePath = '';
   let sourceDuration: Seconds = seconds(0);
   if (projItem) {
-    // O1/O2 — Premiere 26 sometimes returns empty string from
-    // getMediaFilePath() or throws altogether. Try every known accessor
-    // before falling back to bare name (which is useless for the sidecar
-    // because it needs an absolute path to read frames from disk).
-    const pi = projItem as PProProjectItem & {
-      mediaFilePath?: string;
-      filePath?: string;
-      path?: string;
-      getMediaPath?: () => Promise<string>;
-      getFilePath?: () => Promise<string>;
-    };
-    const tryers: { label: string; fn: () => Promise<string> | string }[] = [
-      { label: 'getMediaFilePath', fn: () => pi.getMediaFilePath() },
-      { label: 'getMediaPath', fn: () => pi.getMediaPath?.() ?? '' },
-      { label: 'getFilePath', fn: () => pi.getFilePath?.() ?? '' },
-      { label: 'mediaFilePath', fn: () => pi.mediaFilePath ?? '' },
-      { label: 'filePath', fn: () => pi.filePath ?? '' },
-      { label: 'path', fn: () => pi.path ?? '' },
-    ];
-    for (const t of tryers) {
-      try {
-        const v = await t.fn();
-        if (typeof v === 'string' && v.length > 0 && v !== projItem.name) {
-          // Accept only an absolute-looking path (has separator).
-          if (v.includes('/') || v.includes('\\')) {
-            sourcePath = v;
-            break;
-          }
-        }
-      } catch {
-        // try next accessor
-      }
-    }
-    if (!sourcePath) {
-      // Last-resort: bare name. Sidecar will fail on this — at least the
-      // ops log will show the path was empty so we know why.
-      sourcePath = projItem.name;
-    }
+    // PATH-FIX — cast sang ClipProjectItem rồi getMediaFilePath() (đường ĐÚNG).
+    // Nếu lấy được path tuyệt đối → dùng; nếu không (synthetic/offline) thì để
+    // basename (folder-scan hoặc .prproj fallback sẽ map sau).
+    sourcePath = resolveMediaPath(projItem, ppro) || projItem.name;
     try {
       sourceDuration = tickToSeconds(await projItem.getDuration());
     } catch {
@@ -265,7 +262,7 @@ export async function translateMarker(m: PProMarker): Promise<Marker> {
   };
 }
 
-export async function translateSequence(seq: PProSequence): Promise<Sequence> {
+export async function translateSequence(seq: PProSequence, ppro?: PProModule): Promise<Sequence> {
   const [name, endTime, vCount, aCount, settings] = await Promise.all([
     safeAsync(
       () => seq.getName(),
@@ -293,7 +290,7 @@ export async function translateSequence(seq: PProSequence): Promise<Sequence> {
   for (let i = 0; i < vCount; i++) {
     try {
       const t = await seq.getVideoTrack(i);
-      tracks.push(await translateTrack(t, i));
+      tracks.push(await translateTrack(t, i, ppro));
     } catch {
       // skip missing track
     }
@@ -301,7 +298,7 @@ export async function translateSequence(seq: PProSequence): Promise<Sequence> {
   for (let i = 0; i < aCount; i++) {
     try {
       const t = await seq.getAudioTrack(i);
-      tracks.push(await translateTrack(t, i));
+      tracks.push(await translateTrack(t, i, ppro));
     } catch {
       // skip missing track
     }

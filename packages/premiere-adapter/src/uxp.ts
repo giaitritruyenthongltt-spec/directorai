@@ -365,7 +365,7 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     const proj = await this.project();
     const [active, all] = await Promise.all([proj.getActiveSequence(), proj.getSequences()]);
     const sequences: Sequence[] = [];
-    for (const s of all) sequences.push(await translateSequence(s));
+    for (const s of all) sequences.push(await translateSequence(s, this.ppro));
     return {
       id: { value: proj.guid, __brand: 'ProjectId' } as Project['id'],
       metadata: {
@@ -383,7 +383,7 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     const proj = await this.project();
     const all = await proj.getSequences();
     const out: Sequence[] = [];
-    for (const s of all) out.push(await translateSequence(s));
+    for (const s of all) out.push(await translateSequence(s, this.ppro));
     return out;
   }
 
@@ -398,7 +398,7 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     const proj = await this.project();
     const s = await proj.getActiveSequence();
     if (!s) return null;
-    return translateSequence(s);
+    return translateSequence(s, this.ppro);
   }
 
   // ─── Timeline read ────────────────────────────────────────────────────────
@@ -414,13 +414,15 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     for (let i = 0; i < vCount; i++) {
       const t = await seq.getVideoTrack(i);
       const items = await t.getTrackItems(1, false);
-      for (const it of items) out.push(await translateTrackItem(it, `video-${i}`, 'video'));
+      for (const it of items)
+        out.push(await translateTrackItem(it, `video-${i}`, 'video', this.ppro));
     }
     const aCount = await seq.getAudioTrackCount();
     for (let i = 0; i < aCount; i++) {
       const t = await seq.getAudioTrack(i);
       const items = await t.getTrackItems(1, false);
-      for (const it of items) out.push(await translateTrackItem(it, `audio-${i}`, 'audio'));
+      for (const it of items)
+        out.push(await translateTrackItem(it, `audio-${i}`, 'audio', this.ppro));
     }
     const frozen = Object.freeze(out);
     (this.clipListCache ??= new Map()).set(sequenceId, frozen);
@@ -432,14 +434,14 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
       const { item, track } = await this.findTrackItem(clipId);
       const mediaType = await track.getMediaType().catch(() => 'Video');
       const kind: Clip['kind'] = mediaType === 'Video' ? 'video' : 'audio';
-      return translateTrackItem(item, `${kind}-${track.id}`, kind);
+      return translateTrackItem(item, `${kind}-${track.id}`, kind, this.ppro);
     } catch {
       return null;
     }
   }
 
   async listTracks(sequenceId: string): Promise<readonly Track[]> {
-    const seq = await translateSequence(await this.findSequence(sequenceId));
+    const seq = await translateSequence(await this.findSequence(sequenceId), this.ppro);
     return seq.tracks;
   }
 
@@ -478,7 +480,7 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     });
     const mt = await track.getMediaType();
     const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
-    return translateTrackItem(item, `${k}-${track.id}`, k);
+    return translateTrackItem(item, `${k}-${track.id}`, k, this.ppro);
   }
 
   /** A3 — Di chuyển clip dùng createMoveAction. */
@@ -493,7 +495,7 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     });
     const mt = await track.getMediaType();
     const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
-    return translateTrackItem(item, `${k}-${track.id}`, k);
+    return translateTrackItem(item, `${k}-${track.id}`, k, this.ppro);
   }
 
   /**
