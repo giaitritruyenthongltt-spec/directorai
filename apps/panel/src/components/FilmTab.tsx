@@ -34,10 +34,26 @@ export function FilmTab(): React.ReactElement {
   const [applyRes, setApplyRes] = useState<ApplyResponse | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // G5 — bước bị bỏ (theo order) — không ghi.
+  const [skip, setSkip] = useState<Set<number>>(new Set());
 
   const tpl: EditTemplate | undefined = LONG_TEMPLATES.find((t) => t.id === tplId);
   const plan = s.editPlan;
   const clipPaths = s.clipPaths;
+  const ACTION_VN: Record<string, string> = {
+    disable: 'Ẩn',
+    trim: 'Tỉa',
+    move: 'Dời',
+    rename: 'Đổi tên',
+    transition: 'Chuyển cảnh',
+  };
+  const toggleSkip = (order: number): void =>
+    setSkip((prev) => {
+      const n = new Set(prev);
+      if (n.has(order)) n.delete(order);
+      else n.add(order);
+      return n;
+    });
 
   // ── Lập kế hoạch phim (planner LF) — dùng clip path đã map ở context ───────
   const buildPlan = async (): Promise<void> => {
@@ -62,6 +78,7 @@ export function FilmTab(): React.ReactElement {
         structure: tpl.longform?.structure,
       });
       s.setEditPlan(r.edit_plan);
+      setSkip(new Set());
       setDeadAir(null);
     } catch (e) {
       setError(`Lập kế hoạch lỗi: ${e instanceof Error ? e.message : String(e)}`);
@@ -86,6 +103,7 @@ export function FilmTab(): React.ReactElement {
         estimated_saved_sec: number;
       }>('context.planDeadAir', { clipPaths });
       s.setEditPlan(r.edit_plan);
+      setSkip(new Set());
       setDeadAir({
         trims: r.total_trims,
         disables: r.total_disables,
@@ -101,11 +119,18 @@ export function FilmTab(): React.ReactElement {
   // ── Xem trước / Ghi ───────────────────────────────────────────────────────
   const apply = async (write: boolean): Promise<void> => {
     if (!plan) return;
+    // G5 — chỉ ghi các bước CHƯA bị bỏ.
+    const steps = (plan.steps ?? []).filter((st) => !skip.has(st.order));
+    if (steps.length === 0) {
+      setError('Không còn bước nào (đã bỏ hết) — bỏ tick bớt để ghi.');
+      return;
+    }
+    const effectivePlan = { ...plan, steps };
     setBusy(write ? 'apply' : 'preview');
     setError(null);
     try {
       const res = await wsClient.call<ApplyResponse>('safe.applyPlan', {
-        editPlan: plan,
+        editPlan: effectivePlan,
         dryRun: !write,
         approved: write,
       });
@@ -204,6 +229,31 @@ export function FilmTab(): React.ReactElement {
       {/* 4. Duyệt & Ghi */}
       {plan && (
         <Section title="4. Duyệt & Ghi" icon="✅">
+          {plan.steps && plan.steps.length > 0 && (
+            <div className="film-steps">
+              <div className="film-steps-head">
+                Sẽ ghi <b>{plan.steps.length - skip.size}</b>/{plan.steps.length} bước (bỏ tick để
+                loại bước không muốn):
+              </div>
+              <ul className="film-steplist">
+                {plan.steps.map((st) => (
+                  <li key={st.order} className={skip.has(st.order) ? 'off' : ''}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={!skip.has(st.order)}
+                        onChange={() => toggleSkip(st.order)}
+                      />
+                      <span className="film-step-act">{ACTION_VN[st.action] ?? st.action}</span>
+                      <span className="film-step-reason" title={st.target_path}>
+                        {st.reason}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="film-row">
             <Button onClick={() => void apply(false)} busy={busy === 'preview'}>
               👀 Xem trước

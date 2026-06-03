@@ -6,7 +6,7 @@
  * đổi tab không mất. Tab này chỉ giữ state: module đã tích + mục tiêu + kết quả.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   MODULE_REGISTRY,
   moduleInfo,
@@ -52,7 +52,23 @@ const STATUS_ICON: Record<StepStatus, string> = {
 
 export function AutoTab(): React.ReactElement {
   const s = useSession();
-  const [ticked, setTicked] = useState<Set<string>>(new Set(DEFAULT_TICKED));
+  // G9 — nhớ module đã tích qua reload.
+  const [ticked, setTicked] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('directorai_ticked');
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch {
+      // bỏ qua
+    }
+    return new Set(DEFAULT_TICKED);
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('directorai_ticked', JSON.stringify([...ticked]));
+    } catch {
+      // bỏ qua
+    }
+  }, [ticked]);
   const [customGoal, setCustomGoal] = useState<string>('');
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);

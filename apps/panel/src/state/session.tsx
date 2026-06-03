@@ -61,7 +61,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
   const [seqName, setSeqName] = useState('');
   const [loadingClips, setLoadingClips] = useState(false);
   const [clipError, setClipError] = useState<string | null>(null);
-  const [folderText, setFolderText] = useState('');
+  // G9 — nhớ thư mục gốc qua reload.
+  const [folderText, setFolderTextRaw] = useState<string>(() => {
+    try {
+      return localStorage.getItem('directorai_folders') ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const setFolderText = useCallback((s: string): void => {
+    setFolderTextRaw(s);
+    try {
+      localStorage.setItem('directorai_folders', s);
+    } catch {
+      // bỏ qua nếu storage không khả dụng
+    }
+  }, []);
   const [editPlan, setEditPlan] = useState<SessionPlan | null>(null);
 
   // 1 subscribe conn duy nhất cho cả panel.
