@@ -10,6 +10,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { wsClient } from '../bridge/ws-client.js';
+import { useSession } from '../state/session.js';
 import './ContextTab.css';
 
 interface Health {
@@ -18,6 +19,7 @@ interface Health {
 }
 
 export function ContextTab(): React.ReactElement {
+  const { conn } = useSession();
   const [health, setHealth] = useState<Health | null>(null);
   const [healthErr, setHealthErr] = useState<string | null>(null);
   const [mediaPath, setMediaPath] = useState<string>('');
@@ -26,7 +28,9 @@ export function ContextTab(): React.ReactElement {
   const [result, setResult] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // F2 — kiểm tra health LẠI mỗi khi (re)connect, không chỉ 1 lần lúc mount.
   useEffect(() => {
+    if (conn !== 'connected') return;
     void (async () => {
       try {
         const h = await wsClient.call<Health>('context.health');
@@ -36,7 +40,7 @@ export function ContextTab(): React.ReactElement {
         setHealthErr(e instanceof Error ? e.message : String(e));
       }
     })();
-  }, []);
+  }, [conn]);
 
   const run = async (label: string, fn: () => Promise<unknown>): Promise<void> => {
     setBusy(label);
