@@ -24,6 +24,22 @@
   margin-bottom: var(--sp-4);
 }
 
+.film-hint {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 160px;
+}
+.film-folder-adv {
+  margin: var(--sp-3) 0 var(--sp-4);
+}
+.film-folder-adv > summary {
+  font-size: var(--fs-md);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: var(--sp-2) 0;
+}
+
 /* Thư mục gốc */
 .film-folder {
   display: flex;

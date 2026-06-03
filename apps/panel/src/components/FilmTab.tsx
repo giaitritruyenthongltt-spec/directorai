@@ -128,6 +128,36 @@ export function FilmTab(): React.ReactElement {
     }
   };
 
+  // ── Lấy path tự động từ project (.prproj) — KHÔNG cần nhập thư mục ─────────
+  const resolveFromProject = async (): Promise<void> => {
+    setBusy('proj');
+    setError(null);
+    try {
+      const r = await wsClient.call<{
+        resolved: { name: string; fullPath: string }[];
+        unresolved: string[];
+        mediaIndexed: number;
+      }>('context.resolveFromProject', {});
+      const byName = new Map(r.resolved.map((x) => [x.name.toLowerCase(), x.fullPath]));
+      setClips((prev) =>
+        prev.map((c) => {
+          const full = byName.get(c.name.toLowerCase());
+          return full ? { ...c, path: full, hasFullPath: true } : c;
+        })
+      );
+      if (r.resolved.length === 0) {
+        setError(
+          `Không map được clip nào từ project (${r.mediaIndexed} media). ` +
+            `Hãy LƯU project rồi thử lại, hoặc dùng "Quét thư mục".`
+        );
+      }
+    } catch (e) {
+      setError(`Lấy path từ project lỗi: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // ── Lập kế hoạch phim (planner LF) ────────────────────────────────────────
   const buildPlan = async (): Promise<void> => {
     if (clipPaths.length === 0) {
@@ -242,18 +272,34 @@ export function FilmTab(): React.ReactElement {
           )}
         </div>
 
-        <div className="film-folder">
-          <textarea
-            className="film-folderbox"
-            placeholder="Dán thư mục gốc (mỗi dòng 1 folder: video/nhạc/hiệu ứng) rồi Quét để lấy path đầy đủ…"
-            value={folderText}
-            onChange={(e) => setFolderText(e.target.value)}
-            rows={2}
-          />
-          <Button onClick={() => void scanFolders()} busy={busy === 'scan'}>
-            🔍 Quét thư mục → map path
+        <div className="film-row">
+          <Button
+            variant="primary"
+            onClick={() => void resolveFromProject()}
+            busy={busy === 'proj'}
+          >
+            🎯 Lấy path tự động (từ project)
           </Button>
+          <span className="film-hint">
+            Cách nhanh nhất: đọc đường dẫn ngay trong file project đã lưu. Không cần nhập thư mục.
+          </span>
         </div>
+
+        <details className="film-folder-adv">
+          <summary>… hoặc Quét thư mục gốc (nếu cách trên thiếu clip)</summary>
+          <div className="film-folder">
+            <textarea
+              className="film-folderbox"
+              placeholder="Dán thư mục gốc (mỗi dòng 1 folder: video/nhạc/hiệu ứng) rồi Quét…"
+              value={folderText}
+              onChange={(e) => setFolderText(e.target.value)}
+              rows={2}
+            />
+            <Button onClick={() => void scanFolders()} busy={busy === 'scan'}>
+              🔍 Quét thư mục → map path
+            </Button>
+          </div>
+        </details>
 
         {clips.length > 0 ? (
           <ClipTable clips={clips} />

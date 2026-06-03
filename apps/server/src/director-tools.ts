@@ -24,6 +24,7 @@ import { listModuleInfos } from '@directorai/modules';
 import { buildFcpxml, type FcpTimeline } from '@directorai/fcpxml';
 import { resolvePlan, type PlanPreview } from './plan-resolver.js';
 import { applyResolvedPlan, type ApplyResult } from './plan-executor.js';
+import { readPrprojMedia } from './prproj-reader.js';
 import type { CheckpointStore } from './checkpoint-store.js';
 
 const SIDECAR_URL = process.env.CONTEXT_ENGINE_URL ?? 'http://127.0.0.1:8000';
@@ -132,6 +133,42 @@ export interface CompositeToolDeps {
   readonly checkpoints?: CheckpointStore;
 }
 
+/** PATH-FIX phương án 3 — index tên file 2 mức: khớp ĐÚNG basename, và
+ *  khớp KHÔNG phân biệt đuôi (clip "0530" ↔ file "0530.mp4"). */
+function buildNameIndex(items: readonly { name: string; fullPath: string }[]): {
+  exact: Map<string, string>;
+  noext: Map<string, string>;
+} {
+  const exact = new Map<string, string>();
+  const noext = new Map<string, string>();
+  for (const it of items) {
+    const b = it.name.toLowerCase();
+    if (!exact.has(b)) exact.set(b, it.fullPath);
+    const ne = b.replace(/\.[^.]+$/, '');
+    if (ne && !noext.has(ne)) noext.set(ne, it.fullPath);
+  }
+  return { exact, noext };
+}
+
+/** Khớp tên clip → path: thử ĐÚNG basename trước, rồi bỏ-đuôi. */
+function matchClipNames(
+  clipNames: readonly string[],
+  idx: { exact: Map<string, string>; noext: Map<string, string> }
+): { resolved: { name: string; fullPath: string }[]; unresolved: string[] } {
+  const resolved: { name: string; fullPath: string }[] = [];
+  const unresolved: string[] = [];
+  const seen = new Set<string>();
+  for (const name of clipNames) {
+    const base = (name.split(/[\\/]/).pop() ?? name).toLowerCase();
+    if (seen.has(base)) continue;
+    seen.add(base);
+    const hit = idx.exact.get(base) ?? idx.noext.get(base.replace(/\.[^.]+$/, ''));
+    if (hit) resolved.push({ name, fullPath: hit });
+    else unresolved.push(name);
+  }
+  return { resolved, unresolved };
+}
+
 export class CompositeTools {
   constructor(private readonly deps: CompositeToolDeps) {}
 
@@ -187,6 +224,8 @@ export class CompositeTools {
         return this.activeSequenceClips(params as { sequenceId?: string });
       case 'context.resolveFromFolders':
         return this.resolveFromFolders(params as { folders: string[]; sequenceId?: string });
+      case 'context.resolveFromProject':
+        return this.resolveFromProject(params as { sequenceId?: string });
       case 'fcpxml.export':
         return this.exportFcpxml(params as { timeline: FcpTimeline; fileName?: string });
       case 'safe.previewPlan':
@@ -241,6 +280,7 @@ export class CompositeTools {
       'context.qualityReport',
       'context.activeSequenceClips',
       'context.resolveFromFolders',
+      'context.resolveFromProject',
       'module.list',
       'fcpxml.export',
       'safe.previewPlan',
@@ -364,24 +404,53 @@ export class CompositeTools {
     };
     for (const f of params.folders) await walk(f, 0);
 
-    // Lấy clip của sequence đang mở.
+    // Lấy clip của sequence đang mở + khớp (ưu tiên đúng đuôi, bù bỏ-đuôi).
     const seqClips = await this.activeSequenceClips({ sequenceId: params.sequenceId });
-    const resolved: { name: string; fullPath: string }[] = [];
-    const unresolved: string[] = [];
-    const seenName = new Set<string>();
-    for (const c of seqClips.clips) {
-      const base = (c.name.split(/[\\/]/).pop() ?? c.name).toLowerCase();
-      if (seenName.has(base)) continue; // tránh trùng (1 file dùng nhiều lần)
-      seenName.add(base);
-      const hit = index.get(base);
-      if (hit) resolved.push({ name: c.name, fullPath: hit });
-      else unresolved.push(c.name);
-    }
+    const items = [...index.entries()].map(([base, fullPath]) => ({ name: base, fullPath }));
+    const idx = buildNameIndex(items);
+    const { resolved, unresolved } = matchClipNames(
+      seqClips.clips.map((c) => c.name),
+      idx
+    );
     this.deps.logger.info(
       { foldersScanned: params.folders.length, filesIndexed, resolved: resolved.length },
       'context.resolveFromFolders'
     );
     return { resolved, unresolved, foldersScanned: params.folders.length, filesIndexed };
+  }
+
+  // ─── context.resolveFromProject (PATH-FIX p.án 2 — đọc thẳng .prproj) ──
+
+  /**
+   * Đọc file `.prproj` (XML gzip) → lấy đường dẫn media TUYỆT ĐỐI cho clip của
+   * sequence đang mở. Đây là nguồn ĐÚNG NHẤT (path Premiere đang dùng), không
+   * cần người dùng chỉ thư mục. Điều kiện: project đã LƯU.
+   */
+  async resolveFromProject(params: { sequenceId?: string }): Promise<{
+    resolved: { name: string; fullPath: string }[];
+    unresolved: string[];
+    prprojPath: string;
+    mediaIndexed: number;
+  }> {
+    const project = await this.deps.adapter.getProject();
+    const prprojPath = project.metadata.path;
+    if (!prprojPath || !(prprojPath.includes('/') || prprojPath.includes('\\'))) {
+      throw new Error(
+        'Chưa lưu project (.prproj) hoặc không lấy được đường dẫn — hãy Lưu rồi thử lại.'
+      );
+    }
+    const media = await readPrprojMedia(prprojPath);
+    const idx = buildNameIndex(media);
+    const seqClips = await this.activeSequenceClips({ sequenceId: params.sequenceId });
+    const { resolved, unresolved } = matchClipNames(
+      seqClips.clips.map((c) => c.name),
+      idx
+    );
+    this.deps.logger.info(
+      { prprojPath, mediaIndexed: media.length, resolved: resolved.length },
+      'context.resolveFromProject'
+    );
+    return { resolved, unresolved, prprojPath, mediaIndexed: media.length };
   }
 
   // ─── context.filterBad (MOD-3 — CV prefilter → Vision subset) ─────────
