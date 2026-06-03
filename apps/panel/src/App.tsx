@@ -17,6 +17,7 @@ import { AutoTab } from './components/AutoTab.js';
 import { FilmTab } from './components/FilmTab.js';
 import { AnalysisTab } from './components/AnalysisTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
+import { SessionProvider } from './state/session.js';
 import './styles/tokens.css';
 import './App.css';
 
@@ -207,15 +208,17 @@ export function App(): React.ReactElement {
           )
         )}
       </nav>
-      <main className="main-content">
-        {activeTab === 'film' && <FilmTab />}
-        {activeTab === 'auto' && <AutoTab />}
-        {activeTab === 'director' && <DirectorTab />}
-        {activeTab === 'analysis' && <AnalysisTab />}
-        {activeTab === 'chat' && <ChatLog entries={logs} />}
-        {activeTab === 'style' && <StylePicker />}
-        {activeTab === 'context' && <ContextTab />}
-      </main>
+      <SessionProvider>
+        <main className="main-content">
+          {activeTab === 'film' && <FilmTab />}
+          {activeTab === 'auto' && <AutoTab />}
+          {activeTab === 'director' && <DirectorTab />}
+          {activeTab === 'analysis' && <AnalysisTab />}
+          {activeTab === 'chat' && <ChatLog entries={logs} />}
+          {activeTab === 'style' && <StylePicker />}
+          {activeTab === 'context' && <ContextTab />}
+        </main>
+      </SessionProvider>
       <ProgressBar />
       <CommandBar onSubmit={handleCommand} disabled={connState !== 'connected'} />
       <StatusBar connState={connState} />

@@ -8,7 +8,9 @@
 
 import React, { useState } from 'react';
 import { wsClient } from '../bridge/ws-client.js';
-import { parseClipPaths, basename } from '../bridge/clip-paths.js';
+import { basename } from '../bridge/clip-paths.js';
+import { useSession } from '../state/session.js';
+import { ClipSourcePanel } from './ClipSourcePanel.js';
 import { HelpButton } from './HelpButton.js';
 import './AnalysisTab.css';
 
@@ -27,17 +29,21 @@ interface ReportResult {
 }
 
 export function AnalysisTab(): React.ReactElement {
-  const [clipText, setClipText] = useState('');
+  const s = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportResult | null>(null);
 
-  const clipPaths = parseClipPaths(clipText);
+  const clipPaths = s.clipPaths;
 
   const run = async (): Promise<void> => {
     setError(null);
+    if (s.conn !== 'connected') {
+      setError('Chưa kết nối Premiere — chờ kết nối rồi thử lại.');
+      return;
+    }
     if (clipPaths.length === 0) {
-      setError('Hãy dán ít nhất 1 đường dẫn file gốc (mỗi dòng 1 file).');
+      setError('Chưa có clip có đường dẫn — bấm "🎯 Lấy path tự động" ở mục Nguồn clip.');
       return;
     }
     setBusy(true);
@@ -71,17 +77,8 @@ export function AnalysisTab(): React.ReactElement {
         <p className="analysis-sub">Chỉ phân tích — KHÔNG sửa timeline.</p>
       </div>
 
-      <textarea
-        className="analysis-cliptext"
-        placeholder={'Mỗi dòng 1 đường dẫn file gốc:\nE:\\T11\\6.mp4\nE:\\T11\\7.mp4'}
-        value={clipText}
-        onChange={(e) => {
-          setClipText(e.target.value);
-          setReport(null);
-        }}
-        rows={5}
-      />
-      <div className="analysis-clipcount">{clipPaths.length} file</div>
+      {/* Nguồn clip dùng chung — map 1 lần ở bất kỳ tab nào */}
+      <ClipSourcePanel title="Nguồn clip (dùng chung mọi tab)" />
 
       {error && <div className="analysis-error">✗ {error}</div>}
 
