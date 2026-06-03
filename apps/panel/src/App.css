@@ -5,6 +5,34 @@
   background: var(--bg);
 }
 
+/* Tầng 1 — nhóm tab (audit-gộp: 3 nhóm) */
+.tab-groups {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px 0;
+  background: var(--surface);
+}
+.tab-group-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  transition: color 0.15s, background 0.15s;
+}
+.tab-group-btn:hover {
+  color: var(--text);
+}
+.tab-group-btn.active {
+  color: var(--accent);
+  background: var(--bg);
+  border-color: var(--accent);
+}
+
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--border);

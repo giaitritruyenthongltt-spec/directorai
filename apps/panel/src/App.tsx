@@ -10,7 +10,7 @@ import { OnboardingTour } from './components/OnboardingTour.js';
 // L2 — replaced lazy() with static imports. UXP's chunk-loader behaviour
 // in Premiere 26 may differ from web browsers; lazy() risked a silent
 // chunk 404 that would leave the panel blank with no error visible.
-import { StylePicker } from './components/StylePicker.js';
+// (StylePicker BỎ — audit: demo dữ liệu giả, lạc khỏi luồng thật.)
 import { ContextTab } from './components/ContextTab.js';
 import { DirectorTab } from './components/DirectorTab.js';
 import { AutoTab } from './components/AutoTab.js';
@@ -21,18 +21,27 @@ import { SessionProvider } from './state/session.js';
 import './styles/tokens.css';
 import './App.css';
 
-export type ActiveTab = 'film' | 'auto' | 'director' | 'analysis' | 'chat' | 'style' | 'context';
+export type ActiveTab = 'film' | 'auto' | 'analysis' | 'director' | 'chat' | 'context';
 
 /** Nhãn tab tiếng Việt. */
 const TAB_LABELS: Record<ActiveTab, string> = {
   film: '🎞️ Phim dài',
   auto: '⚡ Tự động',
-  director: '🎬 Đạo diễn',
   analysis: '🔍 Báo cáo',
+  director: '🎬 Đạo diễn',
   chat: '💬 Trò chuyện',
-  style: '🎨 Phong cách',
   context: '📊 Ngữ cảnh',
 };
+
+/**
+ * Audit-gộp — 3 NHÓM thay vì 7 tab ngang hàng (bỏ Style demo).
+ *   Dựng phim (Phim/Tự động/Báo cáo) · Trợ lý (Đạo diễn/Chat) · Nâng cao (Ngữ cảnh).
+ */
+const TAB_GROUPS: { id: string; label: string; tabs: ActiveTab[] }[] = [
+  { id: 'build', label: '🎬 Dựng phim', tabs: ['film', 'auto', 'analysis'] },
+  { id: 'assist', label: '🤖 Trợ lý', tabs: ['director', 'chat'] },
+  { id: 'advanced', label: '⚙️ Nâng cao', tabs: ['context'] },
+];
 
 /** Restore a checkpoint into the chat log if it was created recently (< 5 min). */
 const RECENT_CHECKPOINT_MS = 5 * 60_000;
@@ -195,19 +204,39 @@ export function App(): React.ReactElement {
   return (
     <div className="app">
       <Header connState={connState} onReconnect={() => wsClient.connect()} />
-      <nav className="tabs">
-        {(['film', 'auto', 'director', 'analysis', 'chat', 'style', 'context'] as ActiveTab[]).map(
-          (tab) => (
-            <button
-              key={tab}
-              className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          )
-        )}
-      </nav>
+      {(() => {
+        const group = TAB_GROUPS.find((g) => g.tabs.includes(activeTab)) ?? TAB_GROUPS[0]!;
+        return (
+          <>
+            {/* Tầng 1 — nhóm */}
+            <nav className="tab-groups">
+              {TAB_GROUPS.map((g) => (
+                <button
+                  key={g.id}
+                  className={`tab-group-btn ${g.id === group.id ? 'active' : ''}`}
+                  onClick={() => setActiveTab(g.tabs[0]!)}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </nav>
+            {/* Tầng 2 — tab con (ẩn nếu nhóm chỉ 1 tab) */}
+            {group.tabs.length > 1 && (
+              <nav className="tabs">
+                {group.tabs.map((tab) => (
+                  <button
+                    key={tab}
+                    className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {TAB_LABELS[tab]}
+                  </button>
+                ))}
+              </nav>
+            )}
+          </>
+        );
+      })()}
       <SessionProvider>
         <main className="main-content">
           {activeTab === 'film' && <FilmTab />}
@@ -215,7 +244,6 @@ export function App(): React.ReactElement {
           {activeTab === 'director' && <DirectorTab />}
           {activeTab === 'analysis' && <AnalysisTab />}
           {activeTab === 'chat' && <ChatLog entries={logs} />}
-          {activeTab === 'style' && <StylePicker />}
           {activeTab === 'context' && <ContextTab />}
         </main>
       </SessionProvider>

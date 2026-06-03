@@ -20,33 +20,27 @@ interface TourStep {
 
 const STEPS: TourStep[] = [
   {
-    target: '.tabs',
-    title: 'Three workspaces',
-    body: 'Chat is your natural-language command bar. Style is the cut planner. Context indexes your footage for semantic search.',
+    target: '.tab-groups',
+    title: '3 nhóm làm việc',
+    body: 'Dựng phim (nạp clip → lập kế hoạch → ghi) · Trợ lý (chat/đạo diễn) · Nâng cao (công cụ engine).',
+    placement: 'bottom',
+  },
+  {
+    target: '.main-content',
+    title: 'Nguồn clip dùng chung',
+    body: 'Bấm "🎯 Lấy path tự động" 1 lần — mọi tab đều thấy clip + đường dẫn, đổi tab không mất.',
     placement: 'bottom',
   },
   {
     target: '.command-bar',
-    title: 'Talk to your timeline',
-    body: 'Type plain English: "cut the silent parts" or "find the bit about Premiere and zoom on it". Built-in shortcuts skip the LLM.',
+    title: 'Ra lệnh bằng tiếng Việt',
+    body: 'Gõ "cắt khoảng lặng" hay "lọc clip mờ". Mọi thao tác ghi đều xem trước + hoàn tác được.',
     placement: 'top',
   },
   {
-    target: '[class*="StylePicker"], .tab-btn:nth-child(2)',
-    title: 'Style tab — the moat',
-    body: 'Pick a built-in style, write your own YAML, then Dry-run or Apply. Every Apply is checkpointed so a single Ctrl-Z reverts everything.',
-    placement: 'bottom',
-  },
-  {
-    target: '[class*="ContextTab"], .tab-btn:nth-child(3)',
-    title: 'Context — search your footage',
-    body: 'Ingest a clip and DirectorAI runs Whisper, scene detection, beats, vision. Then "find the part about X" returns a timecode.',
-    placement: 'bottom',
-  },
-  {
     target: '.status-bar',
-    title: 'Always-on status',
-    body: 'Connection, project, sequence, and adapter mode (UXP / Mock) live here. Trust but verify.',
+    title: 'Trạng thái luôn hiển thị',
+    body: 'Kết nối, dự án, sequence đang mở ở đây.',
     placement: 'top',
   },
 ];
