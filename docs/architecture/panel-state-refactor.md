@@ -57,9 +57,15 @@ App
 | **F5** | StylePicker reset YAML khi đổi mode              | StylePicker.tsx:192     |
 | **F6** | ticked modules + folderText persist localStorage | AutoTab.tsx:58          |
 
-## Thứ tự thực thi
+## Trạng thái
 
-R1 → R2 → R3 → R4 → R5 → R6 → R7/R8 (lõi, sửa đúng điểm đau) → rồi F1–F6 (polish).
+- ✅ **R1–R6 + R7/R8 XONG** — SessionProvider + ClipSourcePanel; FilmTab/AutoTab/
+  AnalysisTab dùng clips chung; conn lấy từ context (R7); editPlan ở context (R8).
+  Map 1 lần → mọi tab thấy, đổi tab KHÔNG mất. AutoTab NAY CÓ nút lấy path.
+- ✅ **F1** (AnalysisTab guard) làm trong R6. ✅ **F2** (ContextTab re-check khi
+  reconnect). **F4** không phải bug (DirectorTab đã có clearInterval cleanup).
+- ⬜ Polish còn lại (nhỏ): **F3** reset preview khi clips đổi · **F5** StylePicker
+  reset YAML khi đổi mode · **F6** persist ticked/folderText vào localStorage.
 
 ## Tiêu chí "xong"
 
