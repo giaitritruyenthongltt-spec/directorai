@@ -32,9 +32,10 @@
   white-space: nowrap;
 }
 
-/* L3 — cao theo panel (responsive) thay vì 320px cứng; header đã sticky. */
+/* Hộp danh sách clip GỌN: cao ~340px, cuộn riêng (thanh kéo lên/xuống), header
+ * sticky. Để cả trang không bị danh sách dài đẩy xuống. */
 .clt-scroll {
-  max-height: min(46vh, 460px);
+  max-height: min(340px, 42vh);
   overflow-y: auto;
 }
 .clt-table {

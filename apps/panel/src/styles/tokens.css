@@ -76,19 +76,13 @@
   --ring-focus: 0 0 0 2px var(--accent-ring);
 }
 
-/* ── R1+ — Icon = <span> tô currentColor, hình từ SVG qua CSS mask. ───
- * (UXP KHÔNG render <svg> nội tuyến → phải dùng mask-image data URI.) */
+/* ── Icon = <img> SVG data-URI (UXP render được; <svg> nội tuyến & mask thì
+ * KHÔNG). Màu nướng sẵn trong SVG nên đây chỉ canh dòng + kích thước. */
 .icon {
   display: inline-block;
   vertical-align: -0.15em;
   flex-shrink: 0;
-  background-color: currentColor;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
+  object-fit: contain;
 }
 /* Quay icon "đang xử lý" (refresh) khi gắn class .spin. */
 .icon.spin {

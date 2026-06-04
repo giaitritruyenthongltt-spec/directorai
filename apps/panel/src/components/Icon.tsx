@@ -1,15 +1,14 @@
 /**
  * Icon — hệ icon SVG cho UXP (Premiere).
  *
- * BUG GỐC (đã sửa): UXP KHÔNG render `<svg>` NỘI TUYẾN (DOM tùy biến của UXP
- * không có phần tử SVG) → icon hiện thành Ô VUÔNG ĐEN. Tuy nhiên engine CSS/ảnh
- * của UXP là Chromium thật → SVG đi qua `mask-image` (data URI) RENDER ĐƯỢC.
+ * BUG GỐC (đã thử 2 cách thất bại): UXP KHÔNG render `<svg>` nội tuyến (DOM tùy
+ * biến) → ô vuông đen; UXP cũng KHÔNG hỗ trợ `-webkit-mask-image` → ô vuông đặc.
  *
- * CÁCH LÀM: mỗi icon là 1 chuỗi markup SVG → gói thành data URI → đặt làm
- * `-webkit-mask-image` của 1 <span>, tô bằng `background-color: currentColor`
- * (xem .icon trong tokens.css). Nhờ currentColor, icon TỰ đổi màu theo chữ/
- * theme (accent khi tab active, trắng trên nút gradient…). Stroke màu trong
- * SVG không quan trọng (mask dùng alpha).
+ * CÁCH CHẠY ĐƯỢC: render SVG qua thẻ <img> (data URI). UXP hỗ trợ SVG dạng ẢNH.
+ * Hệ quả: màu phải "nướng" sẵn vào SVG (img không ăn currentColor của trang) →
+ * dùng bộ icon ĐƠN SẮC (giống Adobe Spectrum). Mặc định màu theo chữ; có prop
+ * `color` để đổi (vd accent). Đổi màu theo trạng thái active dùng nhãn/underline
+ * (đã có) thay vì màu icon.
  */
 
 import React from 'react';
@@ -50,7 +49,8 @@ export type IconName =
   | 'pause'
   | 'stop';
 
-/** Markup BÊN TRONG <svg> (viewBox 0 0 24 24). fill="#000" cho nét đặc. */
+/** Markup bên trong <svg> (viewBox 0 0 24 24). Nét đặc dùng fill="#fff" (token
+ * sẽ thay bằng màu thực khi dựng data URI). */
 const SHAPES: Record<IconName, string> = {
   film: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18M3 7.5h4M3 12h18M3 16.5h4M17 3v18M17 7.5h4M17 16.5h4"/>',
   zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
@@ -68,7 +68,7 @@ const SHAPES: Record<IconName, string> = {
     '<path d="M9.94 14.06A2 2 0 0 0 8.5 12.6l-5.4-1.4a.5.5 0 0 1 0-.96l5.4-1.4A2 2 0 0 0 9.94 7.4l1.4-5.4a.5.5 0 0 1 .96 0l1.4 5.4a2 2 0 0 0 1.44 1.44l5.4 1.4a.5.5 0 0 1 0 .96l-5.4 1.4a2 2 0 0 0-1.44 1.44l-1.4 5.4a.5.5 0 0 1-.96 0z"/><path d="M20 3v4M22 5h-4M4 17v2M5 18H3"/>',
   eye: '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>',
   check: '<path d="M21.8 10A10 10 0 1 1 17 3.34"/><path d="m9 11 3 3L22 4"/>',
-  play: '<path d="M6 3v18l15-9z" fill="#000" stroke="none"/>',
+  play: '<path d="M6 3v18l15-9z" fill="#fff" stroke="none"/>',
   refresh:
     '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   alert:
@@ -90,29 +90,33 @@ const SHAPES: Record<IconName, string> = {
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
   palette:
-    '<circle cx="13.5" cy="6.5" r="1" fill="#000" stroke="none"/><circle cx="17.5" cy="10.5" r="1" fill="#000" stroke="none"/><circle cx="8.5" cy="7.5" r="1" fill="#000" stroke="none"/><circle cx="6.5" cy="12.5" r="1" fill="#000" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/>',
+    '<circle cx="13.5" cy="6.5" r="1" fill="#fff" stroke="none"/><circle cx="17.5" cy="10.5" r="1" fill="#fff" stroke="none"/><circle cx="8.5" cy="7.5" r="1" fill="#fff" stroke="none"/><circle cx="6.5" cy="12.5" r="1" fill="#fff" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/>',
   layers:
     '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65M22 12.65l-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   trash:
     '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
   pause:
-    '<rect x="14" y="4" width="4" height="16" rx="1" fill="#000" stroke="none"/><rect x="6" y="4" width="4" height="16" rx="1" fill="#000" stroke="none"/>',
-  stop: '<circle cx="12" cy="12" r="10"/><rect width="6" height="6" x="9" y="9" rx="1" fill="#000" stroke="none"/>',
+    '<rect x="14" y="4" width="4" height="16" rx="1" fill="#fff" stroke="none"/><rect x="6" y="4" width="4" height="16" rx="1" fill="#fff" stroke="none"/>',
+  stop: '<circle cx="12" cy="12" r="10"/><rect width="6" height="6" x="9" y="9" rx="1" fill="#fff" stroke="none"/>',
 };
 
-/** Cache data URI theo (name+strokeWidth) để khỏi dựng lại mỗi render. */
+/** Màu icon mặc định (đơn sắc, đọc tốt trên nền tối Premiere). */
+const DEFAULT_COLOR = '#cfd3da';
+
 const URI_CACHE = new Map<string, string>();
 
-function maskUri(name: IconName, strokeWidth: number): string {
-  const key = `${name}:${strokeWidth}`;
+function svgUri(name: IconName, strokeWidth: number, color: string): string {
+  const key = `${name}:${strokeWidth}:${color}`;
   const cached = URI_CACHE.get(key);
   if (cached) return cached;
+  // "Nướng" màu vào SVG: nét (#fff filled) + stroke = color.
+  const shape = SHAPES[name].replace(/#fff/g, color);
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ` +
-    `stroke="#000" stroke-width="${strokeWidth}" stroke-linecap="round" ` +
-    `stroke-linejoin="round">${SHAPES[name]}</svg>`;
-  const uri = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    `stroke="${color}" stroke-width="${strokeWidth}" stroke-linecap="round" ` +
+    `stroke-linejoin="round">${shape}</svg>`;
+  const uri = `data:image/svg+xml,${encodeURIComponent(svg)}`;
   URI_CACHE.set(key, uri);
   return uri;
 }
@@ -124,6 +128,8 @@ export interface IconProps {
   className?: string;
   /** nét đậm — mặc định 2. */
   strokeWidth?: number;
+  /** màu icon (literal CSS color) — mặc định đơn sắc sáng. */
+  color?: string;
 }
 
 export function Icon({
@@ -131,18 +137,17 @@ export function Icon({
   size = 16,
   className,
   strokeWidth = 2,
+  color = DEFAULT_COLOR,
 }: IconProps): React.ReactElement {
-  const uri = maskUri(name, strokeWidth);
   return (
-    <span
+    <img
       className={`icon${className ? ` ${className}` : ''}`}
+      src={svgUri(name, strokeWidth, color)}
+      width={size}
+      height={size}
+      alt=""
       aria-hidden="true"
-      style={{
-        width: size,
-        height: size,
-        WebkitMaskImage: uri,
-        maskImage: uri,
-      }}
+      draggable={false}
     />
   );
 }
