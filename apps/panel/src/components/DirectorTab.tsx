@@ -12,6 +12,7 @@ import { wsClient, type ConnectionState } from '../bridge/ws-client.js';
 import { HelpButton } from './HelpButton.js';
 import { WorkflowDiagram } from './WorkflowDiagram.js';
 import { Icon, type IconName } from './Icon.js';
+import { ClickBox } from './ui/primitives.js';
 import './DirectorTab.css';
 
 type Persona = 'cinematic' | 'action' | 'vlog' | 'vintage';
@@ -362,9 +363,8 @@ export function DirectorTab(): React.ReactElement {
         </div>
         <div className="director-persona-grid">
           {(Object.keys(PERSONA_LABELS) as Persona[]).map((p) => (
-            <button
+            <ClickBox
               key={p}
-              type="button"
               className={`director-persona-card ${persona === p ? 'active' : ''}`}
               onClick={() => setPersona(p)}
               disabled={busy}
@@ -373,7 +373,7 @@ export function DirectorTab(): React.ReactElement {
                 <Icon name={PERSONA_ICONS[p]} size={15} /> {PERSONA_LABELS[p]}
               </span>
               <span className="director-persona-tip">{PERSONA_TIPS[p]}</span>
-            </button>
+            </ClickBox>
           ))}
         </div>
       </section>
@@ -390,7 +390,7 @@ export function DirectorTab(): React.ReactElement {
             ]}
           />
         </div>
-        <button className="director-primary" onClick={() => void generate()} disabled={busy}>
+        <ClickBox className="director-primary" onClick={() => void generate()} disabled={busy}>
           {busy && !plan ? (
             <>
               <Icon name="refresh" size={15} className="spin" /> Đang tạo kế hoạch…{' '}
@@ -401,7 +401,7 @@ export function DirectorTab(): React.ReactElement {
               <Icon name="sparkles" size={15} /> Tạo kế hoạch
             </>
           )}
-        </button>
+        </ClickBox>
         {error && (
           <div className="director-error">
             <div className="director-error-msg">{error}</div>
@@ -476,9 +476,9 @@ export function DirectorTab(): React.ReactElement {
           </ol>
           {!progress && (
             <div className="director-plan-actions">
-              <button className="director-primary" onClick={() => void execute()} disabled={busy}>
+              <ClickBox className="director-primary" onClick={() => void execute()} disabled={busy}>
                 <Icon name="play" size={15} /> Chạy kế hoạch
-              </button>
+              </ClickBox>
               <button className="director-secondary" onClick={reset}>
                 Huỷ
               </button>
@@ -511,17 +511,17 @@ export function DirectorTab(): React.ReactElement {
             Bước {progress.currentStep}/{progress.totalSteps} · {progressLabel(progress.status)}
           </div>
           {progress.status === 'running' && (
-            <button className="director-secondary" onClick={() => void cancel()}>
+            <ClickBox className="director-secondary" onClick={() => void cancel()}>
               <Icon name="stop" size={15} /> Dừng
-            </button>
+            </ClickBox>
           )}
           {(progress.status === 'done' ||
             progress.status === 'error' ||
             progress.status === 'cancelled') && (
             <>
-              <button className="director-secondary" onClick={reset}>
+              <ClickBox className="director-secondary" onClick={reset}>
                 <Icon name="refresh" size={15} /> Kế hoạch mới
-              </button>
+              </ClickBox>
               <div className="director-refine">
                 <div className="director-label-row">
                   <label htmlFor="refine-input">Tinh chỉnh kế hoạch này</label>
@@ -542,13 +542,13 @@ export function DirectorTab(): React.ReactElement {
                   disabled={busy}
                   rows={2}
                 />
-                <button
+                <ClickBox
                   className="director-secondary"
                   onClick={() => void refine()}
                   disabled={busy || !feedback.trim()}
                 >
                   <Icon name="wand" size={15} /> Tinh chỉnh
-                </button>
+                </ClickBox>
               </div>
             </>
           )}
