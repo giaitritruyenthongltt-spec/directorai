@@ -13,6 +13,7 @@ import { useSession } from '../state/session.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
 import { HelpButton } from './HelpButton.js';
 import { Icon } from './Icon.js';
+import { ClickBox } from './ui/primitives.js';
 import './AnalysisTab.css';
 
 interface Row {
@@ -87,7 +88,7 @@ export function AnalysisTab(): React.ReactElement {
         </div>
       )}
 
-      <button className="analysis-btn" disabled={busy} onClick={() => void run()}>
+      <ClickBox className="analysis-btn" disabled={busy} onClick={() => void run()}>
         {busy ? (
           <>
             <Icon name="refresh" size={15} className="spin" /> Đang phân tích…
@@ -97,7 +98,7 @@ export function AnalysisTab(): React.ReactElement {
             <Icon name="report" size={15} /> Phân tích chất lượng
           </>
         )}
-      </button>
+      </ClickBox>
 
       {report && (
         <div className="analysis-result">

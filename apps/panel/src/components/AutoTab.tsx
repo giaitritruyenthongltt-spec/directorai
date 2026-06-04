@@ -18,6 +18,7 @@ import { useSession } from '../state/session.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
 import { HelpButton } from './HelpButton.js';
 import { Icon } from './Icon.js';
+import { ClickBox } from './ui/primitives.js';
 import './AutoTab.css';
 
 const MODULES = MODULE_REGISTRY.map(moduleInfo);
@@ -279,7 +280,11 @@ export function AutoTab(): React.ReactElement {
       )}
 
       <div className="auto-actions">
-        <button className="auto-btn preview" disabled={busy} onClick={() => void run(true, false)}>
+        <ClickBox
+          className="auto-btn preview"
+          disabled={busy}
+          onClick={() => void run(true, false)}
+        >
           {busy && !applied ? (
             <>
               <Icon name="refresh" size={15} className="spin" /> Đang lập kế hoạch…
@@ -289,8 +294,8 @@ export function AutoTab(): React.ReactElement {
               <Icon name="eye" size={15} /> Xem trước (không ghi)
             </>
           )}
-        </button>
-        <button
+        </ClickBox>
+        <ClickBox
           className="auto-btn apply"
           disabled={busy || !preview}
           title={!preview ? 'Hãy "Xem trước" rồi mới ghi' : 'Ghi thật (có hoàn tác)'}
@@ -301,7 +306,7 @@ export function AutoTab(): React.ReactElement {
           }}
         >
           <Icon name="check" size={15} /> Duyệt &amp; Ghi
-        </button>
+        </ClickBox>
       </div>
 
       {preview && !applied && renderResult(preview, 'Xem trước (chưa ghi gì)')}

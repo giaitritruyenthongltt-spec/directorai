@@ -78,6 +78,42 @@ export function Button(props: {
   );
 }
 
+// ─── ClickBox: <div role=button> thay <button> (UXP <button> nuốt icon) ────
+// Giữ className tuỳ ý của lời gọi nên style cũ vẫn áp; tự lo disabled/keyboard.
+export function ClickBox(props: {
+  className?: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  title?: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}): React.ReactElement {
+  const d = Boolean(props.disabled);
+  return (
+    <div
+      className={props.className}
+      role="button"
+      tabIndex={d ? -1 : 0}
+      aria-disabled={d || undefined}
+      title={props.title}
+      style={
+        d
+          ? { opacity: 0.45, cursor: 'not-allowed', pointerEvents: 'none', ...props.style }
+          : props.style
+      }
+      onClick={d ? undefined : props.onClick}
+      onKeyDown={(e) => {
+        if (!d && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          props.onClick?.();
+        }
+      }}
+    >
+      {props.children}
+    </div>
+  );
+}
+
 // ─── Badge: nhãn nhỏ có màu theo loại ─────────────────────────────────────
 export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warn' | 'error';
 export function Badge(props: {

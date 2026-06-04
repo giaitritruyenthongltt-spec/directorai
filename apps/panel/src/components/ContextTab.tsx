@@ -12,6 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { wsClient } from '../bridge/ws-client.js';
 import { useSession } from '../state/session.js';
 import { Icon, type IconName } from './Icon.js';
+import { ClickBox } from './ui/primitives.js';
 import './ContextTab.css';
 
 interface Health {
@@ -154,7 +155,7 @@ export function ContextTab(): React.ReactElement {
         />
         <div className="ctx-actions">
           {ACTIONS.map((a) => (
-            <button
+            <ClickBox
               key={a.key}
               className="ctx-action-btn"
               disabled={!canRun}
@@ -163,7 +164,7 @@ export function ContextTab(): React.ReactElement {
             >
               <Icon name={a.icon} size={16} />
               <span>{a.label}</span>
-            </button>
+            </ClickBox>
           ))}
         </div>
       </section>
@@ -183,14 +184,14 @@ export function ContextTab(): React.ReactElement {
               if (e.key === 'Enter' && canSearch) void callSearch();
             }}
           />
-          <button
+          <ClickBox
             className="ctx-search-btn"
             disabled={!canSearch}
             onClick={() => void callSearch()}
           >
             <Icon name="search" size={15} />
             Tìm
-          </button>
+          </ClickBox>
         </div>
       </section>
 
