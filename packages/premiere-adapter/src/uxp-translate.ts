@@ -62,7 +62,13 @@ export async function translateTrack(
     track.getTrackItems(1 /* ANY */, false),
   ]);
 
-  const trackKind: Track['kind'] = mediaType === VIDEO_MEDIA ? 'video' : 'audio';
+  // B2-FIX: getMediaType() khai báo string nhưng PPro26 trả SỐ (MediaType.VIDEO)
+  // → so chuỗi 'Video' luôn false. So thêm với hằng số UXP thật.
+  const videoConst = ppro?.MediaType?.VIDEO;
+  const trackKind: Track['kind'] =
+    mediaType === VIDEO_MEDIA || (videoConst !== undefined && (mediaType as unknown) === videoConst)
+      ? 'video'
+      : 'audio';
   const trackId = `${trackKind}-${index}`;
   const clips: Clip[] = [];
   for (const item of items) {
@@ -185,7 +191,16 @@ export async function translateTrackItem(
     }
   }
 
-  const kind: Clip['kind'] = mediaType === VIDEO_MEDIA ? 'video' : 'audio';
+  // B2-FIX: Premiere 26 trả getMediaType() là SỐ (MediaType.VIDEO), KHÔNG phải
+  // chuỗi 'Video' → so với 'Video' luôn false → MỌI clip thành 'audio'. trackKind
+  // (từ getVideoTrack/getAudioTrack) là nguồn ĐÁNG TIN → ưu tiên; getMediaType
+  // chỉ là fallback (mock trả 'Video').
+  const kind: Clip['kind'] =
+    trackKind === 'video' || trackKind === 'audio'
+      ? trackKind
+      : mediaType === VIDEO_MEDIA
+        ? 'video'
+        : 'audio';
 
   // Premiere 2026 sometimes returns undefined for `nodeId` on the readonly
   // property — try alternate accessors and finally fall back to a synthetic
