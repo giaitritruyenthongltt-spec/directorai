@@ -76,13 +76,16 @@
   --ring-focus: 0 0 0 2px var(--accent-ring);
 }
 
-/* ── Icon = <img> SVG data-URI (UXP render được; <svg> nội tuyến & mask thì
- * KHÔNG). Màu nướng sẵn trong SVG nên đây chỉ canh dòng + kích thước. */
+/* ── Icon = <span> ĐƯỢC set kích thước, bọc <img> PNG fill 100%. ─────────
+ * UXP render PNG trong <img> nhưng KHÔNG tôn trọng width/height TRÊN img →
+ * set kích thước ở span (UXP tôn trọng box span/div), img phủ 100% span. */
 .icon {
   display: inline-block;
   vertical-align: -0.15em;
   flex-shrink: 0;
-  object-fit: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
 }
 /* Quay icon "đang xử lý" (refresh) khi gắn class .spin. */
 .icon.spin {

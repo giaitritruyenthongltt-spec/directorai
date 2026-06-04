@@ -209,31 +209,42 @@ export function App(): React.ReactElement {
         const group = TAB_GROUPS.find((g) => g.tabs.includes(activeTab)) ?? TAB_GROUPS[0]!;
         return (
           <>
-            {/* Tầng 1 — nhóm */}
+            {/* Tầng 1 — nhóm. Dùng <div role=button> (KHÔNG <button>) vì UXP
+                <button> nuốt icon span; <div> render icon đúng. */}
             <nav className="tab-groups">
               {TAB_GROUPS.map((g) => (
-                <button
+                <div
                   key={g.id}
+                  role="button"
+                  tabIndex={0}
                   className={`tab-group-btn ${g.id === group.id ? 'active' : ''}`}
                   onClick={() => setActiveTab(g.tabs[0]!)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') setActiveTab(g.tabs[0]!);
+                  }}
                 >
                   <Icon name={g.icon} size={15} />
                   <span>{g.label}</span>
-                </button>
+                </div>
               ))}
             </nav>
             {/* Tầng 2 — tab con (ẩn nếu nhóm chỉ 1 tab) */}
             {group.tabs.length > 1 && (
               <nav className="tabs">
                 {group.tabs.map((tab) => (
-                  <button
+                  <div
                     key={tab}
+                    role="button"
+                    tabIndex={0}
                     className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
                     onClick={() => setActiveTab(tab)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab);
+                    }}
                   >
                     <Icon name={TAB_META[tab].icon} size={14} />
                     <span>{TAB_META[tab].label}</span>
-                  </button>
+                  </div>
                 ))}
               </nav>
             )}

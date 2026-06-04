@@ -62,15 +62,21 @@ export interface IconProps {
 }
 
 export function Icon({ name, size = 16, className }: IconProps): React.ReactElement {
+  // UXP quirks (đã kiểm chứng bằng chụp màn hình):
+  //  • <svg> nội tuyến & mask & data: URI → KHÔNG render.
+  //  • <img> PNG → render NHƯNG không nhận width/height (phình theo dòng), và
+  //    <img>/<span><img></span> bên trong <button> bị nuốt.
+  // GIẢI: 1 <span> ĐƯỢC set kích thước (UXP sizing span/div đúng) + PNG đặt làm
+  // background-image. Không có thẻ con nên <button> không nuốt; kích thước chuẩn.
   return (
-    <img
+    <span
       className={`icon${className ? ` ${className}` : ''}`}
-      src={`icons/ui/${name}.svg`}
-      width={size}
-      height={size}
-      alt=""
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        backgroundImage: `url("icons/ui/${name}.png")`,
+      }}
       aria-hidden="true"
-      draggable={false}
     />
   );
 }

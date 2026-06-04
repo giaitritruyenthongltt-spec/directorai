@@ -13,9 +13,21 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
+// sharp TÙY CHỌN: chỉ cần khi MUỐN raster lại PNG. Bình thường PNG đã commit
+// sẵn trong icons/ui nên prebuild không cần sharp (tránh lệ thuộc native dep).
+let sharp = null;
+try {
+  sharp = (await import('sharp')).default;
+} catch {
+  console.warn('gen-ui-icons: không có sharp → bỏ qua raster PNG (dùng PNG đã commit).');
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(__dirname, '../apps/panel/icons/ui');
 const COLOR = '#cfd3da'; // đơn sắc sáng, đọc tốt trên nền tối Premiere
+// QUAN TRỌNG: UXP render PNG trong <img> NHƯNG KHÔNG render SVG trong <img>
+// (đã kiểm chứng bằng chụp màn hình). Nên raster SVG → PNG 64px (nét khi thu nhỏ).
+const PX = 64;
 
 /** Markup bên trong <svg> (viewBox 0 0 24 24). Nét đặc dùng fill="#fff". */
 const SHAPES = {
@@ -69,14 +81,20 @@ const SHAPES = {
 };
 
 mkdirSync(OUT, { recursive: true });
+const names = Object.keys(SHAPES);
 let n = 0;
 for (const [name, shape] of Object.entries(SHAPES)) {
   const colored = shape.replaceAll('#fff', COLOR);
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" ` +
     `stroke="${COLOR}" stroke-width="2" stroke-linecap="round" ` +
-    `stroke-linejoin="round">${colored}</svg>\n`;
-  writeFileSync(resolve(OUT, `${name}.svg`), svg, 'utf8');
+    `stroke-linejoin="round">${colored}</svg>`;
+  writeFileSync(resolve(OUT, `${name}.svg`), svg + '\n', 'utf8');
+  // Raster SVG → PNG (UXP chỉ render PNG trong <img>) nếu có sharp.
+  if (sharp) {
+    await sharp(Buffer.from(svg)).resize(PX, PX).png().toFile(resolve(OUT, `${name}.png`));
+  }
   n++;
 }
-console.log(`gen-ui-icons: wrote ${n} svg → ${OUT}`);
+console.log(`gen-ui-icons: wrote ${n} svg + ${n} png (${PX}px) → ${OUT}`);
+console.log(`icons: ${names.join(', ')}`);

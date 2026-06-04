@@ -47,12 +47,26 @@ export function Button(props: {
   iconName?: IconName;
 }): React.ReactElement {
   const v = props.variant ?? 'secondary';
+  const isDisabled = Boolean(props.disabled || props.busy);
+  // UXP <button> NUỐT icon span → dùng <div role=button> (UXP render icon trong
+  // div đúng). Tự lo disabled/keyboard.
   return (
-    <button
+    <div
       className={`ui-btn ui-btn-${v}${props.full ? ' ui-btn-full' : ''}`}
-      onClick={props.onClick}
-      disabled={props.disabled || props.busy}
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+      aria-disabled={isDisabled || undefined}
       title={props.title}
+      style={
+        isDisabled ? { opacity: 0.5, cursor: 'not-allowed', pointerEvents: 'none' } : undefined
+      }
+      onClick={isDisabled ? undefined : props.onClick}
+      onKeyDown={(e) => {
+        if (!isDisabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          props.onClick?.();
+        }
+      }}
     >
       {props.busy ? (
         <span className="ui-spinner" aria-hidden />
@@ -60,7 +74,7 @@ export function Button(props: {
         props.iconName && <Icon name={props.iconName} size={15} />
       )}
       {props.children}
-    </button>
+    </div>
   );
 }
 

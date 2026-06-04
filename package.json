@@ -58,6 +58,9 @@
     "@commitlint/config-conventional": "^19.5.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.7.0",
+    "@types/ws": "^8.5.13",
+    "@types/yauzl": "^2.10.3",
+    "@types/yazl": "^3.3.0",
     "@typescript-eslint/eslint-plugin": "^8.8.0",
     "@typescript-eslint/parser": "^8.8.0",
     "eslint": "^9.12.0",
@@ -73,11 +76,8 @@
     "typescript-eslint": "^8.59.4",
     "vitest": "^2.1.2",
     "ws": "^8.18.0",
-    "@types/ws": "^8.5.13",
-    "yazl": "^3.3.1",
-    "@types/yazl": "^3.3.0",
     "yauzl": "^3.2.0",
-    "@types/yauzl": "^2.10.3"
+    "yazl": "^3.3.1"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
