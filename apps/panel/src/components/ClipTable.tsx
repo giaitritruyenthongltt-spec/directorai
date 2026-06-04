@@ -4,9 +4,14 @@
  * Thay "1 ô textarea" (vỡ khi >500 clip) bằng bảng có Ô LỌC + SẮP XẾP +
  * cuộn. Hiển thị tên/loại/đã-có-path; cảnh báo clip chưa map full path
  * (cần quét thư mục — D4).
+ *
+ * L8 — VIRTUALIZE (windowing): với phim dài hàng trăm clip, render HẾT vào
+ * DOM làm panel giật. Ở đây chỉ render các dòng đang NHÌN THẤY (+ overscan),
+ * dùng 2 hàng "spacer" giữ đúng chiều cao cuộn. Đo chiều cao 1 dòng ĐỘNG để
+ * tính cửa sổ chính xác (không phụ thuộc magic-number theo theme/zoom).
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import './ClipTable.css';
 
 export interface ClipRow {
@@ -19,11 +24,24 @@ export interface ClipRow {
 
 type SortKey = 'name' | 'kind' | 'path';
 
+/** Số dòng đệm trên/dưới khung nhìn (cuộn nhanh không thấy hụt). */
+const OVERSCAN = 8;
+/** Dưới ngưỡng này thì render thẳng (khỏi tính toán cửa sổ). */
+const VIRT_THRESHOLD = 60;
+
 export function ClipTable(props: { clips: ClipRow[]; maxRows?: number }): React.ReactElement {
   const [q, setQ] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [asc, setAsc] = useState(true);
-  const maxRows = props.maxRows ?? 500;
+  // L8 — virtualize gánh được nhiều dòng nên nới trần (trước cứng 500).
+  const maxRows = props.maxRows ?? 2000;
+
+  // ── Trạng thái cuộn/đo cho windowing ────────────────────────────────
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLTableRowElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewH, setViewH] = useState(420);
+  const [rowH, setRowH] = useState(29);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -44,6 +62,43 @@ export function ClipTable(props: { clips: ClipRow[]; maxRows?: number }): React.
 
   const shown = filtered.slice(0, maxRows);
   const resolved = props.clips.filter((c) => c.hasFullPath).length;
+
+  // Theo dõi cuộn + đổi kích thước khung cuộn (ResizeObserver có ở webview UXP).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = (): void => setScrollTop(el.scrollTop);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    const ro = new ResizeObserver(() => setViewH(el.clientHeight || 420));
+    ro.observe(el);
+    setViewH(el.clientHeight || 420);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      ro.disconnect();
+    };
+  }, []);
+
+  // Lọc/sắp xếp đổi → về đầu danh sách (tránh cửa sổ rỗng do scrollTop cũ).
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    setScrollTop(0);
+  }, [q, sortKey, asc]);
+
+  // ── Tính cửa sổ hiển thị ────────────────────────────────────────────
+  const total = shown.length;
+  const virtual = total > VIRT_THRESHOLD;
+  const start = virtual ? Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN) : 0;
+  const visCount = virtual ? Math.ceil(viewH / rowH) + OVERSCAN * 2 : total;
+  const end = virtual ? Math.min(total, start + visCount) : total;
+  const padTop = start * rowH;
+  const padBottom = Math.max(0, (total - end) * rowH);
+  const windowRows = shown.slice(start, end);
+
+  // Đo chiều cao THỰC của 1 dòng (gồm border) → tự hiệu chỉnh theo theme/zoom.
+  useLayoutEffect(() => {
+    const h = measureRef.current?.getBoundingClientRect().height;
+    if (h && Math.abs(h - rowH) > 0.5) setRowH(h);
+  }, [windowRows.length, rowH, virtual]);
 
   const th = (key: SortKey, label: string): React.ReactElement => (
     <th
@@ -74,7 +129,7 @@ export function ClipTable(props: { clips: ClipRow[]; maxRows?: number }): React.
           {filtered.length}/{props.clips.length} clip · {resolved} có path
         </span>
       </div>
-      <div className="clt-scroll">
+      <div className="clt-scroll" ref={scrollRef}>
         <table className="clt-table">
           <thead>
             <tr>
@@ -84,8 +139,13 @@ export function ClipTable(props: { clips: ClipRow[]; maxRows?: number }): React.
             </tr>
           </thead>
           <tbody>
-            {shown.map((c, i) => (
-              <tr key={c.id ?? `${c.name}-${i}`}>
+            {virtual && padTop > 0 && (
+              <tr aria-hidden="true" className="clt-spacer">
+                <td colSpan={3} style={{ height: padTop }} />
+              </tr>
+            )}
+            {windowRows.map((c, i) => (
+              <tr key={c.id ?? `${c.name}-${start + i}`} ref={i === 0 ? measureRef : undefined}>
                 <td className="clt-name" title={c.name}>
                   {c.name}
                 </td>
@@ -95,6 +155,11 @@ export function ClipTable(props: { clips: ClipRow[]; maxRows?: number }): React.
                 </td>
               </tr>
             ))}
+            {virtual && padBottom > 0 && (
+              <tr aria-hidden="true" className="clt-spacer">
+                <td colSpan={3} style={{ height: padBottom }} />
+              </tr>
+            )}
           </tbody>
         </table>
         {filtered.length > maxRows && (

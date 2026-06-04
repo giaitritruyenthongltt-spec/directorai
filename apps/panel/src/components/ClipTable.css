@@ -64,6 +64,15 @@
   padding: var(--sp-3) var(--sp-4);
   border-bottom: 1px solid var(--bg);
 }
+/* L8 — hàng đệm virtualize: chỉ giữ chiều cao, không viền/nền/padding. */
+.clt-spacer td {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.clt-spacer:hover td {
+  background: transparent;
+}
 .clt-table tr:hover td {
   background: var(--ui-bg-hover);
 }
