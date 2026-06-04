@@ -2,7 +2,8 @@
   padding: var(--sp-5) var(--sp-6) 40px;
   color: var(--text);
   font-size: var(--fs-base);
-  max-width: 760px;
+  /* U-Wide — dùng nhiều bề ngang ở panel rộng. */
+  max-width: min(1040px, 100%);
   margin: 0 auto;
 }
 .analysis-intro h2 {
