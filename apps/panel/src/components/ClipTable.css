@@ -32,11 +32,26 @@
   white-space: nowrap;
 }
 
-/* Hộp danh sách clip GỌN: cao ~340px, cuộn riêng (thanh kéo lên/xuống), header
- * sticky. Để cả trang không bị danh sách dài đẩy xuống. */
+/* Hộp danh sách clip: cuộn riêng (thanh kéo), header sticky. max-height đặt
+ * INLINE bằng px (thu gọn 5 dòng / mở rộng 14 dòng) — KHÔNG dùng min()/vh vì
+ * UXP bỏ qua → danh sách từng tràn cả panel. */
 .clt-scroll {
-  max-height: min(340px, 42vh);
   overflow-y: auto;
+}
+/* Toggle thu gọn/mở rộng danh sách. */
+.clt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.clt-toggle:hover {
+  color: var(--text);
 }
 .clt-table {
   width: 100%;

@@ -12,6 +12,8 @@
  */
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Icon } from './Icon.js';
+import { ClickBox } from './ui/primitives.js';
 import './ClipTable.css';
 
 export interface ClipRow {
@@ -33,6 +35,10 @@ export function ClipTable(props: { clips: ClipRow[]; maxRows?: number }): React.
   const [q, setQ] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('name');
   const [asc, setAsc] = useState(true);
+  // Mặc định THU GỌN: chỉ hiện ~5 dòng + cuộn riêng (danh sách dài không
+  // chiếm cả panel). Bấm để mở rộng. (Cap chiều cao dùng px THUẦN vì UXP
+  // KHÔNG hỗ trợ min()/vh trong CSS → cap cũ bị bỏ qua.)
+  const [expanded, setExpanded] = useState(false);
   // L8 — virtualize gánh được nhiều dòng nên nới trần (trước cứng 500).
   const maxRows = props.maxRows ?? 2000;
 
@@ -94,6 +100,12 @@ export function ClipTable(props: { clips: ClipRow[]; maxRows?: number }): React.
   const padBottom = Math.max(0, (total - end) * rowH);
   const windowRows = shown.slice(start, end);
 
+  // Cap chiều cao hộp cuộn (px thuần): thu gọn = 5 dòng, mở rộng = 14 dòng.
+  const COMPACT_ROWS = 5;
+  const HEADER_H = 34;
+  const scrollMaxH = Math.round(HEADER_H + (expanded ? 14 : COMPACT_ROWS) * rowH);
+  const canToggle = total > COMPACT_ROWS;
+
   // Đo chiều cao THỰC của 1 dòng (gồm border) → tự hiệu chỉnh theo theme/zoom.
   useLayoutEffect(() => {
     const h = measureRef.current?.getBoundingClientRect().height;
@@ -128,8 +140,18 @@ export function ClipTable(props: { clips: ClipRow[]; maxRows?: number }): React.
         <span className="clt-count">
           {filtered.length}/{props.clips.length} clip · {resolved} có path
         </span>
+        {canToggle && (
+          <ClickBox
+            className="clt-toggle"
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded ? 'Thu gọn danh sách' : 'Mở rộng danh sách'}
+          >
+            <Icon name={expanded ? 'chevronDown' : 'chevronRight'} size={13} />
+            {expanded ? 'Thu gọn' : `Xem hết (${total})`}
+          </ClickBox>
+        )}
       </div>
-      <div className="clt-scroll" ref={scrollRef}>
+      <div className="clt-scroll" ref={scrollRef} style={{ maxHeight: scrollMaxH }}>
         <table className="clt-table">
           <thead>
             <tr>
