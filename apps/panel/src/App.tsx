@@ -19,6 +19,8 @@ import { AnalysisTab } from './components/AnalysisTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import { SessionProvider } from './state/session.js';
 import { Icon, type IconName } from './components/Icon.js';
+import { LogDrawer } from './components/LogDrawer.js';
+import { initLogCapture, pushLog } from './bridge/log-store.js';
 import './styles/tokens.css';
 import './App.css';
 
@@ -68,6 +70,11 @@ export function App(): React.ReactElement {
         document.documentElement.setAttribute('data-theme', t);
       }
     });
+  }, []);
+
+  // Box log trong panel — bắt console/lỗi để check bug không cần UDT.
+  useEffect(() => {
+    initLogCapture();
   }, []);
 
   // L1 — Send mount lifecycle + global error events to server log
@@ -154,6 +161,8 @@ export function App(): React.ReactElement {
     });
     const unsubLog = wsClient.onLog((entry) => {
       setLogs((prev) => [entry, ...prev].slice(0, 500)); // keep last 500 entries
+      // Đổ vào box Nhật ký vận hành (lọc lỗi/ngữ cảnh nhanh).
+      pushLog(entry.error ? 'error' : 'info', 'ws', entry.error ?? entry.result ?? entry.type);
     });
     wsClient.connect();
     return () => {
@@ -190,13 +199,10 @@ export function App(): React.ReactElement {
       // Everything else → LLM-driven natural-language router on the server
       await wsClient.call('nl.query', { prompt: trimmed });
     } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      pushLog('error', 'cmd', m);
       setLogs((prev) => [
-        {
-          id: String(Date.now()),
-          ts: Date.now(),
-          type: 'error',
-          error: err instanceof Error ? err.message : String(err),
-        },
+        { id: String(Date.now()), ts: Date.now(), type: 'error', error: m },
         ...prev,
       ]);
     }
@@ -262,6 +268,7 @@ export function App(): React.ReactElement {
         </main>
       </SessionProvider>
       <ProgressBar />
+      <LogDrawer />
       <CommandBar onSubmit={handleCommand} disabled={connState !== 'connected'} />
       <StatusBar connState={connState} />
       <FirstRunWizard />
