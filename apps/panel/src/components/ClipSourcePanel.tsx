@@ -7,19 +7,25 @@
 import React from 'react';
 import { useSession } from '../state/session.js';
 import { Section, Button, Badge, EmptyState } from './ui/primitives.js';
+import { Icon } from './Icon.js';
 import { ClipTable } from './ClipTable.js';
 
 export function ClipSourcePanel(props: { title?: string }): React.ReactElement {
   const s = useSession();
 
   return (
-    <Section title={props.title ?? '1. Nguồn clip'} icon="🎞️">
+    <Section title={props.title ?? '1. Nguồn clip'} iconName="film">
       <div className="film-row">
-        <Button onClick={() => void s.loadClips()} busy={s.loadingClips}>
-          🔄 Nạp lại từ sequence
+        <Button iconName="refresh" onClick={() => void s.loadClips()} busy={s.loadingClips}>
+          Nạp lại từ sequence
         </Button>
-        <Button variant="primary" onClick={() => void s.resolveFromProject()} busy={s.loadingClips}>
-          🎯 Lấy path tự động (từ project)
+        <Button
+          variant="primary"
+          iconName="target"
+          onClick={() => void s.resolveFromProject()}
+          busy={s.loadingClips}
+        >
+          Lấy path tự động (từ project)
         </Button>
         {s.seqName && (
           <Badge tone="accent" title="Sequence đang mở">
@@ -43,25 +49,29 @@ export function ClipSourcePanel(props: { title?: string }): React.ReactElement {
             onChange={(e) => s.setFolderText(e.target.value)}
             rows={2}
           />
-          <Button onClick={() => void s.scanFolders()} busy={s.loadingClips}>
-            🔍 Quét thư mục → map path
+          <Button iconName="search" onClick={() => void s.scanFolders()} busy={s.loadingClips}>
+            Quét thư mục → map path
           </Button>
         </div>
       </details>
 
-      {s.clipError && <div className="ui-error">⚠️ {s.clipError}</div>}
+      {s.clipError && (
+        <div className="ui-error">
+          <Icon name="alert" size={15} /> {s.clipError}
+        </div>
+      )}
 
       {s.clips.length > 0 ? (
         <ClipTable clips={s.clips} />
       ) : s.conn !== 'connected' ? (
         <EmptyState
-          icon="🔌"
+          iconName="refresh"
           title="Đang kết nối Premiere…"
           hint="Chờ panel kết nối rồi tự nạp clip. Nếu lâu, bấm Nạp lại."
         />
       ) : (
         <EmptyState
-          icon="📭"
+          iconName="folder"
           title="Chưa có clip"
           hint="Mở 1 sequence trong Premiere rồi bấm Nạp lại."
         />

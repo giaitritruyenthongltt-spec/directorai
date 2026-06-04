@@ -10,6 +10,7 @@ import { NERF_TEMPLATES, type EditTemplate } from '@directorai/modules';
 import { wsClient } from '../bridge/ws-client.js';
 import { useSession, type SessionPlan } from '../state/session.js';
 import { Section, Button, ErrorBox } from './ui/primitives.js';
+import { Icon } from './Icon.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
 import { ChapterTimeline } from './ChapterTimeline.js';
 import './FilmTab.css';
@@ -58,7 +59,7 @@ export function FilmTab(): React.ReactElement {
   // ── Lập kế hoạch phim (planner LF) — dùng clip path đã map ở context ───────
   const buildPlan = async (): Promise<void> => {
     if (clipPaths.length === 0) {
-      setError('Chưa có clip nào có đường dẫn — bấm "🎯 Lấy path tự động" ở mục Nguồn clip.');
+      setError('Chưa có clip nào có đường dẫn — bấm "Lấy path tự động" ở mục Nguồn clip.');
       return;
     }
     if (!tpl) {
@@ -90,7 +91,7 @@ export function FilmTab(): React.ReactElement {
   // ── Cắt dead-air ──────────────────────────────────────────────────────────
   const planDeadAir = async (): Promise<void> => {
     if (clipPaths.length === 0) {
-      setError('Chưa có clip có đường dẫn — bấm "🎯 Lấy path tự động" ở mục Nguồn clip.');
+      setError('Chưa có clip có đường dẫn — bấm "Lấy path tự động" ở mục Nguồn clip.');
       return;
     }
     setBusy('deadair');
@@ -151,7 +152,9 @@ export function FilmTab(): React.ReactElement {
   return (
     <div className="film-tab">
       <div className="film-intro">
-        <h2>🎬 Dựng phim Nerf dài</h2>
+        <h2>
+          <Icon name="film" size={18} /> Dựng phim Nerf dài
+        </h2>
         <p className="film-sub">
           Nạp clip → chọn kiểu phim → lập kế hoạch theo chương → cắt khoảng chết → duyệt → ghi. An
           toàn, hoàn tác được.
@@ -164,7 +167,7 @@ export function FilmTab(): React.ReactElement {
       <ClipSourcePanel />
 
       {/* 2. Kiểu phim */}
-      <Section title="2. Kiểu phim" icon="🎭">
+      <Section title="2. Kiểu phim" iconName="clapperboard">
         <div className="film-templates">
           {LONG_TEMPLATES.map((t) => (
             <button
@@ -182,29 +185,31 @@ export function FilmTab(): React.ReactElement {
       </Section>
 
       {/* 3. Lập kế hoạch */}
-      <Section title="3. Lập kế hoạch" icon="🧠">
+      <Section title="3. Lập kế hoạch" iconName="sparkles">
         <div className="film-row">
           <Button
             variant="primary"
+            iconName="sparkles"
             onClick={() => void buildPlan()}
             busy={busy === 'plan'}
             disabled={!clipPaths.length}
           >
-            🎬 Lập kế hoạch phim
+            Lập kế hoạch phim
           </Button>
           <Button
+            iconName="scissors"
             onClick={() => void planDeadAir()}
             busy={busy === 'deadair'}
             disabled={!clipPaths.length}
           >
-            ✂️ Cắt khoảng chết (dead-air)
+            Cắt khoảng chết (dead-air)
           </Button>
         </div>
 
         {deadAir && (
           <div className="film-deadair">
-            ✂️ Cắt dead-air: tỉa <b>{deadAir.trims}</b> clip · ẩn <b>{deadAir.disables}</b> clip ·
-            bỏ ~<b>{fmt(deadAir.saved)}</b> thời lượng chết.
+            <Icon name="scissors" size={14} /> Cắt dead-air: tỉa <b>{deadAir.trims}</b> clip · ẩn{' '}
+            <b>{deadAir.disables}</b> clip · bỏ ~<b>{fmt(deadAir.saved)}</b> thời lượng chết.
           </div>
         )}
 
@@ -228,7 +233,7 @@ export function FilmTab(): React.ReactElement {
 
       {/* 4. Duyệt & Ghi */}
       {plan && (
-        <Section title="4. Duyệt & Ghi" icon="✅">
+        <Section title="4. Duyệt & Ghi" iconName="check">
           {plan.steps && plan.steps.length > 0 && (
             <div className="film-steps">
               <div className="film-steps-head">
@@ -255,16 +260,22 @@ export function FilmTab(): React.ReactElement {
             </div>
           )}
           <div className="film-row">
-            <Button onClick={() => void apply(false)} busy={busy === 'preview'}>
-              👀 Xem trước
+            <Button iconName="eye" onClick={() => void apply(false)} busy={busy === 'preview'}>
+              Xem trước
             </Button>
-            <Button variant="primary" onClick={() => void apply(true)} busy={busy === 'apply'}>
-              ✍️ Duyệt & Ghi
+            <Button
+              variant="primary"
+              iconName="check"
+              onClick={() => void apply(true)}
+              busy={busy === 'apply'}
+            >
+              Duyệt & Ghi
             </Button>
           </div>
           {applyRes && (
             <div className="film-result">
-              {applyRes.dryRun ? '🔵 Xem trước' : '🟢 Đã ghi'}: {applyRes.applied} áp dụng ·{' '}
+              <Icon name={applyRes.dryRun ? 'eye' : 'check'} size={14} />{' '}
+              {applyRes.dryRun ? 'Xem trước' : 'Đã ghi'}: {applyRes.applied} áp dụng ·{' '}
               {applyRes.failed} lỗi · {applyRes.deferred} hoãn / {applyRes.total} bước.
               {applyRes.approvalNote && <div className="film-note">{applyRes.approvalNote}</div>}
             </div>

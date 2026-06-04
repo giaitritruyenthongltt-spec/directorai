@@ -17,6 +17,7 @@ import { wsClient } from '../bridge/ws-client.js';
 import { useSession } from '../state/session.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
 import { HelpButton } from './HelpButton.js';
+import { Icon } from './Icon.js';
 import './AutoTab.css';
 
 const MODULES = MODULE_REGISTRY.map(moduleInfo);
@@ -42,12 +43,13 @@ interface ApplyResponse {
   plan: { goal_understanding: string; strategy: string };
 }
 
-const STATUS_ICON: Record<StepStatus, string> = {
-  'dry-run': '🔵',
-  deferred: '🟡',
-  skipped: '⚪',
-  applied: '🟢',
-  failed: '🔴',
+/** R6 — chấm màu trạng thái (CSS) thay emoji 🔵🟡 (tránh tofu). */
+const STATUS_COLOR: Record<StepStatus, string> = {
+  'dry-run': 'var(--accent)',
+  deferred: 'var(--warn)',
+  skipped: 'var(--text-dim)',
+  applied: 'var(--success)',
+  failed: 'var(--error)',
 };
 
 export function AutoTab(): React.ReactElement {
@@ -104,7 +106,7 @@ export function AutoTab(): React.ReactElement {
   const run = async (dryRun: boolean, approved: boolean): Promise<void> => {
     setError(null);
     if (clipPaths.length === 0) {
-      setError('Chưa có clip có đường dẫn — bấm "🎯 Lấy path tự động" ở mục Nguồn clip.');
+      setError('Chưa có clip có đường dẫn — bấm "Lấy path tự động" ở mục Nguồn clip.');
       return;
     }
     const goal = buildGoal();
@@ -147,15 +149,21 @@ export function AutoTab(): React.ReactElement {
       <ul className="auto-steps">
         {r.results.map((st) => (
           <li key={st.order} className={`auto-step status-${st.status}`}>
-            <span className="auto-step-icon">{STATUS_ICON[st.status] ?? '•'}</span>
+            <span
+              className="auto-step-dot"
+              style={{ background: STATUS_COLOR[st.status] ?? 'var(--text-dim)' }}
+            />
             <span className="auto-step-action">{st.action}</span>
             <span className="auto-step-detail">{st.detail}</span>
           </li>
         ))}
       </ul>
       <div className="auto-counts">
-        🔵 xem {r.dryRunCount} · 🟢 ghi {r.applied} · 🟡 hoãn {r.deferred} · ⚪ bỏ {r.skipped} · 🔴
-        lỗi {r.failed}
+        <span className="auto-dot" style={{ background: 'var(--accent)' }} /> xem {r.dryRunCount} ·{' '}
+        <span className="auto-dot" style={{ background: 'var(--success)' }} /> ghi {r.applied} ·{' '}
+        <span className="auto-dot" style={{ background: 'var(--warn)' }} /> hoãn {r.deferred} ·{' '}
+        <span className="auto-dot" style={{ background: 'var(--text-dim)' }} /> bỏ {r.skipped} ·{' '}
+        <span className="auto-dot" style={{ background: 'var(--error)' }} /> lỗi {r.failed}
       </div>
       {r.approvalNote && <div className="auto-approval-note">⚠ {r.approvalNote}</div>}
     </div>
@@ -165,7 +173,7 @@ export function AutoTab(): React.ReactElement {
     <div className="auto-tab">
       <div className="auto-intro">
         <h2>
-          ⚡ Chế độ Tự động
+          <Icon name="zap" size={18} /> Chế độ Tự động
           <HelpButton
             title="Chế độ Tự động hoạt động thế nào?"
             lines={[
@@ -181,7 +189,9 @@ export function AutoTab(): React.ReactElement {
       </div>
 
       <section className="auto-section">
-        <div className="auto-section-title">🎯 Mẫu nhanh (1-click)</div>
+        <div className="auto-section-title">
+          <Icon name="sparkles" size={15} /> Mẫu nhanh (1-click)
+        </div>
         <div className="auto-templates">
           {NERF_TEMPLATES.map((t) => (
             <button
@@ -252,11 +262,23 @@ export function AutoTab(): React.ReactElement {
         />
       </section>
 
-      {error && <div className="auto-error">✗ {error}</div>}
+      {error && (
+        <div className="auto-error">
+          <Icon name="alert" size={15} /> {error}
+        </div>
+      )}
 
       <div className="auto-actions">
         <button className="auto-btn preview" disabled={busy} onClick={() => void run(true, false)}>
-          {busy && !applied ? '⏳ Đang lập kế hoạch…' : '👁 Xem trước (không ghi)'}
+          {busy && !applied ? (
+            <>
+              <Icon name="refresh" size={15} className="spin" /> Đang lập kế hoạch…
+            </>
+          ) : (
+            <>
+              <Icon name="eye" size={15} /> Xem trước (không ghi)
+            </>
+          )}
         </button>
         <button
           className="auto-btn apply"
@@ -268,12 +290,12 @@ export function AutoTab(): React.ReactElement {
             }
           }}
         >
-          ✅ Duyệt &amp; Ghi
+          <Icon name="check" size={15} /> Duyệt &amp; Ghi
         </button>
       </div>
 
-      {preview && !applied && renderResult(preview, '👁 Xem trước (chưa ghi gì)')}
-      {applied && renderResult(applied, '✅ Đã thực thi')}
+      {preview && !applied && renderResult(preview, 'Xem trước (chưa ghi gì)')}
+      {applied && renderResult(applied, 'Đã thực thi')}
     </div>
   );
 }

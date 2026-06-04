@@ -6,12 +6,15 @@
  */
 
 import React from 'react';
+import { Icon, type IconName } from '../Icon.js';
 import './primitives.css';
 
 // ─── Section: hộp có tiêu đề ───────────────────────────────────────────────
+// R6 — ưu tiên iconName (SVG, không tofu); `icon` (emoji) giữ để tương thích cũ.
 export function Section(props: {
   title?: React.ReactNode;
   icon?: string;
+  iconName?: IconName;
   children: React.ReactNode;
   className?: string;
 }): React.ReactElement {
@@ -19,7 +22,11 @@ export function Section(props: {
     <section className={`ui-section ${props.className ?? ''}`}>
       {props.title && (
         <div className="ui-section-title">
-          {props.icon && <span>{props.icon}</span>}
+          {props.iconName ? (
+            <Icon name={props.iconName} size={15} />
+          ) : (
+            props.icon && <span>{props.icon}</span>
+          )}
           <span>{props.title}</span>
         </div>
       )}
@@ -37,6 +44,7 @@ export function Button(props: {
   busy?: boolean;
   title?: string;
   full?: boolean;
+  iconName?: IconName;
 }): React.ReactElement {
   const v = props.variant ?? 'secondary';
   return (
@@ -46,7 +54,11 @@ export function Button(props: {
       disabled={props.disabled || props.busy}
       title={props.title}
     >
-      {props.busy && <span className="ui-spinner" aria-hidden />}
+      {props.busy ? (
+        <span className="ui-spinner" aria-hidden />
+      ) : (
+        props.iconName && <Icon name={props.iconName} size={15} />
+      )}
       {props.children}
     </button>
   );
@@ -69,18 +81,29 @@ export function Badge(props: {
 // ─── ErrorBox ──────────────────────────────────────────────────────────────
 export function ErrorBox(props: { error?: string | null }): React.ReactElement | null {
   if (!props.error) return null;
-  return <div className="ui-error">⚠️ {props.error}</div>;
+  return (
+    <div className="ui-error">
+      <Icon name="alert" size={15} /> {props.error}
+    </div>
+  );
 }
 
 // ─── EmptyState ────────────────────────────────────────────────────────────
 export function EmptyState(props: {
   icon?: string;
+  iconName?: IconName;
   title: string;
   hint?: string;
 }): React.ReactElement {
   return (
     <div className="ui-empty">
-      {props.icon && <div className="ui-empty-icon">{props.icon}</div>}
+      {props.iconName ? (
+        <div className="ui-empty-icon">
+          <Icon name={props.iconName} size={30} />
+        </div>
+      ) : (
+        props.icon && <div className="ui-empty-icon">{props.icon}</div>
+      )}
       <div className="ui-empty-title">{props.title}</div>
       {props.hint && <div className="ui-empty-hint">{props.hint}</div>}
     </div>
