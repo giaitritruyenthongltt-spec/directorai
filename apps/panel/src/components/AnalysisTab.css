@@ -1,8 +1,9 @@
 .analysis-tab {
-  padding: 12px 14px 40px;
+  padding: var(--sp-5) var(--sp-6) 40px;
   color: var(--text);
-  font-size: 13px;
-  overflow-y: auto;
+  font-size: var(--fs-base);
+  max-width: 760px;
+  margin: 0 auto;
 }
 .analysis-intro h2 {
   font-size: 16px;

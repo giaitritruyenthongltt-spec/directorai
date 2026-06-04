@@ -1,13 +1,15 @@
 .app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   background: var(--bg);
 }
 
 /* Tầng 1 — nhóm tab (audit-gộp: 3 nhóm) */
 .tab-groups {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 6px 8px 0;
   background: var(--surface);
@@ -35,6 +37,7 @@
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--border);
   padding: 0 8px;
 }
@@ -65,9 +68,11 @@
   font-style: italic;
 }
 
+/* L1 — main là THANH CUỘN DUY NHẤT (min-height:0 cho phép co trong flex). */
 .main-content {
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .placeholder {

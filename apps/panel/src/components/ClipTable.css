@@ -32,8 +32,9 @@
   white-space: nowrap;
 }
 
+/* L3 — cao theo panel (responsive) thay vì 320px cứng; header đã sticky. */
 .clt-scroll {
-  max-height: 320px;
+  max-height: min(46vh, 460px);
   overflow-y: auto;
 }
 .clt-table {

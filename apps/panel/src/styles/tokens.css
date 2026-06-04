@@ -74,6 +74,29 @@
   --ui-bg-hover: #e8e8e8;
 }
 
+/* L5 — Thanh cuộn MỎNG theo theme (thay scrollbar webview mặc định to/xấu). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+  background-clip: content-box;
+}
+
 @media (prefers-color-scheme: light) {
   /* Chỉ áp khi KHÔNG ép theme thủ công (data-theme rỗng). */
   :root:not([data-theme]) {

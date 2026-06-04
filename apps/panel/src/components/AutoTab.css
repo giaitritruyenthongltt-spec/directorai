@@ -1,8 +1,10 @@
 .auto-tab {
-  padding: 12px 14px 40px;
+  padding: var(--sp-5) var(--sp-6) 40px;
   color: var(--text);
-  font-size: 13px;
-  overflow-y: auto;
+  font-size: var(--fs-base);
+  /* L4 — căn giữa, không dãn trống khi dock rộng. Cuộn do .main-content. */
+  max-width: 760px;
+  margin: 0 auto;
 }
 
 .auto-intro h2 {
