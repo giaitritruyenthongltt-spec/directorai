@@ -24,7 +24,11 @@ export function CommandBar({ onSubmit, disabled }: Props): React.ReactElement {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={disabled ? 'Connecting…' : 'get project  /  list sequences  /  list clips'}
+        placeholder={
+          disabled
+            ? 'Đang kết nối…'
+            : '💬 Hỏi/ra lệnh tiếng Việt rồi Enter (KHÔNG phải nút Chạy — nút Chạy ở trong tab)'
+        }
         disabled={disabled}
       />
       <button
