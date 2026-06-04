@@ -23,12 +23,21 @@
 }
 
 .wf-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3, 6px);
   font-weight: 600;
 }
 
 .wf-header-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2, 4px);
   font-size: 11px;
   color: var(--ui-text-secondary, #969696);
+}
+.wf-chev-open {
+  transform: rotate(180deg);
 }
 
 .wf-steps {
@@ -71,10 +80,18 @@
 }
 
 .wf-step-icon {
-  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
-  text-align: center;
   flex-shrink: 0;
+  color: var(--accent, #5b9bd5);
+}
+.wf-step.active .wf-step-icon {
+  color: #818cf8;
+}
+.wf-step.done .wf-step-icon {
+  color: #34d399;
 }
 
 .wf-step-body {
@@ -104,8 +121,10 @@
 }
 
 .wf-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ui-text-secondary, #6b7280);
-  font-size: 13px;
   line-height: 1;
   margin: 1px 0;
 }

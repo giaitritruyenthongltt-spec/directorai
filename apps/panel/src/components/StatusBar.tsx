@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { ConnectionState } from '../bridge/ws-client.js';
 import { wsClient } from '../bridge/ws-client.js';
 import { isInUXP, readActiveContext } from '../bridge/uxp-api.js';
+import { Icon } from './Icon.js';
 import './StatusBar.css';
 
 interface Props {
@@ -64,14 +65,16 @@ export function StatusBar({ connState }: Props): React.ReactElement {
 
   return (
     <div className="status-bar">
-      <span className="status-item">{isInUXP ? '⚡ Premiere' : '🔷 Giả lập'}</span>
+      <span className="status-item">
+        <Icon name={isInUXP ? 'zap' : 'layers'} size={12} /> {isInUXP ? 'Premiere' : 'Giả lập'}
+      </span>
       <span className="status-sep">|</span>
       <span className="status-item" title="Dự án đang mở">
-        📁 {project}
+        <Icon name="folder" size={12} /> {project}
       </span>
       <span className="status-sep">|</span>
       <span className="status-item" title="Sequence đang chọn">
-        🎬 {sequence}
+        <Icon name="film" size={12} /> {sequence}
       </span>
       <span className="status-sep">|</span>
       <span className="status-item" style={{ opacity: 0.6 }}>

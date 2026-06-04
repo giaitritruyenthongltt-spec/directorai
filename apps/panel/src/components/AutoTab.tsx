@@ -140,10 +140,16 @@ export function AutoTab(): React.ReactElement {
       <div className="auto-result-head">{title}</div>
       <div className="auto-plan-summary">
         <div>
-          <strong>🧠 Hiểu mục tiêu:</strong> {r.plan?.goal_understanding}
+          <strong>
+            <Icon name="sparkles" size={13} /> Hiểu mục tiêu:
+          </strong>{' '}
+          {r.plan?.goal_understanding}
         </div>
         <div>
-          <strong>♟ Chiến lược:</strong> {r.plan?.strategy}
+          <strong>
+            <Icon name="target" size={13} /> Chiến lược:
+          </strong>{' '}
+          {r.plan?.strategy}
         </div>
       </div>
       <ul className="auto-steps">
@@ -165,7 +171,11 @@ export function AutoTab(): React.ReactElement {
         <span className="auto-dot" style={{ background: 'var(--text-dim)' }} /> bỏ {r.skipped} ·{' '}
         <span className="auto-dot" style={{ background: 'var(--error)' }} /> lỗi {r.failed}
       </div>
-      {r.approvalNote && <div className="auto-approval-note">⚠ {r.approvalNote}</div>}
+      {r.approvalNote && (
+        <div className="auto-approval-note">
+          <Icon name="alert" size={13} /> {r.approvalNote}
+        </div>
+      )}
     </div>
   );
 

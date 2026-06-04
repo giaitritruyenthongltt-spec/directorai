@@ -40,8 +40,11 @@
   text-align: right;
 }
 .analysis-error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
   color: var(--error);
-  background: #3a2020;
+  background: var(--error-bg);
   border: 1px solid var(--error);
   border-radius: 6px;
   padding: 8px 10px;
@@ -50,6 +53,10 @@
 }
 .analysis-btn {
   width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
   padding: 10px;
   border-radius: 6px;
   border: 1px solid var(--accent);
@@ -58,6 +65,19 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+/* R7 — nhãn đánh giá clip (icon + chữ) */
+.analysis-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+.analysis-tag.bad {
+  color: var(--warn);
+}
+.analysis-tag.good {
+  color: var(--success);
 }
 .analysis-btn:hover:not(:disabled) {
   background: var(--accent-hover);

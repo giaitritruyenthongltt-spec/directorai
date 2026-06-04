@@ -43,7 +43,9 @@ export type IconName =
   | 'palette'
   | 'layers'
   | 'trash'
-  | 'info';
+  | 'info'
+  | 'pause'
+  | 'stop';
 
 /** Path/shape của mỗi icon (viewBox 0 0 24 24, stroke=currentColor). */
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -225,6 +227,18 @@ const PATHS: Record<IconName, React.ReactNode> = {
     <>
       <circle cx="12" cy="12" r="10" />
       <path d="M12 16v-4M12 8h.01" />
+    </>
+  ),
+  pause: (
+    <>
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+    </>
+  ),
+  stop: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <rect width="6" height="6" x="9" y="9" rx="1" />
     </>
   ),
 };

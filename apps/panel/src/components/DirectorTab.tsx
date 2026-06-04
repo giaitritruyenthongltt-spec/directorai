@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import { wsClient, type ConnectionState } from '../bridge/ws-client.js';
 import { HelpButton } from './HelpButton.js';
 import { WorkflowDiagram } from './WorkflowDiagram.js';
+import { Icon, type IconName } from './Icon.js';
 import './DirectorTab.css';
 
 type Persona = 'cinematic' | 'action' | 'vlog' | 'vintage';
@@ -52,42 +53,50 @@ interface PlanProgress {
 const GOAL_PRESETS: { id: string; label: string; prompt: string }[] = [
   {
     id: 'travel-cinematic',
-    label: '🏞️ Video du lịch — Điện ảnh — 3 phút',
+    label: 'Video du lịch — Điện ảnh — 3 phút',
     prompt: 'Dựng video du lịch phong cách điện ảnh dài khoảng 3 phút, chọn cảnh đẹp nhất',
   },
   {
     id: 'action-montage',
-    label: '⚡ Montage hành động — 60 giây',
+    label: 'Montage hành động — 60 giây',
     prompt: 'Tạo montage hành động nhịp nhanh 60 giây, cắt theo nhịp',
   },
   {
     id: 'remove-lowquality',
-    label: '🧹 Lọc bỏ cảnh chất lượng kém',
+    label: 'Lọc bỏ cảnh chất lượng kém',
     prompt:
       'Phân tích chất lượng từng clip (mờ, thiếu sáng, lệch khung) và xoá các clip chất lượng kém khỏi timeline',
   },
   {
     id: 'cut-silence',
-    label: '🔇 Cắt bỏ khoảng lặng audio',
+    label: 'Cắt bỏ khoảng lặng audio',
     prompt: 'Tìm và cắt bỏ tất cả khoảng lặng dài trên track audio',
   },
   {
     id: 'family-memory',
-    label: '👨‍👩‍👧 Video kỷ niệm gia đình — 1 phút',
+    label: 'Video kỷ niệm gia đình — 1 phút',
     prompt: 'Dựng video kỷ niệm gia đình ấm áp dài 1 phút từ các clip đẹp nhất',
   },
   {
     id: 'custom',
-    label: '✏️ Tự nhập mục tiêu của bạn',
+    label: 'Tự nhập mục tiêu của bạn',
     prompt: '',
   },
 ];
 
 const PERSONA_LABELS: Record<Persona, string> = {
-  cinematic: '🎞️ Điện ảnh',
-  action: '⚡ Hành động',
-  vlog: '📹 Vlog',
-  vintage: '📼 Hoài cổ',
+  cinematic: 'Điện ảnh',
+  action: 'Hành động',
+  vlog: 'Vlog',
+  vintage: 'Hoài cổ',
+};
+
+/** R7 — icon SVG cho từng phong cách (thay emoji tofu). */
+const PERSONA_ICONS: Record<Persona, IconName> = {
+  cinematic: 'film',
+  action: 'zap',
+  vlog: 'mic',
+  vintage: 'image',
 };
 
 const PERSONA_TIPS: Record<Persona, string> = {
@@ -265,10 +274,14 @@ export function DirectorTab(): React.ReactElement {
     return (
       <div className="director-tab">
         <header className="director-header">
-          <h2>🎬 Đạo diễn AI</h2>
+          <h2>
+            <Icon name="clapperboard" size={18} /> Đạo diễn AI
+          </h2>
         </header>
         <div className="director-offline">
-          <div className="director-offline-icon">📡</div>
+          <div className="director-offline-icon">
+            <Icon name="refresh" size={32} className="spin" />
+          </div>
           <h3>Đang kết nối tới máy chủ DirectorAI…</h3>
           <p>
             Trạng thái: <code>{wsState}</code>
@@ -288,7 +301,9 @@ export function DirectorTab(): React.ReactElement {
   return (
     <div className="director-tab">
       <header className="director-header">
-        <h2>🎬 Đạo diễn AI</h2>
+        <h2>
+          <Icon name="clapperboard" size={18} /> Đạo diễn AI
+        </h2>
         <p className="director-sub">
           Mô tả video bạn muốn — AI sẽ lập kế hoạch rồi dựng giúp bạn ngay trên timeline.
         </p>
@@ -354,7 +369,9 @@ export function DirectorTab(): React.ReactElement {
               onClick={() => setPersona(p)}
               disabled={busy}
             >
-              <span className="director-persona-name">{PERSONA_LABELS[p]}</span>
+              <span className="director-persona-name">
+                <Icon name={PERSONA_ICONS[p]} size={15} /> {PERSONA_LABELS[p]}
+              </span>
               <span className="director-persona-tip">{PERSONA_TIPS[p]}</span>
             </button>
           ))}
@@ -374,7 +391,16 @@ export function DirectorTab(): React.ReactElement {
           />
         </div>
         <button className="director-primary" onClick={() => void generate()} disabled={busy}>
-          {busy && !plan ? `⏳ Đang tạo kế hoạch… ${planningElapsed}s` : '✨ Tạo kế hoạch'}
+          {busy && !plan ? (
+            <>
+              <Icon name="refresh" size={15} className="spin" /> Đang tạo kế hoạch…{' '}
+              {planningElapsed}s
+            </>
+          ) : (
+            <>
+              <Icon name="sparkles" size={15} /> Tạo kế hoạch
+            </>
+          )}
         </button>
         {error && (
           <div className="director-error">
@@ -395,14 +421,14 @@ export function DirectorTab(): React.ReactElement {
               title="Kế hoạch dựng"
               lines={[
                 'Mỗi dòng là một thao tác AI sẽ thực hiện trên timeline.',
-                '⏸ = điểm dừng để bạn kiểm tra. ✓ = xong. ✗ = lỗi.',
+                'Biểu tượng tạm dừng = điểm dừng kiểm tra · dấu tích = xong · dấu X = lỗi.',
                 'Bấm "Chạy kế hoạch" để AI bắt đầu thực thi tự động.',
               ]}
             />
           </div>
           <p className="director-plan-meta">
-            ⏱ ~{plan.estimatedMinutes} phút · {plan.steps.length} bước ·{' '}
-            {PERSONA_LABELS[plan.persona]}
+            <Icon name="clock" size={13} /> ~{plan.estimatedMinutes} phút · {plan.steps.length} bước
+            · <Icon name={PERSONA_ICONS[plan.persona]} size={13} /> {PERSONA_LABELS[plan.persona]}
           </p>
           {plan.note && <p className="director-plan-note">{plan.note}</p>}
           <ol className="director-steps">
@@ -420,18 +446,30 @@ export function DirectorTab(): React.ReactElement {
               return (
                 <li key={s.id} className={classes}>
                   <span className="director-step-id">
-                    {resultsForStep?.ok ? '✓' : resultsForStep ? '✗' : isCurrent ? '▶' : s.id}
+                    {resultsForStep?.ok ? (
+                      <Icon name="check" size={14} />
+                    ) : resultsForStep ? (
+                      <Icon name="x" size={14} />
+                    ) : isCurrent ? (
+                      <Icon name="play" size={12} />
+                    ) : (
+                      s.id
+                    )}
                   </span>
                   <div className="director-step-body">
                     <span className="director-step-tool">{toolLabel(s.tool)}</span>
                     <span className="director-step-why">{s.why}</span>
                     {resultsForStep && !resultsForStep.ok && resultsForStep.error && (
                       <span className="director-step-err" title={resultsForStep.error}>
-                        ⚠ {resultsForStep.error.slice(0, 80)}
+                        <Icon name="alert" size={12} /> {resultsForStep.error.slice(0, 80)}
                       </span>
                     )}
                   </div>
-                  {s.checkpoint && <span className="director-step-cp">⏸</span>}
+                  {s.checkpoint && (
+                    <span className="director-step-cp" title="Điểm dừng kiểm tra">
+                      <Icon name="pause" size={12} />
+                    </span>
+                  )}
                 </li>
               );
             })}
@@ -439,7 +477,7 @@ export function DirectorTab(): React.ReactElement {
           {!progress && (
             <div className="director-plan-actions">
               <button className="director-primary" onClick={() => void execute()} disabled={busy}>
-                ▶ Chạy kế hoạch
+                <Icon name="play" size={15} /> Chạy kế hoạch
               </button>
               <button className="director-secondary" onClick={reset}>
                 Huỷ
@@ -474,7 +512,7 @@ export function DirectorTab(): React.ReactElement {
           </div>
           {progress.status === 'running' && (
             <button className="director-secondary" onClick={() => void cancel()}>
-              ⏹ Dừng
+              <Icon name="stop" size={15} /> Dừng
             </button>
           )}
           {(progress.status === 'done' ||
@@ -482,7 +520,7 @@ export function DirectorTab(): React.ReactElement {
             progress.status === 'cancelled') && (
             <>
               <button className="director-secondary" onClick={reset}>
-                🔄 Kế hoạch mới
+                <Icon name="refresh" size={15} /> Kế hoạch mới
               </button>
               <div className="director-refine">
                 <div className="director-label-row">
@@ -509,7 +547,7 @@ export function DirectorTab(): React.ReactElement {
                   onClick={() => void refine()}
                   disabled={busy || !feedback.trim()}
                 >
-                  🔁 Tinh chỉnh
+                  <Icon name="wand" size={15} /> Tinh chỉnh
                 </button>
               </div>
             </>
@@ -529,10 +567,10 @@ function progressLabel(status: PlanStatus): string {
     case 'paused':
       return 'tạm dừng';
     case 'done':
-      return '✅ hoàn thành';
+      return 'hoàn thành';
     case 'cancelled':
       return 'đã huỷ';
     case 'error':
-      return '❌ có lỗi';
+      return 'có lỗi';
   }
 }

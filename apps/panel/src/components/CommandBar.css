@@ -33,12 +33,14 @@
 }
 
 .send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--accent);
   border: none;
   border-radius: 4px;
   color: #fff;
   cursor: pointer;
-  font-size: 12px;
   padding: 0 12px;
   transition: background 0.15s;
 }

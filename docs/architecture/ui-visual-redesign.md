@@ -48,16 +48,19 @@ Nguyên tắc:
 
 ## 4. Danh sách phase (nhóm R — Visual redesign)
 
-| #      | Việc                                                                                 | Trạng thái |
-| ------ | ------------------------------------------------------------------------------------ | ---------- |
-| **R1** | Hệ icon SVG `Icon.tsx` (Lucide-style, ~30 icon) — sửa gốc tofu                       | ✅ xong    |
-| **R2** | Nâng `tokens.css`: elevation (layer-1/2/3), accent ramp, focus ring, shadow, `.icon` | ✅ xong    |
-| **R3** | Nav nhóm + tab dùng icon, segmented control, bỏ UPPERCASE                            | ✅ xong    |
-| **R4** | Header: logo icon clapperboard + chấm trạng thái màu (pulse)                         | ✅ xong    |
-| **R5** | Việt hóa + dựng lại tab Nâng cao (thẻ + icon + empty state)                          | ✅ xong    |
-| **R6** | Thay emoji structural trong FilmTab/AutoTab (section header, nút) bằng Icon          | ⏳ sau     |
-| **R7** | Thay emoji trong DirectorTab/AnalysisTab + nút chính dùng `--grad-accent`            | ⏳ sau     |
-| **R8** | CommandBar/StatusBar/ProgressBar dùng Icon + polish nhịp                             | ⏳ sau     |
+| #      | Việc                                                                                                | Trạng thái |
+| ------ | --------------------------------------------------------------------------------------------------- | ---------- |
+| **R1** | Hệ icon SVG `Icon.tsx` (Lucide-style, ~30 icon) — sửa gốc tofu                                      | ✅ xong    |
+| **R2** | Nâng `tokens.css`: elevation (layer-1/2/3), accent ramp, focus ring, shadow, `.icon`                | ✅ xong    |
+| **R3** | Nav nhóm + tab dùng icon, segmented control, bỏ UPPERCASE                                           | ✅ xong    |
+| **R4** | Header: logo icon clapperboard + chấm trạng thái màu (pulse)                                        | ✅ xong    |
+| **R5** | Việt hóa + dựng lại tab Nâng cao (thẻ + icon + empty state)                                         | ✅ xong    |
+| **R6** | FilmTab/AutoTab/ClipSourcePanel dùng Icon (primitive nhận iconName); trạng thái 🔵🟡 → chấm màu CSS | ✅ xong    |
+| **R7** | DirectorTab + WorkflowDiagram + AnalysisTab: icon bước/nút/persona; bỏ emoji select                 | ✅ xong    |
+| **R8** | CommandBar (nút gửi) + StatusBar dùng Icon                                                          | ✅ xong    |
+
+> Còn lại (tùy chọn): emoji trong dữ liệu template/module (`@directorai/modules`)
+> và các modal một-lần (ConsentDialog/Wizard/Tour) — ít hiển thị, để pha sau nếu cần.
 
 ## 5. Tiêu chí "đẹp & xong"
 

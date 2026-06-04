@@ -12,6 +12,7 @@ import { basename } from '../bridge/clip-paths.js';
 import { useSession } from '../state/session.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
 import { HelpButton } from './HelpButton.js';
+import { Icon } from './Icon.js';
 import './AnalysisTab.css';
 
 interface Row {
@@ -43,7 +44,7 @@ export function AnalysisTab(): React.ReactElement {
       return;
     }
     if (clipPaths.length === 0) {
-      setError('Chưa có clip có đường dẫn — bấm "🎯 Lấy path tự động" ở mục Nguồn clip.');
+      setError('Chưa có clip có đường dẫn — bấm "Lấy path tự động" ở mục Nguồn clip.');
       return;
     }
     setBusy(true);
@@ -63,7 +64,7 @@ export function AnalysisTab(): React.ReactElement {
     <div className="analysis-tab">
       <div className="analysis-intro">
         <h2>
-          🔍 Báo cáo chất lượng
+          <Icon name="report" size={18} /> Báo cáo chất lượng
           <HelpButton
             title="Báo cáo chất lượng làm gì?"
             lines={[
@@ -80,10 +81,22 @@ export function AnalysisTab(): React.ReactElement {
       {/* Nguồn clip dùng chung — map 1 lần ở bất kỳ tab nào */}
       <ClipSourcePanel title="Nguồn clip (dùng chung mọi tab)" />
 
-      {error && <div className="analysis-error">✗ {error}</div>}
+      {error && (
+        <div className="analysis-error">
+          <Icon name="alert" size={15} /> {error}
+        </div>
+      )}
 
       <button className="analysis-btn" disabled={busy} onClick={() => void run()}>
-        {busy ? '⏳ Đang phân tích…' : '🔍 Phân tích chất lượng'}
+        {busy ? (
+          <>
+            <Icon name="refresh" size={15} className="spin" /> Đang phân tích…
+          </>
+        ) : (
+          <>
+            <Icon name="report" size={15} /> Phân tích chất lượng
+          </>
+        )}
       </button>
 
       {report && (
@@ -108,13 +121,24 @@ export function AnalysisTab(): React.ReactElement {
                   <td title={r.clip_path}>{fname(r.clip_path)}</td>
                   <td>{r.composite}</td>
                   <td>{r.blur}</td>
-                  <td>{r.is_suspect ? '⚠ nghi' : '✓ tốt'}</td>
+                  <td>
+                    {r.is_suspect ? (
+                      <span className="analysis-tag bad">
+                        <Icon name="alert" size={12} /> nghi
+                      </span>
+                    ) : (
+                      <span className="analysis-tag good">
+                        <Icon name="check" size={12} /> tốt
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div className="analysis-files">
-            📄 Đã xuất: <code>{fname(report.csvPath)}</code> + <code>{fname(report.htmlPath)}</code>
+            <Icon name="report" size={14} /> Đã xuất: <code>{fname(report.csvPath)}</code> +{' '}
+            <code>{fname(report.htmlPath)}</code>
             <div className="analysis-files-dir">tại ~/.directorai/reports/</div>
           </div>
         </div>
