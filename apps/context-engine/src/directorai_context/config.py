@@ -61,6 +61,11 @@ class Settings(BaseSettings):
 
     # AI-2 — Gemini text (gộp understandings → bản đồ video, Tầng 3)
     gemini_text_model: str = "gemini-2.5-flash"
+    # AI-3 — trần token OUTPUT cho kế hoạch edit. Phim dài (hàng trăm clip →
+    # nhiều chương + nhiều bước, mỗi bước lặp đường dẫn dài) sinh JSON lớn; 4096
+    # gây MAX_TOKENS → JSON bị cắt → 500. Trần cao chỉ là CAP (không bị tính tiền
+    # nếu không sinh tới); gemini-2.5-flash hỗ trợ tới 65536.
+    gemini_text_max_tokens: int = 16_384
 
     # Cache
     cache_dir: Path = Field(default_factory=lambda: Path.home() / ".directorai" / "cache")

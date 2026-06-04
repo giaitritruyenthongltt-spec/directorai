@@ -146,7 +146,53 @@ def _longform_directive(
     return "\n".join(lines) + "\n"
 
 
-def _gemini_text_request(prompt: str, payload: str, model: str, api_key: str) -> dict:
+def _salvage_truncated_json(text: str) -> dict | None:
+    """Cứu JSON bị CẮT giữa chừng (finishReason=MAX_TOKENS).
+
+    Duyệt ký tự, theo dõi ngăn xếp ngoặc + trạng thái chuỗi; nhớ vị trí ngay
+    SAU mỗi phần tử mảng hoàn chỉnh (đóng `}`/`]` khi cha là mảng). Cắt tới
+    điểm an toàn cuối cùng rồi đóng các ngoặc còn mở → JSON hợp lệ chứa các
+    bước/chương ĐÃ sinh xong (bỏ phần tử dở cuối). Trả None nếu không cứu được.
+    """
+    stack: list[str] = []
+    in_str = False
+    esc = False
+    last_safe = -1
+    safe_stack: list[str] | None = None
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+            # Vừa đóng 1 phần tử mà cha là MẢNG → điểm an toàn (1 step/chapter xong).
+            if stack and stack[-1] == "[":
+                last_safe = i + 1
+                safe_stack = list(stack)
+    if last_safe < 0 or not safe_stack:
+        return None
+    repaired = text[:last_safe]
+    for b in reversed(safe_stack):
+        repaired += "]" if b == "[" else "}"
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        return None
+
+
+def _gemini_text_request(
+    prompt: str, payload: str, model: str, api_key: str, max_tokens: int = 16_384
+) -> dict:
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{model}:generateContent?key={api_key}"
@@ -155,12 +201,12 @@ def _gemini_text_request(prompt: str, payload: str, model: str, api_key: str) ->
         "contents": [{"role": "user", "parts": [{"text": prompt}, {"text": payload}]}],
         "generationConfig": {
             "temperature": 0.3,
-            "maxOutputTokens": 4096,
+            "maxOutputTokens": max_tokens,
             "responseMimeType": "application/json",
             "thinkingConfig": {"thinkingBudget": 0},
         },
     }
-    with httpx.Client(timeout=90.0) as client:
+    with httpx.Client(timeout=120.0) as client:
         resp = client.post(url, json=body)
     if resp.status_code != 200:
         raise RuntimeError(f"Gemini text HTTP {resp.status_code}: {resp.text[:300]}")
@@ -170,15 +216,30 @@ def _gemini_text_request(prompt: str, payload: str, model: str, api_key: str) ->
         block = data.get("promptFeedback", {}).get("blockReason")
         raise RuntimeError(f"Gemini text no candidates (block={block})")
     cand = candidates[0]
+    finish = cand.get("finishReason")
     text = (cand.get("content", {}).get("parts", [{}]) or [{}])[0].get("text", "")
     if not text:
-        raise RuntimeError(f"Gemini text empty (finishReason={cand.get('finishReason')})")
+        raise RuntimeError(f"Gemini text empty (finishReason={finish})")
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
-        raise RuntimeError(
-            f"Gemini text JSON lỗi (finishReason={cand.get('finishReason')}): {e}"
-        ) from e
+        # Bị cắt do chạm trần token → cứu phần đã sinh xong thay vì sập.
+        if finish == "MAX_TOKENS":
+            salvaged = _salvage_truncated_json(text)
+            if salvaged is not None:
+                log.warning(
+                    "edit_plan_truncated_salvaged",
+                    chars=len(text),
+                    steps=len(salvaged.get("steps") or []),
+                    chapters=len(salvaged.get("chapters") or []),
+                )
+                salvaged["_truncated"] = True
+                return salvaged
+            raise RuntimeError(
+                "Kế hoạch quá dài, vượt trần token và không cứu được JSON. "
+                "Hãy giảm số clip (lọc bớt) hoặc tăng CONTEXT_GEMINI_TEXT_MAX_TOKENS."
+            ) from e
+        raise RuntimeError(f"Gemini text JSON lỗi (finishReason={finish}): {e}") from e
 
 
 def _valid_params(action: str, params: dict) -> tuple[bool, str]:
@@ -370,8 +431,21 @@ def build_edit_plan(
         target_sec=target_duration_sec,
         structure=structure,
     )
-    plan = _gemini_text_request(prompt, payload, cfg.gemini_text_model, cfg.gemini_api_key)
+    plan = _gemini_text_request(
+        prompt,
+        payload,
+        cfg.gemini_text_model,
+        cfg.gemini_api_key,
+        cfg.gemini_text_max_tokens,
+    )
+    truncated = bool(plan.pop("_truncated", False))
     plan = _sanitize_plan(plan)
+    if truncated:
+        plan["truncated"] = True
+        plan["truncation_note"] = (
+            "Kế hoạch dài vượt trần token nên chỉ giữ các bước đã sinh xong; "
+            "hãy lọc bớt clip rồi lập lại để có kế hoạch đầy đủ."
+        )
 
     log.info(
         "edit_plan_done",
@@ -379,5 +453,6 @@ def build_edit_plan(
         chapters=len(plan.get("chapters", [])),
         out_of_scope=len(plan.get("out_of_scope", [])),
         rejected=plan.get("rejected_unsafe_steps", 0),
+        truncated=truncated,
     )
     return plan
