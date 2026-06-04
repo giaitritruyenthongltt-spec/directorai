@@ -18,29 +18,30 @@ import { FilmTab } from './components/FilmTab.js';
 import { AnalysisTab } from './components/AnalysisTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import { SessionProvider } from './state/session.js';
+import { Icon, type IconName } from './components/Icon.js';
 import './styles/tokens.css';
 import './App.css';
 
 export type ActiveTab = 'film' | 'auto' | 'analysis' | 'director' | 'chat' | 'context';
 
-/** Nhãn tab tiếng Việt. */
-const TAB_LABELS: Record<ActiveTab, string> = {
-  film: '🎞️ Phim dài',
-  auto: '⚡ Tự động',
-  analysis: '🔍 Báo cáo',
-  director: '🎬 Đạo diễn',
-  chat: '💬 Trò chuyện',
-  context: '📊 Ngữ cảnh',
+/** R1 — Nhãn + ICON (SVG, không tofu) cho từng tab. */
+const TAB_META: Record<ActiveTab, { label: string; icon: IconName }> = {
+  film: { label: 'Phim dài', icon: 'film' },
+  auto: { label: 'Tự động', icon: 'zap' },
+  analysis: { label: 'Báo cáo', icon: 'report' },
+  director: { label: 'Đạo diễn', icon: 'clapperboard' },
+  chat: { label: 'Trò chuyện', icon: 'chat' },
+  context: { label: 'Ngữ cảnh', icon: 'sliders' },
 };
 
 /**
  * Audit-gộp — 3 NHÓM thay vì 7 tab ngang hàng (bỏ Style demo).
  *   Dựng phim (Phim/Tự động/Báo cáo) · Trợ lý (Đạo diễn/Chat) · Nâng cao (Ngữ cảnh).
  */
-const TAB_GROUPS: { id: string; label: string; tabs: ActiveTab[] }[] = [
-  { id: 'build', label: '🎬 Dựng phim', tabs: ['film', 'auto', 'analysis'] },
-  { id: 'assist', label: '🤖 Trợ lý', tabs: ['director', 'chat'] },
-  { id: 'advanced', label: '⚙️ Nâng cao', tabs: ['context'] },
+const TAB_GROUPS: { id: string; label: string; icon: IconName; tabs: ActiveTab[] }[] = [
+  { id: 'build', label: 'Dựng phim', icon: 'film', tabs: ['film', 'auto', 'analysis'] },
+  { id: 'assist', label: 'Trợ lý', icon: 'sparkles', tabs: ['director', 'chat'] },
+  { id: 'advanced', label: 'Nâng cao', icon: 'sliders', tabs: ['context'] },
 ];
 
 /** Restore a checkpoint into the chat log if it was created recently (< 5 min). */
@@ -216,7 +217,8 @@ export function App(): React.ReactElement {
                   className={`tab-group-btn ${g.id === group.id ? 'active' : ''}`}
                   onClick={() => setActiveTab(g.tabs[0]!)}
                 >
-                  {g.label}
+                  <Icon name={g.icon} size={15} />
+                  <span>{g.label}</span>
                 </button>
               ))}
             </nav>
@@ -229,7 +231,8 @@ export function App(): React.ReactElement {
                     className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
                     onClick={() => setActiveTab(tab)}
                   >
-                    {TAB_LABELS[tab]}
+                    <Icon name={TAB_META[tab].icon} size={14} />
+                    <span>{TAB_META[tab].label}</span>
                   </button>
                 ))}
               </nav>

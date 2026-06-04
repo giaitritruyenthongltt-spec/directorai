@@ -2,46 +2,103 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  height: 36px;
-  background: var(--surface);
+  padding: 0 var(--sp-5);
+  height: 38px;
+  background: var(--layer-1);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
+.header-left {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+}
 .logo {
-  font-weight: 600;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-weight: 700;
+  font-size: var(--fs-lg);
+  letter-spacing: 0.2px;
   color: var(--text);
 }
-
+.logo-icon {
+  color: var(--accent);
+}
 .version {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--text-dim);
-  margin-left: 6px;
+  font-weight: 500;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-4);
 }
 
+/* Trạng thái kết nối — chấm màu + nhãn (R4, thay ký tự ● dễ tofu). */
 .conn-state {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+.conn-connected .conn-dot {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-bg);
+}
+.conn-connecting .conn-dot {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px var(--warn-bg);
+  animation: conn-pulse 1s ease-in-out infinite;
+}
+.conn-connected {
+  color: var(--success);
+}
+.conn-error .conn-dot,
+.conn-disconnected .conn-dot {
+  background: var(--error);
+  box-shadow: 0 0 0 3px var(--error-bg);
+}
+.conn-error,
+.conn-disconnected {
+  color: var(--text);
+}
+@keyframes conn-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 
 .reconnect-btn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-ring);
+  border-radius: var(--radius-md);
+  color: var(--accent);
   cursor: pointer;
-  font-size: 11px;
-  padding: 3px 8px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: var(--sp-2) var(--sp-4);
+  transition: background var(--t-fast);
 }
-
 .reconnect-btn:hover {
-  background: var(--border);
-  color: var(--text);
+  background: var(--accent);
+  color: #fff;
 }

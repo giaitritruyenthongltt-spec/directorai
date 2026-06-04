@@ -6,55 +6,62 @@
   background: var(--bg);
 }
 
-/* Tầng 1 — nhóm tab (audit-gộp: 3 nhóm) */
+/* Tầng 1 — nhóm tab (audit-gộp: 3 nhóm). R3 — segmented control có icon. */
 .tab-groups {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 8px 0;
-  background: var(--surface);
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) var(--sp-2);
+  background: var(--layer-1);
+  border-bottom: 1px solid var(--border);
 }
 .tab-group-btn {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   color: var(--text-dim);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-md);
   font-weight: 600;
-  padding: 7px 14px;
-  transition: color 0.15s, background 0.15s;
+  padding: var(--sp-3) var(--sp-5);
+  transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
 }
 .tab-group-btn:hover {
   color: var(--text);
+  background: var(--layer-2);
 }
 .tab-group-btn.active {
   color: var(--accent);
-  background: var(--bg);
-  border-color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent-ring);
 }
 
+/* Tầng 2 — tab con: underline accent + icon. */
 .tabs {
   display: flex;
   flex-wrap: wrap;
+  gap: var(--sp-1);
   border-bottom: 1px solid var(--border);
-  padding: 0 8px;
+  padding: 0 var(--sp-4);
+  background: var(--layer-1);
 }
-
 .tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--text-dim);
   cursor: pointer;
-  font-size: 11px;
-  padding: 8px 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  transition: color 0.15s, border-color 0.15s;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  padding: var(--sp-4);
+  transition: color var(--t-fast), border-color var(--t-fast);
 }
-
 .tab-btn:hover { color: var(--text); }
 .tab-btn.active {
   color: var(--accent);

@@ -55,6 +55,41 @@
 
   /* ── Nhịp chuyển động ────────────────────────────────────────────── */
   --t-fast: 0.15s;
+  --t-med: 0.22s;
+
+  /* ── R2 — LỚP BỀ MẶT (elevation) — chiều sâu thị giác ────────────── */
+  --layer-1: var(--surface); /* thanh điều hướng, header */
+  --layer-2: #353535; /* thẻ nổi (card) trên nền */
+  --layer-3: #3f3f3f; /* hover/raised */
+
+  /* ── R2 — Dải ACCENT + trạng thái (gom, đồng bộ Premiere-blue) ───── */
+  --accent-bg: rgba(91, 155, 213, 0.14); /* nền nhạt theo accent */
+  --accent-ring: rgba(91, 155, 213, 0.45); /* vòng focus */
+  --grad-accent: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  --success-bg: rgba(76, 175, 80, 0.14);
+  --warn-bg: rgba(255, 152, 0, 0.14);
+  --error-bg: rgba(244, 67, 54, 0.14);
+
+  /* ── R2 — Đổ bóng theo độ cao ────────────────────────────────────── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --ring-focus: 0 0 0 2px var(--accent-ring);
+}
+
+/* ── R1 — Icon SVG nội tuyến: canh dòng + không co méo ─────────────── */
+.icon {
+  display: inline-block;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+}
+/* Quay icon "đang xử lý" (refresh) khi gắn class .spin. */
+.icon.spin {
+  animation: icon-spin 0.9s linear infinite;
+}
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /**
