@@ -1,0 +1,40 @@
+=== JOB TEST ĐẦY ĐỦ (live) — sequence đang mở ===
+
+[A] Đọc dự án + nguồn clip
+  PASS  project.get  (6ms) project="PHONG DEP TRUY_6_1.prproj"
+  PASS  project.getActiveSequence  (5ms) seq="tap 11" id=có
+  PASS  context.activeSequenceClips  (8ms) seq="tap 11" total=413 kind={"video":207,"audio":206}
+  PASS  context.resolveFromProject  (32ms) mediaIndexed=202 resolved=171 (video=171)
+
+[B] CV + audio (không Gemini)
+  PASS  context.qualityReport (3)  (3244ms) rows=3 suspects=0 clusters=3
+  PASS  context.planDeadAir (3)  (235ms) trims=2 disables=0 saved=3.4s
+  PASS  context.detectBeats (1)  (227ms) beats=56 tempo=143.5546875
+  PASS  context.clusterClips (5)  (1211ms) clusters=5 reduction=0
+  PASS  context.listEffects  (0ms) effects=60
+  PASS  module.list  (1ms) modules=6
+
+[C] AI Vision (Gemini)
+  PASS  context.understandClip (1)  (3ms) scene=action verdict=keep
+  PASS  context.buildVideoMap (3)  (5319ms) segments=3 key_moments=2
+  PASS  context.buildEditPlan (5, 3 hồi)  (21624ms) steps=15 chapters=2 actions={"rename":5,"trim":5,"move":4,"transition":1}
+
+[D] Preview/dry-run (mọi action execution-ready — KHÔNG mutate)
+  PASS  safe.previewPlan  (4ms) total=15 executable=15
+  PASS  safe.applyPlan DRY-RUN  (4ms) dryRun=true total=15 sẽ-ghi=15 hoãn=0
+
+[E] GHI THẬT (rename 1 clip, verify theo ID, tự hoàn tác)
+  clip thử: "DJI_20251126115630_0119_D.MP4" (id=video-0:66271241836800:DJI_20251126115630_0119_D.MP4, unique=true)
+  PASS  checkpoint.snapshot (an toàn)  (10ms) id=1780625402471_jobtest-before-write
+  PASS  safe.applyPlan rename GHI THẬT  (39ms) applied=1 failed=0
+  PASS  verify rename phản ánh (đếm theo TÊN MỚI)  (299ms) clip mang tên mới = 1 (video)
+  PASS  hoàn tác rename + verify khôi phục  (342ms) đã khôi phục (còn 0 clip tên test)
+
+[F] Hệ thống
+  PASS  checkpoint.list  (1ms) checkpoints=10
+  INFO  marker.list chưa khả dụng (Cannot read properties of undefined (reading 'getMarkers')) — không tính fail
+
+========================================
+KẾT QUẢ: 20/20 PASS
+Ghi timeline: rename=OK · hoàn tác=OK
+========================================
