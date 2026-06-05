@@ -349,8 +349,75 @@ try {
   bad('transition', e.message);
 }
 
+// ── TEST 6 — EFFECT (thêm hiệu ứng video → gỡ) ───────────────────────────────
+console.log('[6] EFFECT (thêm Gaussian Blur 2 rồi gỡ)');
+try {
+  const v = t0.clips.find((c) => c.kind === 'video' && String(c.id).split(':')[0] === 'video-0');
+  const fx0 = await call('effect.list', { clipId: v.id });
+  const ef = await call('effect.apply', { clipId: v.id, effectMatchName: 'AE.ADBE Gaussian Blur 2' });
+  const fx1 = await call('effect.list', { clipId: v.id });
+  const added = fx1.some((e) => /Gaussian/i.test(e.matchName));
+  if (added && fx1.length === fx0.length + 1) ok('effect ghi thật', `Gaussian Blur 2 (${fx0.length}→${fx1.length})`);
+  else bad('effect verify', `count ${fx0.length}→${fx1.length} added=${added}`);
+  dirty = true;
+  await call('effect.remove', { clipId: v.id, effectId: 'AE.ADBE Gaussian Blur 2' });
+  const fx2 = await call('effect.list', { clipId: v.id });
+  if (fx2.length === fx0.length && !fx2.some((e) => /Gaussian/i.test(e.matchName))) {
+    ok('effect hoàn tác', `về ${fx2.length} component`);
+    dirty = false;
+  } else bad('effect hoàn tác', `count=${fx2.length}`);
+  void ef;
+} catch (e) {
+  bad('effect', e.message);
+}
+
+// ── TEST 7 — COLOR (Lumetri exposure → gỡ) ───────────────────────────────────
+console.log('[7] COLOR (setParams Lumetri rồi gỡ)');
+try {
+  const v = t0.clips.find(
+    (c) => c.kind === 'video' && String(c.id).split(':')[0] === 'video-0'
+  );
+  const fx0 = await call('effect.list', { clipId: v.id });
+  await call('color.setParams', { clipId: v.id, exposure: 0.5, contrast: 8 });
+  const fx1 = await call('effect.list', { clipId: v.id });
+  const lum = fx1.some((e) => /Lumetri/i.test(e.matchName));
+  if (lum) ok('color ghi thật', `Lumetri thêm (exposure/contrast)`);
+  else bad('color verify', `không thấy Lumetri (${fx1.map((e) => e.matchName)})`);
+  dirty = true;
+  if (lum) await call('effect.remove', { clipId: v.id, effectId: 'AE.ADBE Lumetri' });
+  const fx2 = await call('effect.list', { clipId: v.id });
+  if (fx2.length === fx0.length && !fx2.some((e) => /Lumetri/i.test(e.matchName))) {
+    ok('color hoàn tác', `gỡ Lumetri → ${fx2.length} component`);
+    dirty = false;
+  } else bad('color hoàn tác', `count=${fx2.length}`);
+} catch (e) {
+  bad('color', e.message);
+}
+
+// ── TEST 8 — AUDIO GAIN (set → khôi phục) ────────────────────────────────────
+console.log('[8] AUDIO GAIN (đổi gain rồi khôi phục)');
+try {
+  const a = t0.clips.find((c) => c.kind === 'audio');
+  if (!a) {
+    note('audio gain BỎ QUA', 'không có clip audio');
+  } else {
+    const g0 = await call('audio.getGain', { clipId: a.id });
+    await call('audio.setGain', { clipId: a.id, gainDb: g0 - 6 }); // ghi thật (path action-model)
+    dirty = true;
+    ok('audio gain ghi thật', `setGain chạy (gain gốc ${g0}dB → ${g0 - 6}dB)`);
+    await call('audio.setGain', { clipId: a.id, gainDb: g0 });
+    const g2 = await call('audio.getGain', { clipId: a.id });
+    if (Math.abs(g2 - g0) < 0.2) {
+      ok('audio gain hoàn tác', `gain về ${g2}dB`);
+      dirty = false;
+    } else bad('audio gain hoàn tác', `gain=${g2} (gốc ${g0})`);
+  }
+} catch (e) {
+  bad('audio gain', e.message);
+}
+
 // ── INTEGRITY — toàn timeline về nguyên trạng? ───────────────────────────────
-console.log('[6] INTEGRITY — đối chiếu vân tay toàn timeline');
+console.log('[9] INTEGRITY — đối chiếu vân tay toàn timeline');
 const tEnd = await listClips();
 const endFP = fingerprint(tEnd.clips);
 if (endFP === startFP) {

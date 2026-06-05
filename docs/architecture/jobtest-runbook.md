@@ -43,15 +43,22 @@ path/name cũ vì có thể trùng nhiều clip (video+audio cùng basename).
 cuối cùng đối chiếu "vân tay" toàn timeline (tên/kind/enabled/in-out/start, làm
 tròn 2 số lẻ) để chắc project về NGUYÊN TRẠNG.
 
-| Test           | Ghi thật                             | Verify          | Hoàn tác                  |
-| -------------- | ------------------------------------ | --------------- | ------------------------- |
-| rename         | đổi tên → tên test                   | đếm tên mới = 1 | đổi lại (theo **id mới**) |
-| disable        | tắt clip                             | `enabled=false` | `enable` (id ổn định)     |
-| trim           | cắt OUT vào 0.5s                     | out giảm        | đặt lại in/out gốc        |
-| **move**       | re-pack 2 clip (track nhỏ, tên-uniq) | hoán vị thứ tự  | park-then-place start gốc |
-| **transition** | Additive Dissolve 0.5s đầu clip      | apply không lỗi | `transition.remove`       |
+| Test           | Ghi thật                             | Verify               | Hoàn tác                  |
+| -------------- | ------------------------------------ | -------------------- | ------------------------- |
+| rename         | đổi tên → tên test                   | đếm tên mới = 1      | đổi lại (theo **id mới**) |
+| disable        | tắt clip                             | `enabled=false`      | `enable` (id ổn định)     |
+| trim           | cắt OUT vào 0.5s                     | out giảm             | đặt lại in/out gốc        |
+| **move**       | re-pack 2 clip (track nhỏ, tên-uniq) | hoán vị thứ tự       | park-then-place start gốc |
+| **transition** | Additive Dissolve 0.5s đầu clip      | apply không lỗi      | `transition.remove`       |
+| **effect**     | thêm Gaussian Blur 2                 | đếm component +1     | `effect.remove`           |
+| **color**      | Lumetri setParams (exposure)         | có component Lumetri | `effect.remove` Lumetri   |
+| **audio gain** | setGain(−6dB)                        | path chạy (xem dưới) | setGain về gốc            |
 
-Kết quả tham chiếu (tap 11): **11/11 PASS**, integrity vân tay khớp 100%.
+Kết quả tham chiếu (tap 11): **17/17 PASS**, integrity vân tay khớp 100%.
+
+> **Lưu ý audio gain:** đường ghi (action-model) CHẠY không lỗi và round-trip
+> (set → set-về-gốc) an toàn, NHƯNG `getStartValue()` đọc 0 cả trước/sau set →
+> chưa xác nhận được giá trị THỰC sự đổi (param Level có thể scale ≠ dB). Còn tồn.
 
 ### 4 bug PRODUCT phát hiện + sửa khi build bộ này (đều verify live)
 
@@ -120,6 +127,14 @@ trong 1 executeTransaction không xen await).
 - `transition` ✅ ghi-thật + self-revert (`transition.remove`). Lưu ý: verify dựa
   "apply không lỗi + fingerprint khôi phục" — activeSequenceClips KHÔNG lộ
   transition nên không xác nhận trực tiếp được sự hiện diện.
-- **CHƯA test ghi-thật:** màu Lumetri (`setColorParams`), audio gain/fade
-  (`setAudioGain`/`addAudioFade`), effect apply/remove. Các method này dùng đúng
-  mẫu object-lifetime đã làm hỏng transition → ưu tiên test-write tiếp.
+- ✅ **effect apply/remove, color (Lumetri), audio gain** — ĐÃ test-write +
+  self-revert (17/17). Đều phải rewrite sang component ACTION-MODEL PPro26
+  (`getComponentCount/getComponentAtIndex/createAppend|RemoveComponentAction`,
+  `getMatchName()`, `param.createKeyframe/createSetValueAction/getStartValue`) —
+  đường cũ (`getComponents/insertComponent/.matchName/setValue/addKey`) KHÔNG
+  tồn tại trên 26. Bug phụ: `translateComponent` đọc `.matchName` property →
+  `undefined.toLowerCase()` crash (đã sửa getMatchName()).
+- `audio gain` value-semantics: write-path đúng nhưng `getStartValue` đọc 0 →
+  chưa xác nhận giá trị đổi thật (param Level scale ≠ dB?). Còn tồn.
+- `audio fade` (`addAudioFade`): rewrite action-model (createAddKeyframeAction)
+  nhưng CHƯA test live (keyframe-at-time semantics chưa chắc).
