@@ -88,13 +88,15 @@ try {
   console.log(`    applied=${w1.applied} failed=${w1.failed} deferred=${w1.deferred} (dryRun=${w1.dryRun})`);
   if (w1.applied < 1) throw new Error('không ghi được bước rename (applied=0)');
 
-  // 2) KIỂM TRA: re-list, tìm theo path, xem tên đã đổi chưa
+  // 2) KIỂM TRA: rename thành công ⇔ tồn tại đúng 1 clip mang testName.
+  // KHÔNG đối chiếu theo path/name CŨ vì có thể trùng nhiều clip (video+audio)
+  // → find() trả nhầm clip chưa đổi. (synthetic id cũng đổi theo tên → không
+  // dùng id cũ được.)
   console.log('[2] Kiểm tra tên đã đổi …');
   const seq2 = await call('context.activeSequenceClips', {});
-  const after = seq2.clips.find((c) => (c.path || c.name) === key);
-  const newNameSeen = after?.name;
-  const ok = newNameSeen === testName;
-  console.log(`    tên hiện tại = "${newNameSeen}"  → ${ok ? '✅ ĐÚNG' : '⚠️ chưa thấy đổi'}`);
+  const renamed = seq2.clips.filter((c) => c.name === testName);
+  const ok = renamed.length === 1;
+  console.log(`    clip mang tên mới = ${renamed.length}  → ${ok ? '✅ ĐÚNG' : '⚠️ chưa thấy đổi'}`);
 
   // 3) HOÀN TÁC: đổi lại tên cũ
   console.log(`[3] Hoàn tác: đổi lại → "${origName}" …`);
@@ -112,9 +114,9 @@ try {
   restored = w2.applied >= 1;
 
   const seq3 = await call('context.activeSequenceClips', {});
-  const back = seq3.clips.find((c) => (c.path || c.name) === key);
-  const restoredOk = back?.name === origName;
-  console.log(`    tên sau hoàn tác = "${back?.name}" → ${restoredOk ? '✅ KHÔI PHỤC' : '⚠️ chưa khớp'}`);
+  const stillTest = seq3.clips.filter((c) => c.name === testName).length;
+  const restoredOk = stillTest === 0;
+  console.log(`    còn clip tên test = ${stillTest} → ${restoredOk ? '✅ KHÔI PHỤC' : '⚠️ chưa khớp'}`);
 
   console.log('\n=== KẾT QUẢ ===');
   console.log(`  Ghi thật:    ${w1.applied >= 1 ? '✅' : '❌'}`);

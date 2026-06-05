@@ -121,11 +121,19 @@ export function resolvePlan(
   clips: readonly Clip[],
   sequenceId: string
 ): PlanPreview {
+  // B2-resolver: CHỈ full-path (có separator) vào byFull. Nếu source.path là
+  // basename trần (host không cho full path → cả clip video LẪN audio cùng key
+  // "0530.mp4") thì byFull sẽ ĐÈ IM LẶNG (audio ghi đè video) → khớp nhầm. Để
+  // basename rơi xuống byBase (có cảnh báo + chọn clip ĐẦU = video, do video
+  // track liệt kê trước). Thêm byId để plan nhắm chính xác 1 clip qua id.
+  const hasSep = (p: string): boolean => /[\\/]/.test(p);
   const byFull = new Map<string, Clip>();
+  const byId = new Map<string, Clip>();
   const byBase = new Map<string, Clip[]>();
   for (const c of clips) {
     const src = c.source?.path ?? '';
-    if (src) byFull.set(normPath(src), c);
+    if (src && hasSep(src)) byFull.set(normPath(src), c);
+    if (c.id) byId.set(c.id, c);
     const b = basename(src || c.name);
     const arr = byBase.get(b) ?? [];
     arr.push(c);
@@ -137,7 +145,8 @@ export function resolvePlan(
 
   for (const s of plan.steps ?? []) {
     const target = s.target_path ?? '';
-    let clip = byFull.get(normPath(target)) ?? null;
+    // Ưu tiên: id chính xác → full-path → basename (byBase, có cảnh báo).
+    let clip = byId.get(target) ?? byFull.get(normPath(target)) ?? null;
     let warning: string | undefined;
 
     if (!clip) {
