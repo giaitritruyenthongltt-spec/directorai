@@ -312,8 +312,45 @@ try {
   bad('move', e.message);
 }
 
+// ── TEST 5 — TRANSITION (ghi thật chuyển cảnh → gỡ) ──────────────────────────
+console.log('[5] TRANSITION (thêm chuyển cảnh đầu clip rồi gỡ)');
+try {
+  const trackId = (c) => String(c.id).split(':')[0];
+  const v0 = t0.clips
+    .filter((x) => x.kind === 'video' && trackId(x) === 'video-0')
+    .sort((a, b) => a.startSec - b.startSec);
+  // clip B = clip thứ 2+ (có clip A trước nó cùng track) để chuyển cảnh hợp lệ.
+  const B = v0[2] ?? v0[1];
+  const A = v0[v0.indexOf(B) - 1];
+  if (!A || !B) {
+    note('transition BỎ QUA', 'không đủ clip video-0 liền kề');
+  } else {
+    const re = async (name) => {
+      const s = await listClips();
+      return s.clips
+        .filter((x) => x.kind === 'video' && trackId(x) === 'video-0')
+        .sort((a, b) => a.startSec - b.startSec)
+        .find((x) => x.name === name);
+    };
+    const w1 = await call(
+      'transition.apply',
+      { clipIdA: A.id, clipIdB: B.id, matchName: 'ADBE Additive Dissolve', durationSec: 0.5 },
+      90000
+    );
+    ok('transition ghi thật', `Additive Dissolve 0.5s đầu "${B.name}"`);
+    dirty = true;
+    const Bnow = (await re(B.name)) ?? B;
+    await call('transition.remove', { clipId: Bnow.id, atStart: true }, 90000);
+    ok('transition hoàn tác', `đã gỡ chuyển cảnh`);
+    dirty = false;
+    void w1;
+  }
+} catch (e) {
+  bad('transition', e.message);
+}
+
 // ── INTEGRITY — toàn timeline về nguyên trạng? ───────────────────────────────
-console.log('[5] INTEGRITY — đối chiếu vân tay toàn timeline');
+console.log('[6] INTEGRITY — đối chiếu vân tay toàn timeline');
 const tEnd = await listClips();
 const endFP = fingerprint(tEnd.clips);
 if (endFP === startFP) {

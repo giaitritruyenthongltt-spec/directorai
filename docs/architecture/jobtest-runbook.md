@@ -43,16 +43,24 @@ path/name cũ vì có thể trùng nhiều clip (video+audio cùng basename).
 cuối cùng đối chiếu "vân tay" toàn timeline (tên/kind/enabled/in-out/start, làm
 tròn 2 số lẻ) để chắc project về NGUYÊN TRẠNG.
 
-| Test     | Ghi thật                             | Verify          | Hoàn tác                  |
-| -------- | ------------------------------------ | --------------- | ------------------------- |
-| rename   | đổi tên → tên test                   | đếm tên mới = 1 | đổi lại (theo **id mới**) |
-| disable  | tắt clip                             | `enabled=false` | `enable` (id ổn định)     |
-| trim     | cắt OUT vào 0.5s                     | out giảm        | đặt lại in/out gốc        |
-| **move** | re-pack 2 clip (track nhỏ, tên-uniq) | hoán vị thứ tự  | park-then-place start gốc |
+| Test           | Ghi thật                             | Verify          | Hoàn tác                  |
+| -------------- | ------------------------------------ | --------------- | ------------------------- |
+| rename         | đổi tên → tên test                   | đếm tên mới = 1 | đổi lại (theo **id mới**) |
+| disable        | tắt clip                             | `enabled=false` | `enable` (id ổn định)     |
+| trim           | cắt OUT vào 0.5s                     | out giảm        | đặt lại in/out gốc        |
+| **move**       | re-pack 2 clip (track nhỏ, tên-uniq) | hoán vị thứ tự  | park-then-place start gốc |
+| **transition** | Additive Dissolve 0.5s đầu clip      | apply không lỗi | `transition.remove`       |
 
-Kết quả tham chiếu (tap 11): **9/9 PASS**, integrity vân tay khớp 100%.
+Kết quả tham chiếu (tap 11): **11/11 PASS**, integrity vân tay khớp 100%.
 
-### 3 bug PRODUCT phát hiện + sửa khi build bộ này (đều verify live)
+### 4 bug PRODUCT phát hiện + sửa khi build bộ này (đều verify live)
+
+0. **`applyTransition` "Illegal invocation"** — tách `const make =
+item.createAddVideoTransitionAction` rồi gọi `make(trans)` → mất `this=item`.
+   Phải gọi như METHOD `item.createAddVideoTransitionAction!(trans, options)`.
+   Cũng đổi thứ tự tạo trans/options TRƯỚC, fetch item TƯƠI sau (object-lifetime).
+   → transition apply giờ ghi thật; thêm `removeTransition` (createRemoveVideoTransitionAction
+   với `VideoTransition.TRANSITIONPOSITION_START`) làm inverse.
 
 1. **`moveClip` dùng sai action** — trước truyền `newStart` (tuyệt đối) vào
    `createMoveAction` (vốn nhận OFFSET tương đối) → mọi move cộng dồn sai, clip
@@ -106,7 +114,12 @@ trong 1 executeTransaction không xen await).
 
 ## Tồn đọng đã ghi nhận
 
-- `marker.add/delete` ghi-thật chưa hoạt động (signature action chưa rõ); list OK.
+- `marker.add/delete` ghi-thật chưa hoạt động (object-lost; signature chưa rõ); list OK.
 - `move` ghi-thật chỉ tự-test trên track 2–25 clip TÊN-DUY-NHẤT (để park-then-place
   khôi phục an toàn); track lớn/trùng tên → kiểm qua dry-run.
-- `transition` chưa có inverse-action để auto-revert → kiểm qua dry-run.
+- `transition` ✅ ghi-thật + self-revert (`transition.remove`). Lưu ý: verify dựa
+  "apply không lỗi + fingerprint khôi phục" — activeSequenceClips KHÔNG lộ
+  transition nên không xác nhận trực tiếp được sự hiện diện.
+- **CHƯA test ghi-thật:** màu Lumetri (`setColorParams`), audio gain/fade
+  (`setAudioGain`/`addAudioFade`), effect apply/remove. Các method này dùng đúng
+  mẫu object-lifetime đã làm hỏng transition → ưu tiên test-write tiếp.
