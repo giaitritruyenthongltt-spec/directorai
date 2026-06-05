@@ -158,7 +158,7 @@ export async function translateTrackItem(
   trackKind: Track['kind'],
   ppro?: PProModule
 ): Promise<Clip> {
-  const [name, startT, endT, inT, outT, mediaType, projItem] = await Promise.all([
+  const [name, startT, endT, inT, outT, mediaType, projItem, disabled] = await Promise.all([
     safeAsync(
       () => item.getName(),
       () => item.name ?? 'Untitled'
@@ -174,6 +174,12 @@ export async function translateTrackItem(
     safeAsync(
       () => item.getProjectItem(),
       () => null
+    ),
+    // Trạng thái tắt THẬT (PPro26 có isDisabled()). Đọc được → enabled phản
+    // ánh đúng (verify được disable/enable); lỗi → mặc định bật.
+    safeAsync(
+      () => item.isDisabled(),
+      () => false
     ),
   ]);
 
@@ -221,7 +227,7 @@ export async function translateTrackItem(
       hasAudio: kind === 'audio',
     },
     effects: [],
-    enabled: true,
+    enabled: !disabled,
   };
 }
 

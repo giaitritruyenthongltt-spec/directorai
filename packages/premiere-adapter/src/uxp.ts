@@ -483,15 +483,25 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     return translateTrackItem(item, `${k}-${track.id}`, k, this.ppro);
   }
 
-  /** A3 — Di chuyển clip dùng createMoveAction. */
+  /**
+   * A3 — Di chuyển clip tới VỊ TRÍ TUYỆT ĐỐI `newStart` (giây), GIỮ NGUYÊN in/out.
+   *
+   * BUG-FIX (PPro26): `createMoveAction(time)` dời clip THEO OFFSET (tương đối,
+   * GIỮ in/out) — đúng để "move". Lỗi cũ: truyền `newStart` (tuyệt đối) làm
+   * offset → cộng dồn sai. `createSetStartAction` thì KHÔNG dùng được vì nó
+   * SLIP in-point (đổi start kéo theo source in → hỏng in/out). Đúng nhất:
+   * createMoveAction với DELTA = newStart − startHiệnTại.
+   */
   async moveClip(input: MoveClipInput): Promise<Clip> {
     this.invalidateClipCache();
     const { item, track } = await this.findTrackItem(input.clipId);
     if (input.newTrackId) {
       throw new AdapterError('UXP', 'Premiere 26 UXP chưa hỗ trợ chuyển clip sang track khác');
     }
+    const startT = await item.getStartTime();
+    const delta = input.newStart - startT.seconds;
     await this.runTransaction('Di chuyển clip', (compound) => {
-      compound.addAction(item.createMoveAction(this.secondsToTick(input.newStart)));
+      compound.addAction(item.createMoveAction(this.secondsToTick(delta)));
     });
     const mt = await track.getMediaType();
     const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
