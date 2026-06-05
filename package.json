@@ -22,6 +22,7 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "smoke:functions": "node tools/function-smoke.mjs",
     "smoke:write": "node tools/live-write-verify.mjs",
+    "test:job": "node tools/jobtest-tap11.mjs",
     "bench:perf": "tsx tools/perf-bench.ts",
     "bench:memory": "tsx --expose-gc tools/memory-soak.ts",
     "bundle:ccx": "tsx tools/bundle-ccx.ts",
