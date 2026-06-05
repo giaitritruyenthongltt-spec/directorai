@@ -32,6 +32,7 @@ const MUTATING_METHODS = new Set([
   'audio.muteTrack',
   'text.addOverlay',
   'transition.apply',
+  'transition.remove',
 ]);
 
 export function isMutatingMethod(method: string): boolean {
@@ -314,6 +315,13 @@ const handlers: Record<string, RpcHandler> = {
         matchName: params.matchName,
         durationSec: params.durationSec as Seconds,
       });
+    },
+  },
+  'transition.remove': {
+    schema: z.object({ clipId: z.string(), atStart: z.boolean().optional() }),
+    run: (p, a) => {
+      const params = p as { clipId: string; atStart?: boolean };
+      return a.removeTransition(params.clipId, params.atStart ?? true);
     },
   },
   'transition.list': { schema: Empty, run: (_p, a) => a.listTransitions() },

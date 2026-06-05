@@ -503,6 +503,10 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     this.findClip(input.clipIdB);
   }
 
+  async removeTransition(clipId: string, _atStart = true): Promise<void> {
+    this.findClip(clipId);
+  }
+
   async listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
     return [
       { matchName: 'CrossDissolve', displayName: 'Cross Dissolve' },

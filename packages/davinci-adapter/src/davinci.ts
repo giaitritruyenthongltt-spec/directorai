@@ -151,6 +151,9 @@ export class DaVinciAdapter implements INLEAdapter {
   applyTransition(input: TransitionInput): Promise<void> {
     return this.invoke('transition.apply', input);
   }
+  removeTransition(clipId: string, atStart = true): Promise<void> {
+    return this.invoke('transition.remove', { clipId, atStart });
+  }
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
     return this.invoke('transition.list');
   }

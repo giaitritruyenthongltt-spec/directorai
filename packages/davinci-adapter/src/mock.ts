@@ -112,6 +112,9 @@ export class MockDaVinciAdapter implements INLEAdapter {
   applyTransition(input: TransitionInput): Promise<void> {
     return this.inner.applyTransition(input);
   }
+  removeTransition(clipId: string, atStart = true): Promise<void> {
+    return this.inner.removeTransition(clipId, atStart);
+  }
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
     return this.inner.listTransitions();
   }

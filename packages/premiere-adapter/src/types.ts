@@ -183,6 +183,8 @@ export interface INLEAdapter {
   addTextOverlay(input: TextOverlayInput): Promise<{ clipId: string }>;
 
   applyTransition(input: TransitionInput): Promise<void>;
+  /** Xoá chuyển cảnh ở ĐẦU (atStart=true, mặc định) hoặc CUỐI clip — inverse của applyTransition. */
+  removeTransition(clipId: string, atStart?: boolean): Promise<void>;
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]>;
 
   beginUndoGroup(label: string): Promise<void>;

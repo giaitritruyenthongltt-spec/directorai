@@ -145,6 +145,9 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   applyTransition(input: TransitionInput): Promise<void> {
     return this.send<void>('transition.apply', input);
   }
+  removeTransition(clipId: string, atStart = true): Promise<void> {
+    return this.send<void>('transition.remove', { clipId, atStart });
+  }
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
     return this.send<readonly { matchName: string; displayName: string }[]>('transition.list');
   }

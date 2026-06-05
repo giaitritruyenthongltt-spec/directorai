@@ -953,7 +953,8 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     //   createVideoTransition(matchName)  // 1 arg
     //   AddTransitionOptions: setDuration / setApplyToStart / setTransitionAlignment
     //   item.createAddVideoTransitionAction(trans, options)  → executeTransaction
-    // Nuốt lỗi để rơi xuống probe cũ nếu host khác.
+    // Nuốt lỗi để rơi xuống probe cũ nếu host khác. (c2err giữ lại để báo cáo.)
+    let c2err: unknown;
     try {
       const pp = this.ppro as unknown as {
         TransitionFactory?: { createVideoTransition?: (name: string) => unknown };
@@ -963,29 +964,42 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
         };
       };
       const tf = pp.TransitionFactory;
-      const { item } = await this.findTrackItem(input.clipIdB);
-      if (tf?.createVideoTransition && typeof item.createAddVideoTransitionAction === 'function') {
+      if (tf?.createVideoTransition) {
+        // Object-lifetime: tạo trans + options TRƯỚC, fetch item TƯƠI NGAY trước
+        // khi dùng (item chết nếu giữ qua await createVideoTransition).
         const trans = await tf.createVideoTransition(matchName);
         const options = pp.AddTransitionOptions ? new pp.AddTransitionOptions() : undefined;
         if (options) {
           try {
             options.setDuration?.(durTicks);
-            // Áp ở ĐẦU clip B → chuyển cảnh giữa clip trước và clip B.
-            options.setApplyToStart?.(true);
+            options.setApplyToStart?.(true); // áp ở ĐẦU clip B
           } catch {
             /* setters tuỳ chọn */
           }
         }
-        this.invalidateClipCache();
-        await this.runTransaction('Thêm chuyển cảnh', (compound) => {
-          const make = item.createAddVideoTransitionAction!;
-          const act = options !== undefined ? make(trans, options) : make(trans);
-          compound.addAction(act);
-        });
-        return;
+        const { item } = await this.findTrackItem(input.clipIdB);
+        if (typeof item.createAddVideoTransitionAction === 'function') {
+          this.invalidateClipCache();
+          await this.runTransaction('Thêm chuyển cảnh', (compound) => {
+            // Gọi như METHOD trên item (giữ this=item) — tách ra gọi rời gây
+            // "Illegal invocation".
+            const act =
+              options !== undefined
+                ? item.createAddVideoTransitionAction!(trans, options)
+                : item.createAddVideoTransitionAction!(trans);
+            compound.addAction(act);
+          });
+          return;
+        }
       }
-    } catch {
-      // fall through to legacy probes
+    } catch (e) {
+      c2err = e; // lộ ra ở error cuối thay vì nuốt im
+    }
+    if (c2err) {
+      throw new AdapterError(
+        'UXP',
+        `applyTransition C2 fail "${input.matchName}": ${c2err instanceof Error ? c2err.message : String(c2err)}`
+      );
     }
 
     const factory = (
@@ -1041,6 +1055,26 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
         `between ${input.clipIdA}/${input.clipIdB}. Tried TransitionFactory + ` +
         `track.addTransition probes. See docs/guides/uxp-setup.md to verify on PPro 2024+.`
     );
+  }
+
+  /**
+   * C12 — Xoá chuyển cảnh ở đầu/cuối clip (inverse của applyTransition).
+   * Dùng `item.createRemoveVideoTransitionAction(position)` với hằng
+   * `VideoTransition.TRANSITIONPOSITION_START/END`. Gọi như METHOD trên item
+   * (this=item) để tránh "Illegal invocation".
+   */
+  async removeTransition(clipId: string, atStart = true): Promise<void> {
+    const VT = (this.ppro as unknown as { VideoTransition?: Record<string, unknown> })
+      .VideoTransition;
+    const pos = atStart ? VT?.TRANSITIONPOSITION_START : VT?.TRANSITIONPOSITION_END;
+    const { item } = await this.findTrackItem(clipId);
+    if (typeof item.createRemoveVideoTransitionAction !== 'function') {
+      throw new AdapterError('UXP', 'removeTransition: createRemoveVideoTransitionAction không có');
+    }
+    this.invalidateClipCache();
+    await this.runTransaction('Xoá chuyển cảnh', (compound) => {
+      compound.addAction(item.createRemoveVideoTransitionAction!(pos));
+    });
   }
 
   async listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
