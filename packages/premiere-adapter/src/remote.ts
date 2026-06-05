@@ -129,6 +129,9 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   setAudioGain(input: AudioGainInput): Promise<void> {
     return this.send<void>('audio.setGain', input);
   }
+  getAudioGain(clipId: string): Promise<number> {
+    return this.send<number>('audio.getGain', { clipId });
+  }
   addAudioFade(input: AudioFadeInput): Promise<void> {
     return this.send<void>('audio.addFade', input);
   }
@@ -150,6 +153,11 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   }
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
     return this.send<readonly { matchName: string; displayName: string }[]>('transition.list');
+  }
+  listClipEffects(clipId: string): Promise<readonly { matchName: string; displayName: string }[]> {
+    return this.send<readonly { matchName: string; displayName: string }[]>('effect.list', {
+      clipId,
+    });
   }
 
   // Undo

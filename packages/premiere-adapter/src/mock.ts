@@ -446,6 +446,13 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     }
   }
 
+  async getAudioGain(clipId: string): Promise<number> {
+    const { clip } = this.findClip(clipId);
+    const gain = clip.effects.find((e) => e.matchName === 'AudioGain');
+    const p = gain?.params.find((x) => x.name === 'gainDb');
+    return typeof p?.value === 'number' ? p.value : 0;
+  }
+
   async addAudioFade(input: AudioFadeInput): Promise<void> {
     const { clip } = this.findClip(input.clipId);
     clip.effects.push({
@@ -505,6 +512,13 @@ export class MockPremiereAdapter implements IPremiereAdapter {
 
   async removeTransition(clipId: string, _atStart = true): Promise<void> {
     this.findClip(clipId);
+  }
+
+  async listClipEffects(
+    clipId: string
+  ): Promise<readonly { matchName: string; displayName: string }[]> {
+    const { clip } = this.findClip(clipId);
+    return clip.effects.map((e) => ({ matchName: e.matchName, displayName: e.matchName }));
   }
 
   async listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {

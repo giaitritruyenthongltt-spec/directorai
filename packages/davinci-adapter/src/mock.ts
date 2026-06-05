@@ -100,6 +100,9 @@ export class MockDaVinciAdapter implements INLEAdapter {
   setAudioGain(input: AudioGainInput): Promise<void> {
     return this.inner.setAudioGain(input);
   }
+  getAudioGain(clipId: string): Promise<number> {
+    return this.inner.getAudioGain(clipId);
+  }
   addAudioFade(input: AudioFadeInput): Promise<void> {
     return this.inner.addAudioFade(input);
   }
@@ -117,6 +120,9 @@ export class MockDaVinciAdapter implements INLEAdapter {
   }
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
     return this.inner.listTransitions();
+  }
+  listClipEffects(clipId: string): Promise<readonly { matchName: string; displayName: string }[]> {
+    return this.inner.listClipEffects(clipId);
   }
   beginUndoGroup(label: string): Promise<void> {
     return this.inner.beginUndoGroup(label);

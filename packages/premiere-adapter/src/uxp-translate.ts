@@ -233,13 +233,33 @@ export async function translateTrackItem(
 }
 
 export async function translateComponent(c: PProComponent): Promise<Effect> {
+  // PPro26: component dùng getMatchName()/getDisplayName()/getParamCount()/
+  // getParam(i)/param.getStartValue() — KHÔNG có .matchName/.getParams() (đường
+  // cũ → undefined.toLowerCase() crash).
+  const cc = c as unknown as {
+    getMatchName?: () => Promise<string>;
+    getDisplayName?: () => Promise<string>;
+    matchName?: string;
+    displayName?: string;
+    getParamCount?: () => Promise<number>;
+    getParam?: (i: number) => Promise<unknown>;
+  };
+  const matchName = (await cc.getMatchName?.()) ?? cc.matchName ?? '';
+  const displayName = (await cc.getDisplayName?.()) ?? cc.displayName ?? matchName;
+
   const params: { name: string; value: number | string | boolean }[] = [];
   try {
-    const ps = await c.getParams();
-    for (const p of ps) {
+    const pc = (await cc.getParamCount?.()) ?? 0;
+    for (let i = 0; i < pc; i++) {
       try {
-        const v = await p.getValue();
-        params.push({ name: p.displayName, value: v });
+        const p = (await cc.getParam?.(i)) as {
+          displayName?: string;
+          getStartValue?: () => Promise<number | string | boolean> | number | string | boolean;
+        } | null;
+        if (!p?.getStartValue) continue;
+        const v = await p.getStartValue();
+        if (v !== undefined && v !== null)
+          params.push({ name: p.displayName ?? `#${i}`, value: v });
       } catch {
         // skip unreadable param
       }
@@ -248,17 +268,16 @@ export async function translateComponent(c: PProComponent): Promise<Effect> {
     // no params
   }
 
-  const matchName = c.matchName;
+  const m = matchName.toLowerCase();
   let kind: Effect['kind'] = 'video';
-  if (matchName.toLowerCase().includes('audio')) kind = 'audio';
-  else if (matchName.toLowerCase().includes('lumetri')) kind = 'color';
-  else if (matchName.toLowerCase().includes('text') || matchName.toLowerCase().includes('title'))
-    kind = 'text';
+  if (m.includes('audio')) kind = 'audio';
+  else if (m.includes('lumetri')) kind = 'color';
+  else if (m.includes('text') || m.includes('title')) kind = 'text';
 
   return {
     id: `${matchName}-${Math.random().toString(36).slice(2, 8)}`,
     matchName,
-    displayName: c.displayName,
+    displayName,
     kind,
     enabled: true,
     params,

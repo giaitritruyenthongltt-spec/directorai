@@ -98,6 +98,26 @@ import {
  * the constructor throws AdapterError. Use the factory or MockAdapter
  * in Node-only contexts.
  */
+/** PPro26 — VideoComponentChain dùng ACTION-MODEL (introspect thật). */
+interface ChainAM {
+  getComponentCount?: () => Promise<number>;
+  getComponentAtIndex?: (i: number) => Promise<unknown>;
+  createAppendComponentAction?: (c: unknown) => PProAction;
+  createRemoveComponentAction?: (c: unknown) => PProAction;
+}
+interface CompAM {
+  getMatchName?: () => Promise<string>;
+  getDisplayName?: () => Promise<string>;
+  getParamCount?: () => Promise<number>;
+  getParam?: (i: number) => Promise<unknown>;
+}
+interface ParamAM {
+  displayName?: string;
+  getStartValue?: () => Promise<number> | number;
+  createKeyframe?: (v: number) => Promise<unknown> | unknown;
+  createSetValueAction?: (kf: unknown) => PProAction;
+  createAddKeyframeAction?: (kf: unknown) => PProAction;
+}
 export class UXPPremiereAdapter implements IPremiereAdapter {
   readonly kind = 'uxp' as const;
 
@@ -523,43 +543,80 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
 
   // ─── Effects ──────────────────────────────────────────────────────────────
 
+  /**
+   * PPro26 — liệt kê component của clip qua ACTION-MODEL thật:
+   * getComponentChain → getComponentCount/getComponentAtIndex → getMatchName().
+   * KHÔNG có chain.getComponents()/.matchName property (đường cũ treo/sai).
+   */
+  private async chainComponents(item: PProTrackItem): Promise<{
+    chain: ChainAM;
+    comps: { index: number; matchName: string; displayName: string; comp: CompAM }[];
+  }> {
+    const chain = (await item.getComponentChain()) as unknown as ChainAM;
+    const count = (await chain.getComponentCount?.()) ?? 0;
+    const comps: { index: number; matchName: string; displayName: string; comp: CompAM }[] = [];
+    for (let i = 0; i < count; i++) {
+      const comp = (await chain.getComponentAtIndex?.(i)) as CompAM | null;
+      if (!comp) continue;
+      const matchName = (await comp.getMatchName?.()) ?? '';
+      const displayName = (await comp.getDisplayName?.()) ?? '';
+      comps.push({ index: i, matchName, displayName, comp });
+    }
+    return { chain, comps };
+  }
+
   async applyEffect(input: ApplyEffectInput): Promise<Effect> {
-    // D1 — diagnostic timing. We've seen 30s+ hangs on Premiere 26;
-    // these logs nail down which sub-step is the bottleneck. Log to
-    // console so the panel devtools captures them.
-    const tStart = Date.now();
-    const log = (label: string): void => {
-      console.info(`[applyEffect ${input.effectMatchName}] +${Date.now() - tStart}ms ${label}`);
-    };
-    log('enter');
-    return this.mutate('applyEffect', async () => {
-      log('mutate lockedAccess opened');
-      const { item } = await this.findTrackItem(input.clipId);
-      log('findTrackItem ok');
-      const chain = await item.getComponentChain();
-      log('getComponentChain ok');
-      if (!this.ppro.Component) {
-        throw new AdapterError('UXP', 'Component factory not available in this PPro version');
+    // PPro26 ACTION-MODEL: VideoFilterFactory.createComponent + chain
+    // .createAppendComponentAction (đường cũ Component.create/insertComponent
+    // KHÔNG tồn tại trên 26 → treo). Tạo comp TRƯỚC, fetch item TƯƠI sau.
+    const factory = (
+      this.ppro as unknown as {
+        VideoFilterFactory?: { createComponent?: (n: string) => Promise<unknown> };
       }
-      const comp = await this.ppro.Component.create(input.effectMatchName);
-      log('Component.create ok');
-      await chain.insertComponent(comp, 1);
-      log('insertComponent ok');
-      const translated = await translateComponent(comp);
-      log('translateComponent ok — DONE');
-      return translated;
+    ).VideoFilterFactory;
+    if (!factory?.createComponent) {
+      throw new AdapterError(
+        'UXP',
+        'applyEffect: VideoFilterFactory.createComponent không khả dụng'
+      );
+    }
+    const comp = await factory.createComponent(input.effectMatchName);
+    const { item } = await this.findTrackItem(input.clipId);
+    const chain = (await item.getComponentChain()) as unknown as ChainAM;
+    if (typeof chain.createAppendComponentAction !== 'function') {
+      throw new AdapterError('UXP', 'applyEffect: createAppendComponentAction không có');
+    }
+    this.invalidateClipCache();
+    await this.runTransaction('Thêm hiệu ứng', (compound) => {
+      compound.addAction(chain.createAppendComponentAction!(comp));
     });
+    return translateComponent(comp as Parameters<typeof translateComponent>[0]);
   }
 
   async removeEffect(clipId: string, effectId: string): Promise<void> {
-    await this.mutate('removeEffect', async () => {
-      const { item } = await this.findTrackItem(clipId);
-      const chain = await item.getComponentChain();
-      const comps = await chain.getComponents();
-      const target = comps.find((c) => c.matchName === effectId || c.displayName === effectId);
-      if (!target) throw new NotFoundError('Effect', effectId);
-      await chain.removeComponent(target);
+    const { item } = await this.findTrackItem(clipId);
+    const { chain, comps } = await this.chainComponents(item);
+    const target = comps.find(
+      (c) =>
+        c.matchName === effectId || c.displayName === effectId || c.matchName.includes(effectId)
+    );
+    if (!target) throw new NotFoundError('Effect', effectId);
+    if (typeof chain.createRemoveComponentAction !== 'function') {
+      throw new AdapterError('UXP', 'removeEffect: createRemoveComponentAction không có');
+    }
+    this.invalidateClipCache();
+    await this.runTransaction('Gỡ hiệu ứng', (compound) => {
+      compound.addAction(chain.createRemoveComponentAction!(target.comp));
     });
+  }
+
+  /** PPro26 — liệt kê matchName/displayName các component (hiệu ứng) trên clip. */
+  async listClipEffects(
+    clipId: string
+  ): Promise<readonly { matchName: string; displayName: string }[]> {
+    const { item } = await this.findTrackItem(clipId);
+    const { comps } = await this.chainComponents(item);
+    return comps.map((c) => ({ matchName: c.matchName, displayName: c.displayName }));
   }
 
   // ─── Media ────────────────────────────────────────────────────────────────
@@ -821,41 +878,68 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
 
   // ─── Audio ────────────────────────────────────────────────────────────────
 
+  /**
+   * PPro26 — tìm param "Level" của component Volume ("Internal Volume Stereo",
+   * displayName "Volume") đã CÓ SẴN trên clip audio (không cần tạo). Bỏ "Channel
+   * Volume". Trả null nếu không có.
+   */
+  private async audioLevelParam(item: PProTrackItem): Promise<ParamAM | null> {
+    const { comps } = await this.chainComponents(item);
+    const vol =
+      comps.find((c) => /volume/i.test(c.displayName) && !/channel/i.test(c.displayName)) ??
+      comps.find((c) => /volume/i.test(c.matchName) && !/channel/i.test(c.matchName));
+    if (!vol) return null;
+    const pc = (await vol.comp.getParamCount?.()) ?? 0;
+    for (let i = 0; i < pc; i++) {
+      const p = (await vol.comp.getParam?.(i)) as ParamAM | null;
+      const dn = (p?.displayName ?? '').toLowerCase();
+      if (p && (dn === 'level' || dn.includes('level'))) return p;
+    }
+    return (await vol.comp.getParam?.(0)) as ParamAM | null;
+  }
+
   async setAudioGain(input: AudioGainInput): Promise<void> {
-    await this.mutate('setAudioGain', async () => {
-      const { item } = await this.findTrackItem(input.clipId);
-      const chain = await item.getComponentChain();
-      const comps = await chain.getComponents();
-      let gain = comps.find((c) => c.matchName.includes('Volume') || c.displayName === 'Volume');
-      if (!gain) {
-        if (!this.ppro.Component) {
-          throw new AdapterError('UXP', 'Component factory unavailable for Volume');
-        }
-        gain = await this.ppro.Component.create('AE.ADBE Audio Levels');
-        await chain.insertComponent(gain, 1);
-      }
-      const level = await gain.getParam('Level');
-      await level.setValue(input.gainDb, true);
+    // PPro26 ACTION-MODEL: Volume component CÓ SẴN; set param Level qua
+    // createKeyframe + createSetValueAction (đường cũ getComponents/setValue
+    // KHÔNG tồn tại trên 26).
+    const { item } = await this.findTrackItem(input.clipId);
+    const level = await this.audioLevelParam(item);
+    if (!level?.createKeyframe || !level.createSetValueAction) {
+      throw new AdapterError('UXP', 'setAudioGain: không tìm được param Level (Volume) trên clip');
+    }
+    const kf = await level.createKeyframe(input.gainDb);
+    const action = level.createSetValueAction(kf);
+    this.invalidateClipCache();
+    await this.runTransaction('Chỉnh âm lượng', (compound) => {
+      compound.addAction(action);
     });
   }
 
+  /** PPro26 — đọc giá trị gain (Level) hiện tại của clip audio (để hoàn tác). */
+  async getAudioGain(clipId: string): Promise<number> {
+    const { item } = await this.findTrackItem(clipId);
+    const level = await this.audioLevelParam(item);
+    const v = await level?.getStartValue?.();
+    return typeof v === 'number' ? v : 0;
+  }
+
   async addAudioFade(input: AudioFadeInput): Promise<void> {
-    await this.mutate('addAudioFade', async () => {
-      const { item } = await this.findTrackItem(input.clipId);
-      const chain = await item.getComponentChain();
-      const comps = await chain.getComponents();
-      const gain = comps.find((c) => c.matchName.includes('Volume'));
-      if (!gain) throw new AdapterError('UXP', 'No Volume component on clip — apply gain first');
-      const level = await gain.getParam('Level');
-      const start = await item.getStartTime();
-      const end = await item.getEndTime();
-      if (input.type === 'in') {
-        await level.addKey(start, -60);
-        await level.addKey(this.secondsToTick(start.seconds + input.durationSec), 0);
-      } else {
-        await level.addKey(this.secondsToTick(end.seconds - input.durationSec), 0);
-        await level.addKey(end, -60);
-      }
+    // PPro26: fade = keyframe trên Level qua createKeyframe + createAddKeyframeAction.
+    // (Đường cũ level.addKey KHÔNG tồn tại.) Giữ giản lược: đặt 2 mốc gain.
+    const { item } = await this.findTrackItem(input.clipId);
+    const level = await this.audioLevelParam(item);
+    if (!level?.createKeyframe || !level.createAddKeyframeAction) {
+      throw new AdapterError(
+        'UXP',
+        'addAudioFade: param Level không hỗ trợ keyframe trên host này'
+      );
+    }
+    const lo = await level.createKeyframe(-60);
+    const hi = await level.createKeyframe(0);
+    this.invalidateClipCache();
+    await this.runTransaction('Thêm fade âm thanh', (compound) => {
+      compound.addAction(level.createAddKeyframeAction!(input.type === 'in' ? lo : hi));
+      compound.addAction(level.createAddKeyframeAction!(input.type === 'in' ? hi : lo));
     });
   }
 

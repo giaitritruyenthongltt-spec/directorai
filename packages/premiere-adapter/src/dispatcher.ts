@@ -133,6 +133,10 @@ const handlers: Record<string, RpcHandler> = {
       return a.removeEffect(params.clipId, params.effectId);
     },
   },
+  'effect.list': {
+    schema: z.object({ clipId: z.string() }),
+    run: (p, a) => a.listClipEffects((p as { clipId: string }).clipId),
+  },
 
   'media.import': {
     schema: z.object({ path: z.string(), binId: z.string().optional() }),
@@ -239,6 +243,10 @@ const handlers: Record<string, RpcHandler> = {
   'audio.setGain': {
     schema: z.object({ clipId: z.string(), gainDb: z.number() }),
     run: (p, a) => a.setAudioGain(p as { clipId: string; gainDb: number }),
+  },
+  'audio.getGain': {
+    schema: z.object({ clipId: z.string() }),
+    run: (p, a) => a.getAudioGain((p as { clipId: string }).clipId),
   },
   'audio.addFade': {
     schema: z.object({

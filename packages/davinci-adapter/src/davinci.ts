@@ -137,6 +137,9 @@ export class DaVinciAdapter implements INLEAdapter {
   setAudioGain(input: AudioGainInput): Promise<void> {
     return this.invoke('audio.setGain', input);
   }
+  getAudioGain(clipId: string): Promise<number> {
+    return this.invoke('audio.getGain', { clipId });
+  }
   addAudioFade(input: AudioFadeInput): Promise<void> {
     return this.invoke('audio.addFade', input);
   }
@@ -156,6 +159,9 @@ export class DaVinciAdapter implements INLEAdapter {
   }
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
     return this.invoke('transition.list');
+  }
+  listClipEffects(clipId: string): Promise<readonly { matchName: string; displayName: string }[]> {
+    return this.invoke('effect.list', { clipId });
   }
 
   // ── Undo ──────────────────────────────────────────────────────────────────

@@ -177,6 +177,8 @@ export interface INLEAdapter {
   setColorParams(input: ColorParamsInput): Promise<void>;
 
   setAudioGain(input: AudioGainInput): Promise<void>;
+  /** Đọc gain (Level dB) hiện tại của clip audio — để hoàn tác setAudioGain. */
+  getAudioGain(clipId: string): Promise<number>;
   addAudioFade(input: AudioFadeInput): Promise<void>;
   muteTrack(sequenceId: string, trackId: string, muted: boolean): Promise<void>;
 
@@ -186,6 +188,8 @@ export interface INLEAdapter {
   /** Xoá chuyển cảnh ở ĐẦU (atStart=true, mặc định) hoặc CUỐI clip — inverse của applyTransition. */
   removeTransition(clipId: string, atStart?: boolean): Promise<void>;
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]>;
+  /** Liệt kê component (hiệu ứng) trên 1 clip — để verify apply/remove. */
+  listClipEffects(clipId: string): Promise<readonly { matchName: string; displayName: string }[]>;
 
   beginUndoGroup(label: string): Promise<void>;
   endUndoGroup(): Promise<void>;
