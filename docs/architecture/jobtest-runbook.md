@@ -37,10 +37,51 @@ KHÔNG verify theo id cũ (sẽ "undefined"). Verify ĐÚNG = **đếm số clip
 mới** (rename OK ⇔ đúng 1; hoàn tác OK ⇔ còn 0). Cũng KHÔNG đối chiếu theo
 path/name cũ vì có thể trùng nhiều clip (video+audio cùng basename).
 
+## C10 — Bộ GHI THẬT self-revert đầy đủ (`npm run test:job-write`)
+
+`tools/jobtest-write-tap11.mjs` — ghi THẬT 4 thao tác an toàn rồi TỰ HOÀN TÁC,
+cuối cùng đối chiếu "vân tay" toàn timeline (tên/kind/enabled/in-out/start, làm
+tròn 2 số lẻ) để chắc project về NGUYÊN TRẠNG.
+
+| Test     | Ghi thật                             | Verify          | Hoàn tác                  |
+| -------- | ------------------------------------ | --------------- | ------------------------- |
+| rename   | đổi tên → tên test                   | đếm tên mới = 1 | đổi lại (theo **id mới**) |
+| disable  | tắt clip                             | `enabled=false` | `enable` (id ổn định)     |
+| trim     | cắt OUT vào 0.5s                     | out giảm        | đặt lại in/out gốc        |
+| **move** | re-pack 2 clip (track nhỏ, tên-uniq) | hoán vị thứ tự  | park-then-place start gốc |
+
+Kết quả tham chiếu (tap 11): **9/9 PASS**, integrity vân tay khớp 100%.
+
+### 3 bug PRODUCT phát hiện + sửa khi build bộ này (đều verify live)
+
+1. **`moveClip` dùng sai action** — trước truyền `newStart` (tuyệt đối) vào
+   `createMoveAction` (vốn nhận OFFSET tương đối) → mọi move cộng dồn sai, clip
+   trôi xa + (qua các lần thử) làm **hỏng in-point**. Sửa: `createMoveAction`
+   với DELTA = `newStart − startHiệnTại` (giữ in/out). KHÔNG dùng
+   `createSetStartAction` vì action đó **slip in-point** (đổi start kéo source-in).
+2. **executor move dùng id cũ** — `computeReorderOps` sinh [đỗ×N, đặt×N] với id
+   gốc; nhưng synthetic id ĐỔI sau mỗi move (chứa startTick) → pha "đặt" tham
+   chiếu id đã chết → "not found". Sửa: đỗ xong → re-list lấy id MỚI theo vị trí
+   đỗ → đặt bằng id mới (`plan-executor.ts execMoveBatch`).
+3. **`enabled` luôn `true`** — `translateTrackItem` hardcode → không verify được
+   disable. Sửa: đọc `item.isDisabled()` thật.
+
+Phụ trợ: thêm action **`enable`** (inverse của disable) + lộ
+`enabled/inSec/outSec/startSec` trong `context.activeSequenceClips`.
+
+### Khôi phục khẩn (nếu bộ test để lại dirty)
+
+- `safe.applyPlan` tự checkpoint trước ghi; mỗi `timeline.moveClip` = 1 undo step.
+- Đọc clip sau khi undo trong UI Premiere có thể **stale** (panel cache
+  invalidate chỉ khi mutate QUA adapter) → ép fresh bằng 1 no-op mutation hoặc
+  reload panel.
+- Khôi phục vị trí + in/out tuyệt đối: `setClipInOut(in,out)` (sửa in/out, dời
+  start) → `moveClip(start)` (đưa về vị trí, giữ in/out).
+
 ## Tồn đọng đã ghi nhận
 
 - **marker.list** lỗi adapter (`getMarkers` undefined trên PPro26) — probe phụ,
-  để soft (không tính fail). Cần sửa adapter nếu dùng marker.
-- Ghi THẬT mới phủ `rename` (reversible sạch). `disable/transition` chưa có
-  inverse-action để auto-revert → đang kiểm qua dry-run; muốn ghi thật cần
-  thêm cơ chế revert (enable / remove-transition) hoặc dựa Ctrl-Z.
+  để soft. Cần sửa adapter nếu dùng marker.
+- `move` ghi-thật chỉ tự-test trên track 2–25 clip TÊN-DUY-NHẤT (để park-then-place
+  khôi phục an toàn); track lớn/trùng tên → kiểm qua dry-run.
+- `transition` chưa có inverse-action để auto-revert → kiểm qua dry-run.
