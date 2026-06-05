@@ -440,3 +440,112 @@ export async function introspectPremiereApi(): Promise<Record<string, unknown>> 
 
   return out;
 }
+
+/**
+ * C11/C12 — Probe THỰC NGHIỆM: thử nhiều dạng signature createAddMarkerAction,
+ * đo số marker trước/sau qua executeTransaction, dạng nào +1 là ĐÚNG. Tự dọn
+ * marker đã thêm (createRemoveMarkerAction). Gọi qua RPC _debug.markerProbe.
+ */
+export async function markerAddProbe(): Promise<Record<string, unknown>> {
+  if (!ppro) return { error: 'not in UXP' };
+  const out: Record<string, unknown> = {};
+  const pp = ppro as Record<string, unknown>;
+  const MarkersC = pp.Markers as (new (s: unknown) => MarkersInst) | undefined;
+  const MarkerC = pp.Marker as
+    | ((new (t?: unknown) => unknown) & { MARKER_TYPE_COMMENT?: unknown })
+    | undefined;
+  const TickTime = pp.TickTime as { createWithSeconds?: (s: number) => unknown } | undefined;
+  if (!MarkersC || !MarkerC || !TickTime?.createWithSeconds) {
+    return { error: 'Markers/Marker/TickTime missing' };
+  }
+  const tick = (s: number): unknown => TickTime.createWithSeconds!(s);
+  const typeComment = MarkerC.MARKER_TYPE_COMMENT ?? 'Comment';
+
+  // Object UXP chết qua await ("Connection to object lost") → LUÔN lấy proj+seq
+  // TƯƠI ngay trước khi dùng, KHÔNG giữ qua await.
+  interface FreshProj {
+    executeTransaction: (
+      cb: (c: { addAction: (a: unknown) => void }) => void,
+      l: string
+    ) => Promise<boolean>;
+    getActiveSequence: () => Promise<unknown>;
+  }
+  const freshProj = async (): Promise<FreshProj> =>
+    (await (
+      pp.Project as { getActiveProject: () => Promise<unknown> }
+    ).getActiveProject()) as FreshProj;
+
+  const countMarkers = async (): Promise<number> => {
+    try {
+      const proj = await freshProj();
+      const seq = await proj.getActiveSequence();
+      const ms = await new MarkersC(seq).getMarkers();
+      return Array.isArray(ms) ? ms.length : 0;
+    } catch {
+      return -1;
+    }
+  };
+
+  const tryVariant = async (label: string, build: (M: MarkersInst) => unknown): Promise<void> => {
+    const before = await countMarkers();
+    const proj = await freshProj();
+    const seq = await proj.getActiveSequence();
+    let act: unknown;
+    try {
+      act = build(new MarkersC(seq)); // sync — không await giữa fetch seq và dùng
+    } catch (e) {
+      out[label] =
+        `createAction threw: ${(e instanceof Error ? e.message : String(e)).slice(0, 90)}`;
+      return;
+    }
+    try {
+      const ok = await proj.executeTransaction((c) => c.addAction(act), `probe ${label}`);
+      const after = await countMarkers();
+      out[label] = `ok=${ok} count ${before}->${after}${after > before ? ' ✓✓ ADDED' : ''}`;
+      if (after > before) {
+        try {
+          const projA = await freshProj();
+          const seqA = await projA.getActiveSequence();
+          const ms = (await new MarkersC(seqA).getMarkers()) as {
+            getName?: () => Promise<string>;
+            getStart?: () => Promise<{ seconds?: number }>;
+            getType?: () => Promise<string>;
+          }[];
+          const last = ms[ms.length - 1];
+          out[`${label}_added`] = {
+            name: await last.getName?.(),
+            start: (await last.getStart?.())?.seconds,
+            type: await last.getType?.(),
+          };
+          const projB = await freshProj();
+          const seqB = await projB.getActiveSequence();
+          await projB.executeTransaction(
+            (c) => c.addAction(new MarkersC(seqB).createRemoveMarkerAction(last)),
+            'probe cleanup'
+          );
+          out[`${label}_cleaned`] = (await countMarkers()) === before;
+        } catch (e) {
+          out[`${label}_cleanupErr`] = (e instanceof Error ? e.message : String(e)).slice(0, 90);
+        }
+      }
+    } catch (e) {
+      out[label] = `tx threw: ${(e instanceof Error ? e.message : String(e)).slice(0, 90)}`;
+    }
+  };
+
+  const T = tick(7);
+  await tryVariant('v1_time', (M) => M.createAddMarkerAction(T));
+  await tryVariant('v2_time_type', (M) => M.createAddMarkerAction(T, typeComment));
+  await tryVariant('v3_time_type_name', (M) => M.createAddMarkerAction(T, typeComment, 'PROBE'));
+  await tryVariant('v4_time_name', (M) => M.createAddMarkerAction(T, 'PROBE'));
+  await tryVariant('v5_newMarker', (M) => M.createAddMarkerAction(new MarkerC()));
+  await tryVariant('v6_newMarkerTime', (M) => M.createAddMarkerAction(new MarkerC(T)));
+  await tryVariant('v7_marker_time', (M) => M.createAddMarkerAction(new MarkerC(), T));
+  return out;
+}
+
+interface MarkersInst {
+  getMarkers(): Promise<unknown[]> | unknown[];
+  createAddMarkerAction(...args: unknown[]): unknown;
+  createRemoveMarkerAction(marker: unknown): unknown;
+}

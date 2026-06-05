@@ -93,8 +93,16 @@ API marker trên PPro26 KHÁC hẳn: KHÔNG ở `seq.markers` (undefined). Đún
 
 Đã sửa: `listMarkers` dùng `Markers` class + lấy active-seq tươi + bọc try/catch
 trả `[]` (probe mềm, KHÔNG còn crash). `addMarker/deleteMarker` rewrite theo
-action model nhưng **signature `createAddMarkerAction` chưa xác thực được qua
-thử live** (trả null) → cần đối chiếu doc Adobe để hoàn thiện ghi-thật marker.
+action model.
+
+**BLOCKER marker-write (chưa crack):** `new ppro.Markers(seq)` chạy OK trong
+handler `_debug.introspect` (dump được members) NHƯNG ném **"Connection to object
+lost"** trong handler ghi (`marker.add`, `_debug.markerProbe`) — kể cả khi lấy
+proj/seq TƯƠI ngay trước. Đã thử 7 dạng signature `createAddMarkerAction`
+(`_debug.markerProbe`): tất cả ném object-lost tại bước tạo Markers/action.
+→ Cần: (a) mẫu marker chính thức từ doc Adobe UXP PPro, hoặc (b) tìm pattern giữ
+object UXP sống qua await trong context ghi (có thể phải tạo + thực thi đồng bộ
+trong 1 executeTransaction không xen await).
 
 ## Tồn đọng đã ghi nhận
 

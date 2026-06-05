@@ -24,7 +24,7 @@ import {
 } from '@directorai/shared';
 import { dispatchRpc } from '@directorai/premiere-adapter';
 import { getPanelAdapter, adapterKind } from './panel-adapter.js';
-import { introspectPremiereApi } from './uxp-api.js';
+import { introspectPremiereApi, markerAddProbe } from './uxp-api.js';
 import { ReconnectMachine, DEFAULT_RECONNECT_CONFIG } from './reconnect-machine.js';
 
 interface RpcHandler {
@@ -181,7 +181,9 @@ class WsClient {
       const result =
         req.method === '_debug.introspect'
           ? await introspectPremiereApi()
-          : await dispatchRpc(req.method, req.params, getPanelAdapter());
+          : req.method === '_debug.markerProbe'
+            ? await markerAddProbe()
+            : await dispatchRpc(req.method, req.params, getPanelAdapter());
       // A4 — JSON-RPC success PHẢI có field `result`. Method trả void
       // sẽ cho `undefined`, và JSON.stringify bỏ key undefined → response
       // không có result → server không nhận ra → treo. Ép null.
