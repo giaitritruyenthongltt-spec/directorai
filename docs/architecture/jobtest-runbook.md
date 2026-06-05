@@ -78,10 +78,27 @@ Phụ trợ: thêm action **`enable`** (inverse của disable) + lộ
 - Khôi phục vị trí + in/out tuyệt đối: `setClipInOut(in,out)` (sửa in/out, dời
   start) → `moveClip(start)` (đưa về vị trí, giữ in/out).
 
+## C11 — Marker PPro26 (marker.list không còn crash)
+
+API marker trên PPro26 KHÁC hẳn: KHÔNG ở `seq.markers` (undefined). Đúng là:
+
+- `new ppro.Markers(seq)` → instance: `getMarkers()`, `createAddMarkerAction`,
+  `createRemoveMarkerAction`, `createMoveMarkerAction` (action model).
+- `new ppro.Marker()` → `getStart/getName/getType/getComments/getDuration` +
+  `createSetName/Comments/Duration/TypeAction` (KHÔNG có createSetStart).
+- `ppro.Marker.MARKER_TYPE_COMMENT/CHAPTER/…` = hằng loại marker.
+- **QUAN TRỌNG:** phải lấy sequence TƯƠI qua `getActiveSequence()` ngay trước
+  khi `new Markers(seq)` — object từ `getSequences()` chết qua await
+  ("Connection to object lost").
+
+Đã sửa: `listMarkers` dùng `Markers` class + lấy active-seq tươi + bọc try/catch
+trả `[]` (probe mềm, KHÔNG còn crash). `addMarker/deleteMarker` rewrite theo
+action model nhưng **signature `createAddMarkerAction` chưa xác thực được qua
+thử live** (trả null) → cần đối chiếu doc Adobe để hoàn thiện ghi-thật marker.
+
 ## Tồn đọng đã ghi nhận
 
-- **marker.list** lỗi adapter (`getMarkers` undefined trên PPro26) — probe phụ,
-  để soft. Cần sửa adapter nếu dùng marker.
+- `marker.add/delete` ghi-thật chưa hoạt động (signature action chưa rõ); list OK.
 - `move` ghi-thật chỉ tự-test trên track 2–25 clip TÊN-DUY-NHẤT (để park-then-place
   khôi phục an toàn); track lớn/trùng tên → kiểm qua dry-run.
 - `transition` chưa có inverse-action để auto-revert → kiểm qua dry-run.

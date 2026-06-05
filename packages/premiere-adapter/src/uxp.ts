@@ -75,12 +75,14 @@ import {
   type PProCompoundAction,
   type PProAction,
   type TickTime,
+  type PPro26Markers,
+  type PPro26Marker,
 } from './uxp-ppro.js';
 import {
   translateSequence,
   translateTrackItem,
   translateComponent,
-  translateMarker,
+  translatePPro26Marker,
   tickToSeconds,
   stringifyGuid,
 } from './uxp-translate.js';
@@ -579,33 +581,94 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
 
   // ─── Markers ──────────────────────────────────────────────────────────────
 
+  // C11 — Marker PPro26: KHÔNG ở seq.markers (undefined). Dùng class
+  // `ppro.Markers(seq)` (action model: createAddMarkerAction/createRemove…)
+  // + `ppro.Marker(time)`. Marker đặt start lúc construct (không có
+  // createSetStartAction). QUAN TRỌNG: phải lấy sequence TƯƠI qua
+  // getActiveSequence() ngay trước khi tạo Markers — object từ getSequences()
+  // (findSequence) chết qua await ("Connection to object lost").
+  private async activeSeqRaw(): Promise<unknown> {
+    const proj = await this.project();
+    const seq = await proj.getActiveSequence();
+    if (!seq) throw new NotFoundError('Sequence', 'active');
+    return seq;
+  }
+
+  private markersOf(seq: unknown): PPro26Markers {
+    const Klass = (this.ppro as unknown as { Markers?: new (s: unknown) => PPro26Markers }).Markers;
+    if (!Klass) throw new AdapterError('UXP', 'Markers API không khả dụng trên host này');
+    return new Klass(seq);
+  }
+
+  private async markerArray(seq: unknown): Promise<PPro26Marker[]> {
+    const ms = await this.markersOf(seq).getMarkers();
+    return Array.isArray(ms) ? ms : [];
+  }
+
   async addMarker(input: AddMarkerInput): Promise<Marker> {
     return this.mutate('addMarker', async () => {
-      const seq = await this.findSequence(input.sequenceId);
-      const m = await seq.markers.createMarker(
-        this.secondsToTick(input.time),
-        input.name,
-        input.color ?? '#ffcc00',
-        this.ppro.MarkerType.COMMENT
+      const seq = await this.activeSeqRaw();
+      const pp = this.ppro as unknown as {
+        Marker?: { MARKER_TYPE_COMMENT?: unknown } & (new (t?: TickTime) => PPro26Marker);
+      };
+      const markerType = pp.Marker?.MARKER_TYPE_COMMENT ?? 'Comment';
+      const coll = this.markersOf(seq) as unknown as {
+        createAddMarkerAction: (...a: unknown[]) => PProAction;
+      };
+      const timeT = this.secondsToTick(input.time);
+      // PPro26: createAddMarkerAction(time, type, name, comment) — tạo + đặt
+      // tên/comment trong 1 action (Marker không có createSetStartAction).
+      await this.runTransaction('Thêm marker', (compound) => {
+        compound.addAction(
+          coll.createAddMarkerAction(timeT, markerType, input.name ?? '', input.comment ?? '')
+        );
+      });
+      // Tìm lại marker vừa thêm (khớp tên + thời điểm gần nhất) để trả về.
+      const ms = await this.markerArray(seq);
+      const translated = await Promise.all(ms.map((m) => translatePPro26Marker(m)));
+      const mine = translated.find(
+        (m) => m.name === input.name && Math.abs(m.time - input.time) < 0.1
       );
-      if (input.comment) await m.setComment(input.comment);
-      return translateMarker(m);
+      return (
+        mine ?? {
+          id: `mk:${Math.round(input.time * 1000)}:${input.name}`,
+          time: seconds(input.time),
+          duration: seconds(0),
+          kind: 'comment' as const,
+          name: input.name,
+          comment: input.comment ?? '',
+          color: input.color ?? '#ffcc00',
+        }
+      );
     });
   }
 
-  async listMarkers(sequenceId: string): Promise<readonly Marker[]> {
-    const seq = await this.findSequence(sequenceId);
-    const ms = await seq.markers.getMarkers();
-    return Promise.all(ms.map((m) => translateMarker(m)));
+  async listMarkers(_sequenceId: string): Promise<readonly Marker[]> {
+    // Graceful: nếu host không expose Markers / object chết → trả [] (probe mềm).
+    try {
+      const seq = await this.activeSeqRaw();
+      const ms = await this.markerArray(seq);
+      return await Promise.all(ms.map((m) => translatePPro26Marker(m)));
+    } catch (e) {
+      console.warn(`[listMarkers] soft-fail: ${e instanceof Error ? e.message : String(e)}`);
+      return [];
+    }
   }
 
-  async deleteMarker(sequenceId: string, markerId: string): Promise<void> {
+  async deleteMarker(_sequenceId: string, markerId: string): Promise<void> {
     await this.mutate('deleteMarker', async () => {
-      const seq = await this.findSequence(sequenceId);
-      const ms = await seq.markers.getMarkers();
-      const target = ms.find((m) => m.guid === markerId);
-      if (!target) throw new NotFoundError('Marker', markerId);
-      await seq.markers.removeMarker(target);
+      const seq = await this.activeSeqRaw();
+      const coll = this.markersOf(seq);
+      const ms = await this.markerArray(seq);
+      // Không có guid ổn định → khớp theo id tổng hợp (mk:<ms>:<name>).
+      const translated = await Promise.all(
+        ms.map(async (m) => ({ m, t: await translatePPro26Marker(m) }))
+      );
+      const found = translated.find((x) => x.t.id === markerId);
+      if (!found) throw new NotFoundError('Marker', markerId);
+      await this.runTransaction('Xoá marker', (compound) => {
+        compound.addAction(coll.createRemoveMarkerAction(found.m));
+      });
     });
   }
 

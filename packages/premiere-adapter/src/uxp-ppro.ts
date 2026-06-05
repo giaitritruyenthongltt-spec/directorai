@@ -134,6 +134,27 @@ export interface PProMarkerCollection {
   removeMarker(marker: PProMarker): Promise<boolean>;
 }
 
+/** PPro26 — Marker instance (action model; start set lúc construct). */
+export interface PPro26Marker {
+  getStart(): Promise<TickTime>;
+  getDuration(): Promise<TickTime>;
+  getName(): Promise<string>;
+  getType(): Promise<string>;
+  getComments(): Promise<string>;
+  createSetNameAction(name: string): PProAction;
+  createSetCommentsAction(comment: string): PProAction;
+  createSetDurationAction(t: TickTime): PProAction;
+  createSetTypeAction(type: string): PProAction;
+}
+
+/** PPro26 — `new ppro.Markers(seq)`: collection + action factory. */
+export interface PPro26Markers {
+  getMarkers(): Promise<PPro26Marker[]> | PPro26Marker[];
+  createAddMarkerAction(marker: PPro26Marker): PProAction;
+  createRemoveMarkerAction(marker: PPro26Marker): PProAction;
+  createMoveMarkerAction(marker: PPro26Marker, time: TickTime): PProAction;
+}
+
 export interface PProSequence {
   readonly guid: string;
   readonly name: string;

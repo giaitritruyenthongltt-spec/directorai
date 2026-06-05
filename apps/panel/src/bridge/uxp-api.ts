@@ -227,8 +227,56 @@ export async function introspectPremiereApi(): Promise<Record<string, unknown>> 
     'VideoFilterComponent',
     'Color',
     'ComponentFactory',
+    'Markers',
+    'Marker',
+    'MarkerType',
   ]) {
     dumpStatic(n);
+  }
+
+  // C11 — Markers PPro26: KHÔNG ở seq.markers. Dò pattern truy cập đúng.
+  try {
+    const Markers = pp.Markers as Record<string, (arg: unknown) => unknown> | undefined;
+    const seqM = await proj.getActiveSequence?.();
+    if (Markers && seqM) {
+      for (const fn of ['getMarkers', 'getMarkersForSequence', 'create', 'getMarker']) {
+        try {
+          const ms = await Markers[fn]?.(seqM);
+          out[`Markers_${fn}_seq`] = Array.isArray(ms)
+            ? `array len=${ms.length}`
+            : ms === undefined
+              ? 'undefined'
+              : typeof ms;
+          if (Array.isArray(ms) && ms.length > 0) out.markerInstance = listMembers(ms[0]);
+        } catch (e) {
+          out[`Markers_${fn}_err`] = e instanceof Error ? e.message : String(e);
+        }
+      }
+      // PPro26: new ppro.Markers(seq) → instance dùng action model.
+      try {
+        const inst = new (pp.Markers as new (s: unknown) => Record<string, unknown>)(seqM);
+        out.Markers_instance = listMembers(inst);
+        const addFn = inst.createAddMarkerAction as { length?: number } | undefined;
+        const rmFn = inst.createRemoveMarkerAction as { length?: number } | undefined;
+        out.addMarkerArity = addFn?.length ?? null;
+        out.removeMarkerArity = rmFn?.length ?? null;
+        const getFn = inst.getMarkers as (() => unknown) | undefined;
+        const ms = await getFn?.call(inst);
+        out.getMarkersType = Array.isArray(ms) ? `array len=${ms.length}` : typeof ms;
+        if (Array.isArray(ms) && ms.length > 0) out.existingMarker = listMembers(ms[0]);
+      } catch (e) {
+        out.Markers_ctor_err = e instanceof Error ? e.message : String(e);
+      }
+      // Marker class: constructable? dump instance members.
+      try {
+        const inst2 = new (pp.Marker as new () => unknown)();
+        out.Marker_newInstance = listMembers(inst2);
+      } catch (e) {
+        out.Marker_ctor_err = e instanceof Error ? e.message : String(e);
+      }
+    }
+  } catch (e) {
+    out.markersProbeErr = e instanceof Error ? e.message : String(e);
   }
 
   // getComponentChain() of the first track item → chain + first component members.

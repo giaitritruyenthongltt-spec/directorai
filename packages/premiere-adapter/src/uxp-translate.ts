@@ -10,6 +10,7 @@ import {
 } from '@directorai/core';
 import type {
   PProMarker,
+  PPro26Marker,
   PProProjectItem,
   PProSequence,
   PProTrack,
@@ -280,6 +281,47 @@ export async function translateMarker(m: PProMarker): Promise<Marker> {
     name: m.name,
     comment: m.comment,
     color: m.color || '#ffcc00',
+  };
+}
+
+/** PPro26 — id tổng hợp marker (không có guid ổn định) = mk:<ms>:<name>. */
+export function markerSyntheticId(timeSec: number, name: string): string {
+  return `mk:${Math.round(timeSec * 1000)}:${name}`;
+}
+
+/** PPro26 — marker dùng getStart/getName/getType/getComments (action model). */
+export async function translatePPro26Marker(m: PPro26Marker): Promise<Marker> {
+  const [start, duration, name, type, comment] = await Promise.all([
+    m.getStart(),
+    m.getDuration(),
+    safeAsync(
+      () => m.getName(),
+      () => ''
+    ),
+    safeAsync(
+      () => m.getType(),
+      () => 'Comment'
+    ),
+    safeAsync(
+      () => m.getComments(),
+      () => ''
+    ),
+  ]);
+  const kindMap: Record<string, Marker['kind']> = {
+    Comment: 'comment',
+    Chapter: 'chapter',
+    Segmentation: 'segmentation',
+    WebLink: 'web',
+  };
+  const t = tickToSeconds(start);
+  return {
+    id: markerSyntheticId(t, name),
+    time: t,
+    duration: tickToSeconds(duration),
+    kind: kindMap[type] ?? 'comment',
+    name,
+    comment,
+    color: '#ffcc00',
   };
 }
 
