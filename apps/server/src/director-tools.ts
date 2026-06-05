@@ -54,7 +54,14 @@ interface SidecarBeats {
 
 /** Thao tác đã verify ghi được trên Premiere 26 (Track A). Kế hoạch edit
  *  (AI-3) chỉ được chứa các action này — guard phía server ép buộc. */
-export const SAFE_PLAN_ACTIONS = ['disable', 'trim', 'move', 'rename', 'transition'] as const;
+export const SAFE_PLAN_ACTIONS = [
+  'disable',
+  'enable',
+  'trim',
+  'move',
+  'rename',
+  'transition',
+] as const;
 export type SafePlanAction = (typeof SAFE_PLAN_ACTIONS)[number];
 
 export interface EditPlanStep {
@@ -330,7 +337,17 @@ export class CompositeTools {
   async activeSequenceClips(params: { sequenceId?: string }): Promise<{
     sequenceId: string;
     sequenceName: string;
-    clips: { id: string; name: string; path: string; hasFullPath: boolean; kind: string }[];
+    clips: {
+      id: string;
+      name: string;
+      path: string;
+      hasFullPath: boolean;
+      kind: string;
+      enabled: boolean;
+      inSec: number;
+      outSec: number;
+      startSec: number;
+    }[];
     total: number;
     withFullPath: number;
   }> {
@@ -352,6 +369,12 @@ export class CompositeTools {
         path,
         hasFullPath: hasSep(path),
         kind: c.kind,
+        // Trạng thái + ranh giới THẬT để verify/hoàn tác ghi thật (C10):
+        // enabled (disable/enable), in-out (trim), startSec (move).
+        enabled: c.enabled,
+        inSec: c.sourceRange?.start ?? 0,
+        outSec: c.sourceRange?.end ?? 0,
+        startSec: c.timelineRange?.start ?? 0,
       };
     });
     return {

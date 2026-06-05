@@ -64,6 +64,9 @@ async function execStep(adapter: INLEAdapter, step: ResolvedStep): Promise<strin
     case 'disable':
       await adapter.setClipDisabled(clipId, true);
       return `đã tắt clip "${step.clipName}"`;
+    case 'enable':
+      await adapter.setClipDisabled(clipId, false);
+      return `đã bật lại clip "${step.clipName}"`;
     case 'rename': {
       const newName = String(p.new_name ?? '').trim();
       if (!newName) throw new Error('rename: thiếu new_name');
@@ -123,8 +126,47 @@ async function execMoveBatch(
       toIndex: num(s.params?.to_index) ?? 0,
     }));
     const ops = computeReorderOps(videoClips, intents);
-    for (const op of ops) {
+    if (ops.length === 0) {
+      for (const s of moveSteps) {
+        out.set(s.order, { ok: true, detail: 'không cần sắp lại (thứ tự đã đúng)' });
+      }
+      return out;
+    }
+    // computeReorderOps trả [N op ĐỖ, N op ĐẶT] (N = số clip video trên track).
+    // BUG-PPro26: synthetic clipId chứa startTick → ĐỔI sau mỗi moveClip. Nếu
+    // dùng id GỐC cho pha ĐẶT thì clip đã đỗ không còn id đó → "not found".
+    // Sửa: ĐỖ hết (id gốc còn hợp lệ vì mỗi clip chỉ dời 1 lần ở pha này) →
+    // RE-LIST lấy id MỚI theo VỊ TRÍ ĐỖ (duy nhất) → ĐẶT bằng id mới.
+    const n = videoClips.length;
+    const parkOps = ops.slice(0, n);
+    const placeOps = ops.slice(n);
+    for (const op of parkOps) {
       await adapter.moveClip({ clipId: op.clipId, newStart: op.newStart as Seconds });
+    }
+    const afterPark = (await adapter.listClips(sequenceId)).filter(
+      (c) => c.kind === 'video' && c.trackId === trackId
+    );
+    // Khớp id MỚI theo VỊ TRÍ ĐỖ gần nhất (ô đỗ cách nhau ≥2s nên không nhập nhằng).
+    const freshAtPark = (parkPos: number): string | null => {
+      let best: string | null = null;
+      let bestD = 0.5;
+      for (const c of afterPark) {
+        const d = Math.abs((c.timelineRange.start as number) - parkPos);
+        if (d < bestD) {
+          bestD = d;
+          best = c.id;
+        }
+      }
+      return best;
+    };
+    const parkPosOf = new Map<string, number>(parkOps.map((o) => [o.clipId, o.newStart]));
+    for (const op of placeOps) {
+      const parkPos = parkPosOf.get(op.clipId);
+      const freshId = parkPos !== undefined ? freshAtPark(parkPos) : null;
+      if (!freshId) {
+        throw new Error(`move: mất dấu clip sau khi đỗ (parkPos=${parkPos ?? '?'})`);
+      }
+      await adapter.moveClip({ clipId: freshId, newStart: op.newStart as Seconds });
     }
     logger?.info({ sequenceId, ops: ops.length, moves: moveSteps.length }, 'safe.apply move batch');
     for (const s of moveSteps) {

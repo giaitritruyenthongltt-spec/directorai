@@ -30,6 +30,9 @@ import type { EditPlan, EditPlanStep, SafePlanAction } from './director-tools.js
  */
 export const EXECUTABLE_ACTIONS: Record<SafePlanAction, boolean> = {
   disable: true,
+  // enable = inverse của disable (setClipDisabled(false)). Dùng cho hoàn tác
+  // ghi-thật (planner KHÔNG sinh enable; chỉ tầng test/revert dùng).
+  enable: true,
   trim: true,
   rename: true,
   move: true,
@@ -84,6 +87,8 @@ function describe(
   switch (step.action) {
     case 'disable':
       return { description: `Tắt clip "${name}" khỏi bản dựng (ẩn, KHÔNG xoá file)` };
+    case 'enable':
+      return { description: `Bật lại clip "${name}" trong bản dựng` };
     case 'trim': {
       const a = num(p.in_sec);
       const b = num(p.out_sec);
