@@ -434,8 +434,9 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   async getClip(clipId: string): Promise<Clip | null> {
     try {
       const { item, track } = await this.findTrackItem(clipId);
-      const mediaType = await track.getMediaType().catch(() => 'Video');
-      const kind: Clip['kind'] = mediaType === 'Video' ? 'video' : 'audio';
+      // B2: getMediaType() trả SỐ trên PPro26 (so '=== Video' luôn false). Suy
+      // kind từ prefix synthetic clipId (video-*/audio-*) — đáng tin + bỏ 1 await.
+      const kind: Clip['kind'] = clipId.startsWith('audio') ? 'audio' : 'video';
       return translateTrackItem(item, `${kind}-${track.id}`, kind, this.ppro);
     } catch {
       return null;
@@ -480,8 +481,8 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
         item.createSetOutPointAction(this.secondsToTick(inT.seconds + delta + dur))
       );
     });
-    const mt = await track.getMediaType();
-    const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
+    // B2: kind từ prefix clipId (getMediaType trả SỐ trên PPro26) + bỏ 1 await.
+    const k: Clip['kind'] = input.clipId.startsWith('audio') ? 'audio' : 'video';
     return translateTrackItem(item, `${k}-${track.id}`, k, this.ppro);
   }
 
@@ -505,8 +506,8 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     await this.runTransaction('Di chuyển clip', (compound) => {
       compound.addAction(item.createMoveAction(this.secondsToTick(delta)));
     });
-    const mt = await track.getMediaType();
-    const k: Clip['kind'] = mt === 'Video' ? 'video' : 'audio';
+    // B2: kind từ prefix clipId (getMediaType trả SỐ trên PPro26) + bỏ 1 await.
+    const k: Clip['kind'] = input.clipId.startsWith('audio') ? 'audio' : 'video';
     return translateTrackItem(item, `${k}-${track.id}`, k, this.ppro);
   }
 
