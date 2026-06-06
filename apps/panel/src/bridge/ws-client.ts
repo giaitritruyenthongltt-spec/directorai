@@ -30,6 +30,7 @@ import {
   audioProbe,
   importProbe,
   sedProbe,
+  spikeProbe,
 } from './uxp-api.js';
 import { ReconnectMachine, DEFAULT_RECONNECT_CONFIG } from './reconnect-machine.js';
 
@@ -195,7 +196,9 @@ class WsClient {
                 ? await importProbe((req.params as { path?: string } | undefined)?.path)
                 : req.method === '_debug.sedProbe'
                   ? await sedProbe((req.params as { path?: string } | undefined)?.path)
-                  : await dispatchRpc(req.method, req.params, getPanelAdapter());
+                  : req.method === '_debug.spikeProbe'
+                    ? await spikeProbe()
+                    : await dispatchRpc(req.method, req.params, getPanelAdapter());
       // A4 — JSON-RPC success PHẢI có field `result`. Method trả void
       // sẽ cho `undefined`, và JSON.stringify bỏ key undefined → response
       // không có result → server không nhận ra → treo. Ép null.

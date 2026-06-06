@@ -685,6 +685,187 @@ export async function sedProbe(path?: string): Promise<Record<string, unknown>> 
   return out;
 }
 
+/**
+ * SPIKES S1/S5/S4 — kiểm 3 ẩn số chốt phạm vi MVP recut:
+ *  S1: `color`/Lumetri Exposure SET value có PERSIST không (đọc lại)?
+ *  S5: Transform `Scale` SET value persist không → quyết flip/crop làm được trong Premiere?
+ *  S4: API chèn audio clip vào track theo thời gian (cho import stem ngược).
+ * Tự KHÔI PHỤC giá trị + DỌN component đã append. Gọi qua `_debug.spikeProbe`.
+ */
+export async function spikeProbe(): Promise<Record<string, unknown>> {
+  if (!ppro) return { error: 'not in UXP' };
+  const out: Record<string, unknown> = {};
+  const pp = ppro as Record<string, any>;
+  const Proj = pp.Project;
+  const VFF = pp.VideoFilterFactory;
+  const num = (v: any): number =>
+    v && typeof v === 'object' && 'value' in v ? Number(v.value) : Number(v);
+
+  const freshItem = async (): Promise<{ proj: any; item: any }> => {
+    const proj = await Proj.getActiveProject();
+    const seq = await proj.getActiveSequence();
+    const track = await seq.getVideoTrack(0);
+    const items = await track.getTrackItems(1, false);
+    return { proj, item: items[0] };
+  };
+  const chainComps = async (item: any): Promise<{ chain: any; comps: any[] }> => {
+    const chain = await item.getComponentChain();
+    const n = await chain.getComponentCount();
+    const comps: any[] = [];
+    for (let i = 0; i < n; i++) {
+      const c = await chain.getComponentAtIndex(i);
+      comps.push({ c, mn: await c.getMatchName(), dn: await c.getDisplayName() });
+    }
+    return { chain, comps };
+  };
+  const paramByName = async (comp: any, re: RegExp): Promise<any> => {
+    const pc = await comp.getParamCount();
+    for (let i = 0; i < pc; i++) {
+      const p = await comp.getParam(i);
+      const dn = (await p.getDisplayName?.()) ?? p.displayName ?? '';
+      if (re.test(dn)) return { p, dn };
+    }
+    return null;
+  };
+  const find = (comps: any[], re: RegExp): any =>
+    comps.find((c) => re.test(c.mn ?? '') || re.test(c.dn ?? ''));
+
+  // ===== S1: Lumetri Exposure persist =====
+  try {
+    let { proj, item } = await freshItem();
+    let { chain, comps } = await chainComps(item);
+    let lum = find(comps, /lumetri/i);
+    let appended = false;
+    if (!lum) {
+      const comp = await VFF.createComponent('AE.ADBE Lumetri');
+      await proj.executeTransaction(
+        (c: any) => c.addAction(chain.createAppendComponentAction(comp)),
+        'spike S1 add lumetri'
+      );
+      appended = true;
+      ({ proj, item } = await freshItem());
+      ({ chain, comps } = await chainComps(item));
+      lum = find(comps, /lumetri/i);
+    }
+    out.S1_lumetriFound = !!lum;
+    if (lum) {
+      const ex = await paramByName(lum.c, /exposure/i);
+      out.S1_exposureParam = ex?.dn ?? '(none)';
+      if (ex) {
+        const before = num(await ex.p.getStartValue());
+        out.S1_before = before;
+        const kf = await ex.p.createKeyframe(0.85);
+        await proj.executeTransaction(
+          (c: any) => c.addAction(ex.p.createSetValueAction(kf)),
+          'spike S1 set exposure'
+        );
+        const f2 = await freshItem();
+        const cc2 = await chainComps(f2.item);
+        const lum2 = find(cc2.comps, /lumetri/i);
+        const ex2 = lum2 && (await paramByName(lum2.c, /exposure/i));
+        out.S1_after = ex2 ? num(await ex2.p.getStartValue()) : 'n/a';
+        out.S1_persist = out.S1_after === 0.85;
+        // khôi phục giá trị gốc
+        if (ex2) {
+          const kf0 = await ex2.p.createKeyframe(before);
+          await f2.proj.executeTransaction(
+            (c: any) => c.addAction(ex2.p.createSetValueAction(kf0)),
+            'spike S1 restore'
+          );
+        }
+      }
+    }
+    if (appended) {
+      const f3 = await freshItem();
+      const cc3 = await chainComps(f3.item);
+      const lum3 = find(cc3.comps, /lumetri/i);
+      if (lum3)
+        await f3.proj.executeTransaction(
+          (c: any) => c.addAction(cc3.chain.createRemoveComponentAction(lum3.c)),
+          'spike S1 rm lumetri'
+        );
+      out.S1_cleaned = true;
+    }
+  } catch (e) {
+    out.S1_err = (e instanceof Error ? e.message : String(e)).slice(0, 180);
+  }
+
+  // ===== S5: Transform Scale persist (flip/crop) =====
+  try {
+    const { proj, item } = await freshItem();
+    const { chain } = await chainComps(item);
+    const comp = await VFF.createComponent('AE.ADBE Transform');
+    out.S5_transformCreated = !!comp;
+    await proj.executeTransaction(
+      (c: any) => c.addAction(chain.createAppendComponentAction(comp)),
+      'spike S5 add transform'
+    );
+    const f = await freshItem();
+    const cc = await chainComps(f.item);
+    const tr = find(cc.comps, /transform/i);
+    out.S5_transformFound = !!tr;
+    if (tr) {
+      const pcount = await tr.c.getParamCount();
+      const names: string[] = [];
+      for (let i = 0; i < Math.min(pcount, 30); i++) {
+        const p = await tr.c.getParam(i);
+        names.push((await p.getDisplayName?.()) ?? p.displayName ?? `#${i}`);
+      }
+      out.S5_transformParams = names;
+      const sc = (await paramByName(tr.c, /scale width/i)) ?? (await paramByName(tr.c, /scale/i));
+      out.S5_scaleParam = sc?.dn ?? '(none)';
+      if (sc) {
+        out.S5_before = num(await sc.p.getStartValue());
+        const kf = await sc.p.createKeyframe(-100);
+        await f.proj.executeTransaction(
+          (c: any) => c.addAction(sc.p.createSetValueAction(kf)),
+          'spike S5 set scale -100'
+        );
+        const f2 = await freshItem();
+        const cc2 = await chainComps(f2.item);
+        const tr2 = find(cc2.comps, /transform/i);
+        const sc2 =
+          tr2 &&
+          ((await paramByName(tr2.c, /scale width/i)) ?? (await paramByName(tr2.c, /scale/i)));
+        out.S5_after = sc2 ? num(await sc2.p.getStartValue()) : 'n/a';
+        out.S5_persist = out.S5_after === -100;
+      }
+    }
+    const f4 = await freshItem();
+    const cc4 = await chainComps(f4.item);
+    const tr4 = find(cc4.comps, /transform/i);
+    if (tr4)
+      await f4.proj.executeTransaction(
+        (c: any) => c.addAction(cc4.chain.createRemoveComponentAction(tr4.c)),
+        'spike S5 rm transform'
+      );
+    out.S5_cleaned = true;
+  } catch (e) {
+    out.S5_err = (e instanceof Error ? e.message : String(e)).slice(0, 180);
+  }
+
+  // ===== S4: API chèn audio clip (dump khả năng) =====
+  try {
+    const proj = await Proj.getActiveProject();
+    const seq = await proj.getActiveSequence();
+    const atrack = await seq.getAudioTrack(0);
+    out.S4_audioTrackInsertApi = listMembers(atrack).filter((m) =>
+      /insert|overwrite|append|add|clip|item|action/i.test(m)
+    );
+    const root = await proj.getRootItem();
+    const items = await root.getItems();
+    const aClip = items.find((it: any) => /\.(wav|mp3|m4a|aac)$/i.test(it?.name ?? ''));
+    out.S4_audioAssetInProject = aClip?.name ?? '(none)';
+    out.S4_sequenceEditorApi = listMembers(pp.SequenceEditor).filter((m) =>
+      /insert|overwrite|append|clip|action/i.test(m)
+    );
+  } catch (e) {
+    out.S4_err = (e instanceof Error ? e.message : String(e)).slice(0, 180);
+  }
+
+  return out;
+}
+
 export async function importProbe(path?: string): Promise<Record<string, unknown>> {
   if (!ppro) return { error: 'not in UXP' };
   const FCPXML = path ?? 'E:\\T11\\_recut_test_recut.fcpxml';

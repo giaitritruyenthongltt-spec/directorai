@@ -88,6 +88,24 @@ live), editable cho tập HOT. FFmpeg/sidecar = mọi đòn chống-trùng nặn
 > Hôm nay ĐÃ chắc: SED cắt cảnh (verify 21 cảnh), move/trim/rename (17/17), color append
 > Lumetri. CHƯA chắc: color value persist (S1), SED trên gameplay (S2), set-param effect (S5).
 
+### KẾT QUẢ SPIKE (chạy live 2026-06-06 — CHỐT phạm vi)
+
+| Spike                     | Kết quả                                                                                                                                                                                 | Quyết định                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **S1** màu persist        | ❌ `getStartValue` Lumetri Exposure trả **null** trước/sau set → KHÔNG verify được value (cùng lớp lỗi audio-gain)                                                                      | Regrade Lane A = **best-effort không kiểm được** → màu THẬT làm ở **Lane B (FFmpeg curves)**     |
+| **S2** SED episode thật   | ⏳ **CHỜ** 1 đường dẫn episode đã-dựng của bạn (kho 3000 không ở E:\T11)                                                                                                                | SED đã bắt cắt cứng (21 cảnh). Episode đã-dựng vốn CÓ cắt → kỳ vọng chạy; cần xác nhận file thật |
+| **S3** Demucs             | 🟡 `uv` 0.11.15 ✓ nhưng **torch là bản `+cpu` (cuda False)** + venv không pip → cần `uv pip install demucs` **+ cài lại torch-CUDA cu121 (~2.5GB)** cho GTX1660S. CPU quá chậm cho 3000 | Lane B audio: provision torch-CUDA trước; FFmpeg đã có (8.0.1)                                   |
+| **S4** chèn audio Lane A  | ❌ audioTrack chỉ `addEventListener/getTrackItems` — **KHÔNG có insert/overwrite clip**                                                                                                 | Audio dedup → **Lane B (FFmpeg)**, KHÔNG import-back vào Lane A                                  |
+| **S5** flip/crop Premiere | ❌ `'AE.ADBE Transform'` **không phải matchName hợp lệ**; Motion intrinsic + lỗi read-back (S1)                                                                                         | flip/crop → **Lane B (FFmpeg hflip/crop)**                                                       |
+
+**CHỐT phạm vi sau spike (đã de-risk):**
+
+- **Lane A (Premiere) MVP = CHỈ 3 op ĐÃ chứng minh:** ① cắt cảnh (SED) · ② đảo (move) ·
+  ③ tỉa (trim). Regrade màu = best-effort (component add OK, value không kiểm được).
+- **Lane B (FFmpeg + Demucs) = TOÀN BỘ dedup thật:** flip/crop/speed/color/grain (FFmpeg
+  8.0.1 SẴN) + tách/thay BGM (Demucs — provision torch-CUDA). Đây là cỗ máy chống-trùng.
+- 5 spike đã loại sạch giả định sai → kế hoạch giờ build được trên nền chắc.
+
 ## Đặc tả RPC (đã sửa theo code thật — vòng 2)
 
 ### `recut.detectScenes` — PANEL handler (productionize `sedProbe`, BỎ bước tự-dọn)
