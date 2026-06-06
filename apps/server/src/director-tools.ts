@@ -271,6 +271,10 @@ export class CompositeTools {
             options?: { rename?: boolean; trimTailSec?: number; trimHeadSec?: number };
           }
         );
+      case 'recut.batch.process':
+        return this.recutBatchProcess(
+          params as { videoPath: string; outPath?: string; recipe?: Record<string, unknown> }
+        );
       default:
         return null;
     }
@@ -302,6 +306,7 @@ export class CompositeTools {
       'timeline.cutOnBeats',
       'color.applyLookByScene',
       'recut.applyDedup',
+      'recut.batch.process',
     ];
   }
 
@@ -398,6 +403,20 @@ export class CompositeTools {
     }
     this.deps.logger.info({ seqId, N, applied }, 'recut.applyDedup xong');
     return { applied, sceneCount: N, checkpointId, steps };
+  }
+
+  /** RECUT Lane B — chống-trùng headless: gọi sidecar /recut/render (FFmpeg + Demucs). */
+  private async recutBatchProcess(params: {
+    videoPath: string;
+    outPath?: string;
+    recipe?: Record<string, unknown>;
+  }): Promise<unknown> {
+    return sidecarPost('/recut/render', {
+      video_path: params.videoPath,
+      out_path: params.outPath ?? null,
+      recipe: params.recipe ?? {},
+      use_nvenc: true,
+    });
   }
 
   // ─── context.understandClip (AI-1 — Vision) ───────────────────────────

@@ -64,6 +64,55 @@ class SceneResult(BaseModel):
     scenes: list[Scene]
 
 
+class AudioSeparateRequest(BaseModel):
+    """Tách stem audio bằng Demucs (tách nhạc nền / voice)."""
+
+    media_path: str
+    model: str = "htdemucs"
+    # 'vocals' (2-stem: vocals + no_vocals) hoặc '4stem'
+    mode: str = "vocals"
+
+
+class AudioSeparateResult(BaseModel):
+    ok: bool
+    out_dir: str
+    stems: dict[str, str]  # {'vocals': path, 'no_vocals': path, ...}
+    device: str
+    elapsed_ms: int
+
+
+class RecutRecipe(BaseModel):
+    """Công thức chống-trùng (FFmpeg + Demucs)."""
+
+    flip: bool = False  # lật ngang (hflip) — phá pHash
+    crop_pct: float = 0.0  # zoom-crop % (0..10) — đổi khung hình
+    speed: float = 1.0  # đổi tốc độ video (0.9..1.15) + atempo audio
+    saturation: float = 1.0  # eq saturation
+    brightness: float = 0.0  # eq brightness (-0.1..0.1)
+    grain: float = 0.0  # noise cường độ (0..20)
+    # BGM: keep | strip (bỏ nhạc, giữ voice) | replace (voice + nhạc mới)
+    bgm: str = "keep"
+    new_bgm_path: str | None = None
+    bgm_gain_db: float = -6.0
+
+
+class RecutRenderRequest(BaseModel):
+    video_path: str
+    out_path: str | None = None  # mặc định: <video>_recut.mp4
+    recipe: RecutRecipe = RecutRecipe()
+    use_nvenc: bool = True
+
+
+class RecutRenderResult(BaseModel):
+    ok: bool
+    out_path: str
+    duration_sec: float
+    audio_changed: bool
+    applied: list[str]
+    elapsed_ms: int
+    error: str | None = None
+
+
 class BeatRequest(BaseModel):
     """Request to detect musical beats."""
 

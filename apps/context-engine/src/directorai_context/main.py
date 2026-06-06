@@ -27,6 +27,10 @@ from directorai_context.models import (
     IngestResult,
     SceneRequest,
     SceneResult,
+    AudioSeparateRequest,
+    AudioSeparateResult,
+    RecutRenderRequest,
+    RecutRenderResult,
     SearchHit,
     SearchRequest,
     SearchResult,
@@ -240,6 +244,37 @@ def create_app() -> FastAPI:
                 threshold=req.threshold,
                 min_scene_len_sec=req.min_scene_len_sec,
             )
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.post("/audio/separate", response_model=AudioSeparateResult)
+    async def post_audio_separate(req: AudioSeparateRequest) -> AudioSeparateResult:
+        """Lane B — tách stem (Demucs): tách nhạc nền / voice."""
+        from directorai_context.modules.recut_pipeline import separate_audio
+
+        try:
+            r = separate_audio(req.media_path, model=req.model, mode=req.mode)
+            return AudioSeparateResult(**r)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:  # demucs/torch lỗi → 500 có thông điệp
+            raise HTTPException(status_code=500, detail=f"demucs: {e}") from e
+
+    @app.post("/recut/render", response_model=RecutRenderResult)
+    async def post_recut_render(req: RecutRenderRequest) -> RecutRenderResult:
+        """Lane B — render video chống-trùng (FFmpeg + Demucs)."""
+        from directorai_context.modules.recut_pipeline import has_ffmpeg, recut_render
+
+        if not has_ffmpeg():
+            raise HTTPException(status_code=500, detail="ffmpeg không có trong PATH")
+        try:
+            r = recut_render(
+                req.video_path,
+                req.out_path,
+                req.recipe.model_dump(),
+                use_nvenc=req.use_nvenc,
+            )
+            return RecutRenderResult(**r)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
 

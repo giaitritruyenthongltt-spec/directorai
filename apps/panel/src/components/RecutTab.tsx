@@ -50,6 +50,15 @@ export function RecutTab(): React.ReactElement {
   const [applying, setApplying] = useState(false);
   const [dedup, setDedup] = useState<DedupResult | null>(null);
 
+  // Lane B (headless FFmpeg)
+  const [batching, setBatching] = useState(false);
+  const [batchRes, setBatchRes] = useState<{
+    ok?: boolean;
+    out_path?: string;
+    applied?: string[];
+    error?: string;
+  } | null>(null);
+
   const detect = async (): Promise<void> => {
     setErr(null);
     setDedup(null);
@@ -85,6 +94,28 @@ export function RecutTab(): React.ReactElement {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setApplying(false);
+    }
+  };
+
+  const runBatch = async (): Promise<void> => {
+    const path = videoPath.trim();
+    if (!path) {
+      setErr('Hãy nhập đường dẫn video.');
+      return;
+    }
+    setErr(null);
+    setBatching(true);
+    setBatchRes(null);
+    try {
+      const r = await wsClient.call<typeof batchRes>('recut.batch.process', {
+        videoPath: path,
+        recipe: { flip: true, crop_pct: 3, speed: 1.05, saturation: 1.08, grain: 6, bgm: 'keep' },
+      });
+      setBatchRes(r);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBatching(false);
     }
   };
 
@@ -171,12 +202,30 @@ export function RecutTab(): React.ReactElement {
           <Button variant="primary" busy={applying} onClick={rebuild} iconName="check" full>
             {applying ? 'Đang tái dựng…' : 'Tái dựng'}
           </Button>
-          <div className="recut-note">
-            Đòn chống-trùng mạnh (tách/thay nhạc nền, tách voice, lật ngang, đổi tốc độ, đổi khung)
-            chạy ở <b>chế độ Hàng loạt (headless)</b> — sắp có.
-          </div>
         </Section>
       )}
+
+      <Section title="Chống trùng mạnh (headless · không cần Premiere)" iconName="zap">
+        <div className="recut-note">
+          Render bản MỚI bằng FFmpeg: lật ngang + crop-zoom + đổi tốc độ + màu + nhiễu (đòn phá
+          pHash/Content-ID). Tách/thay nhạc nền (Demucs) cần cài torch-CUDA — sẽ bật sau.
+        </div>
+        <Button variant="secondary" busy={batching} onClick={runBatch} iconName="zap" full>
+          {batching ? 'Đang xử lý (FFmpeg)…' : 'Xử lý chống-trùng → xuất file mới'}
+        </Button>
+        {batchRes && (
+          <div className="recut-result">
+            {batchRes.ok ? (
+              <>
+                ✓ Xuất: <span className="recut-seqname">{batchRes.out_path}</span>
+                <div className="recut-note">Đã áp: {(batchRes.applied ?? []).join(', ')}</div>
+              </>
+            ) : (
+              <span className="recut-step bad">Lỗi: {batchRes.error ?? 'không rõ'}</span>
+            )}
+          </div>
+        )}
+      </Section>
 
       {dedup && (
         <Section title="Kết quả tái dựng" iconName="check">

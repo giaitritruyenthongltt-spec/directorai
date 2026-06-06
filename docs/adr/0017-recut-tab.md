@@ -98,6 +98,19 @@ live), editable cho tập HOT. FFmpeg/sidecar = mọi đòn chống-trùng nặn
 | **S4** chèn audio Lane A  | ❌ audioTrack chỉ `addEventListener/getTrackItems` — **KHÔNG có insert/overwrite clip**                                                                                                 | Audio dedup → **Lane B (FFmpeg)**, KHÔNG import-back vào Lane A                                  |
 | **S5** flip/crop Premiere | ❌ `'AE.ADBE Transform'` **không phải matchName hợp lệ**; Motion intrinsic + lỗi read-back (S1)                                                                                         | flip/crop → **Lane B (FFmpeg hflip/crop)**                                                       |
 
+### TRẠNG THÁI THỰC THI (2026-06-06)
+
+- ✅ **Lane A** (Premiere): tab `recut` + `recut.detectScenes` (21 cảnh live) +
+  `recut.applyDedup` (rename+tỉa, 41 op live).
+- ✅ **Lane B** (sidecar headless): `recut_pipeline.py` + `/recut/render` +
+  `/audio/separate` + composite `recut.batch.process` + nút UI. FFmpeg dedup
+  (flip/crop/speed/màu/grain + NVENC) **CHẠY THẬT** qua WS (1.5s/video 36s).
+- 🟡 **Demucs (tách/thay nhạc nền):** đã cài (`uv pip install demucs`) nhưng `torchaudio
+2.11` lưu stem qua **`torchcodec`** → cần **FFmpeg shared libs (libav 4–7)**; hệ thống
+  có ffmpeg **8 static** → DLL không load. Đã cho **degrade mềm** (tách lỗi → vẫn render
+  visual, không sập). **FIX ĐÚNG:** reinstall **torch+torchaudio khớp + CUDA cu12x
+  (~2.5GB)** cho GTX1660S (driver CUDA 13.1 ✓) — sẽ mở khoá audio-dedup + GPU tốc độ.
+
 **CHỐT phạm vi sau spike (đã de-risk):**
 
 - **Lane A (Premiere) MVP = CHỈ 3 op ĐÃ chứng minh:** ① cắt cảnh (SED) · ② đảo (move) ·
