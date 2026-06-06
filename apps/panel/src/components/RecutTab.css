@@ -55,6 +55,14 @@
   min-width: 56px;
   text-align: right;
 }
+.recut-btnrow {
+  display: flex;
+  gap: var(--sp-3, 8px);
+  margin-bottom: var(--sp-3, 8px);
+}
+.recut-btnrow > * {
+  flex: 1;
+}
 .recut-opt {
   display: flex;
   align-items: center;

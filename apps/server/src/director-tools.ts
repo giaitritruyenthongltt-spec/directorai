@@ -275,6 +275,8 @@ export class CompositeTools {
         return this.recutBatchProcess(
           params as { videoPath: string; outPath?: string; recipe?: Record<string, unknown> }
         );
+      case 'recut.separateAudio':
+        return this.recutSeparateAudio(params as { videoPath: string; mode?: string });
       default:
         return null;
     }
@@ -307,6 +309,7 @@ export class CompositeTools {
       'color.applyLookByScene',
       'recut.applyDedup',
       'recut.batch.process',
+      'recut.separateAudio',
     ];
   }
 
@@ -416,6 +419,14 @@ export class CompositeTools {
       out_path: params.outPath ?? null,
       recipe: params.recipe ?? {},
       use_nvenc: true,
+    });
+  }
+
+  /** RECUT — tách nhạc nền / voice (Demucs): trả {stems:{vocals,no_vocals}}. */
+  private async recutSeparateAudio(params: { videoPath: string; mode?: string }): Promise<unknown> {
+    return sidecarPost('/audio/separate', {
+      media_path: params.videoPath,
+      mode: params.mode ?? 'vocals',
     });
   }
 

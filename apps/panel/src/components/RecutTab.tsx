@@ -50,7 +50,13 @@ export function RecutTab(): React.ReactElement {
   const [applying, setApplying] = useState(false);
   const [dedup, setDedup] = useState<DedupResult | null>(null);
 
-  // Lane B (headless FFmpeg)
+  // Lane B (headless FFmpeg) — recipe điều khiển được
+  const [rFlip, setRFlip] = useState(true);
+  const [rCrop, setRCrop] = useState(3);
+  const [rSpeed, setRSpeed] = useState(1.05);
+  const [rColor, setRColor] = useState(true);
+  const [rGrain, setRGrain] = useState(6);
+  const [rBgm, setRBgm] = useState<'keep' | 'strip' | 'replace'>('keep');
   const [batching, setBatching] = useState(false);
   const [batchRes, setBatchRes] = useState<{
     ok?: boolean;
@@ -58,6 +64,37 @@ export function RecutTab(): React.ReactElement {
     applied?: string[];
     error?: string;
   } | null>(null);
+
+  // Tách nhạc nền / voice (Demucs)
+  const [separating, setSeparating] = useState(false);
+  const [sep, setSep] = useState<{
+    ok?: boolean;
+    stems?: Record<string, string>;
+    device?: string;
+    error?: string;
+  } | null>(null);
+
+  const separate = async (): Promise<void> => {
+    const path = videoPath.trim();
+    if (!path) {
+      setErr('Hãy nhập đường dẫn video.');
+      return;
+    }
+    setErr(null);
+    setSeparating(true);
+    setSep(null);
+    try {
+      const r = await wsClient.call<typeof sep>('recut.separateAudio', {
+        videoPath: path,
+        mode: 'vocals',
+      });
+      setSep(r);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSeparating(false);
+    }
+  };
 
   const detect = async (): Promise<void> => {
     setErr(null);
@@ -109,7 +146,14 @@ export function RecutTab(): React.ReactElement {
     try {
       const r = await wsClient.call<typeof batchRes>('recut.batch.process', {
         videoPath: path,
-        recipe: { flip: true, crop_pct: 3, speed: 1.05, saturation: 1.08, grain: 6, bgm: 'keep' },
+        recipe: {
+          flip: rFlip,
+          crop_pct: rCrop,
+          speed: rSpeed,
+          saturation: rColor ? 1.08 : 1.0,
+          grain: rGrain,
+          bgm: rBgm,
+        },
       });
       setBatchRes(r);
     } catch (e) {
@@ -205,12 +249,112 @@ export function RecutTab(): React.ReactElement {
         </Section>
       )}
 
+      <Section title="Tách nhạc nền / voice (Demucs)" iconName="wand">
+        <div className="recut-note">
+          Tách audio thành <b>voice</b> (giọng) + <b>no_vocals</b> (nhạc nền). Đòn chống-trùng số 1
+          (Content-ID là audio-first). Cần torch-CUDA (đang cài nếu chưa có).
+        </div>
+        <div className="recut-btnrow">
+          <Button variant="secondary" busy={separating} onClick={separate} iconName="wand">
+            {separating ? 'Đang tách…' : 'Tách nhạc nền'}
+          </Button>
+          <Button variant="secondary" busy={separating} onClick={separate} iconName="wand">
+            Tách voice
+          </Button>
+        </div>
+        {sep && (
+          <div className="recut-result">
+            {sep.ok ? (
+              <>
+                ✓ Tách xong ({sep.device}):
+                {Object.entries(sep.stems ?? {}).map(([k, v]) => (
+                  <div key={k} className="recut-note">
+                    {k === 'vocals' ? '🎤 voice' : '🎵 nhạc nền'}: {v}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <span className="recut-step bad">
+                Lỗi: {sep.error ?? 'không rõ (xem torch-CUDA)'}
+              </span>
+            )}
+          </div>
+        )}
+      </Section>
+
       <Section title="Chống trùng mạnh (headless · không cần Premiere)" iconName="zap">
         <div className="recut-note">
-          Render bản MỚI bằng FFmpeg: lật ngang + crop-zoom + đổi tốc độ + màu + nhiễu (đòn phá
-          pHash/Content-ID). Tách/thay nhạc nền (Demucs) cần cài torch-CUDA — sẽ bật sau.
+          Render bản MỚI bằng FFmpeg theo công thức dưới (đòn phá pHash/Content-ID).
         </div>
-        <Button variant="secondary" busy={batching} onClick={runBatch} iconName="zap" full>
+        <label className="recut-opt">
+          <input
+            type="checkbox"
+            checked={rFlip}
+            onChange={(e) => setRFlip((e.target as HTMLInputElement).checked)}
+          />
+          <span>Lật ngang (mạnh nhất phá khung hình)</span>
+        </label>
+        <label className="recut-opt">
+          <span>Crop-zoom</span>
+          <input
+            className="recut-num"
+            type="number"
+            step="1"
+            min="0"
+            max="10"
+            value={rCrop}
+            onChange={(e) => setRCrop(Number((e.target as HTMLInputElement).value) || 0)}
+          />
+          <span className="recut-unit">%</span>
+        </label>
+        <label className="recut-opt">
+          <span>Đổi tốc độ</span>
+          <input
+            className="recut-num"
+            type="number"
+            step="0.01"
+            min="0.9"
+            max="1.15"
+            value={rSpeed}
+            onChange={(e) => setRSpeed(Number((e.target as HTMLInputElement).value) || 1)}
+          />
+          <span className="recut-unit">×</span>
+        </label>
+        <label className="recut-opt">
+          <input
+            type="checkbox"
+            checked={rColor}
+            onChange={(e) => setRColor((e.target as HTMLInputElement).checked)}
+          />
+          <span>Đổi màu nhẹ</span>
+        </label>
+        <label className="recut-opt">
+          <span>Nhiễu (grain)</span>
+          <input
+            className="recut-num"
+            type="number"
+            step="1"
+            min="0"
+            max="20"
+            value={rGrain}
+            onChange={(e) => setRGrain(Number((e.target as HTMLInputElement).value) || 0)}
+          />
+        </label>
+        <label className="recut-opt">
+          <span>Nhạc nền</span>
+          <select
+            className="recut-num"
+            value={rBgm}
+            onChange={(e) =>
+              setRBgm((e.target as HTMLSelectElement).value as 'keep' | 'strip' | 'replace')
+            }
+          >
+            <option value="keep">Giữ nguyên</option>
+            <option value="strip">Bỏ nhạc (giữ voice)</option>
+            <option value="replace">Thay nhạc mới</option>
+          </select>
+        </label>
+        <Button variant="primary" busy={batching} onClick={runBatch} iconName="zap" full>
           {batching ? 'Đang xử lý (FFmpeg)…' : 'Xử lý chống-trùng → xuất file mới'}
         </Button>
         {batchRes && (

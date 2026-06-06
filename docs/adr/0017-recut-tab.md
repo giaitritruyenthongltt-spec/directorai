@@ -105,11 +105,13 @@ live), editable cho tập HOT. FFmpeg/sidecar = mọi đòn chống-trùng nặn
 - ✅ **Lane B** (sidecar headless): `recut_pipeline.py` + `/recut/render` +
   `/audio/separate` + composite `recut.batch.process` + nút UI. FFmpeg dedup
   (flip/crop/speed/màu/grain + NVENC) **CHẠY THẬT** qua WS (1.5s/video 36s).
-- 🟡 **Demucs (tách/thay nhạc nền):** đã cài (`uv pip install demucs`) nhưng `torchaudio
-2.11` lưu stem qua **`torchcodec`** → cần **FFmpeg shared libs (libav 4–7)**; hệ thống
-  có ffmpeg **8 static** → DLL không load. Đã cho **degrade mềm** (tách lỗi → vẫn render
-  visual, không sập). **FIX ĐÚNG:** reinstall **torch+torchaudio khớp + CUDA cu12x
-  (~2.5GB)** cho GTX1660S (driver CUDA 13.1 ✓) — sẽ mở khoá audio-dedup + GPU tốc độ.
+- ✅ **Demucs (tách nhạc nền / voice):** ĐÃ FIX + chạy GPU (2026-06-07). Gốc lỗi:
+  torchaudio 2.11 lưu stem qua `torchcodec` (cần FFmpeg shared-libs 4–7; hệ thống ffmpeg
+  8 static → fail). **Fix:** `torch==2.5.1+cu121 + torchaudio==2.5.1+cu121 + soundfile`
+  (torchaudio <2.8 lưu qua soundfile, không cần torchcodec) → **cuda=True**. Live:
+  composite `recut.separateAudio` qua WS → 2 stem (vocals/no_vocals), device=cuda, ~5s.
+  Nút "Tách nhạc nền"/"Tách voice" trong tab. (torch hạ 2.12→2.5.1; chỉ Demucs dùng
+  torch — faster-whisper dùng ctranslate2 nên không ảnh hưởng.)
 
 **CHỐT phạm vi sau spike (đã de-risk):**
 
