@@ -134,7 +134,15 @@ trong 1 executeTransaction không xen await).
   đường cũ (`getComponents/insertComponent/.matchName/setValue/addKey`) KHÔNG
   tồn tại trên 26. Bug phụ: `translateComponent` đọc `.matchName` property →
   `undefined.toLowerCase()` crash (đã sửa getMatchName()).
-- `audio gain` value-semantics: write-path đúng nhưng `getStartValue` đọc 0 →
-  chưa xác nhận giá trị đổi thật (param Level scale ≠ dB?). Còn tồn.
-- `audio fade` (`addAudioFade`): rewrite action-model (createAddKeyframeAction)
-  nhưng CHƯA test live (keyframe-at-time semantics chưa chắc).
+- ✅ **addKeyframe, addAudioFade, muteTrack** — rewrite action-model
+  (`paramByName` + `createKeyframe`/set `keyframe.position`/`createAddKeyframeAction`);
+  CHẠY live không lỗi (C15). Quy ước chung: xem **ADR-0016**.
+- ⚠️ **audio gain VALUE không persist**: `setAudioGain` chạy đúng-shape nhưng
+  `getStartValue()` đọc 0 cả trước/sau set (Volume/Level qua `createSetValueAction`
+  không đổi giá trị). Nghi **clip-gain là API riêng** (không phải Volume filter
+  Level) — trackItem cũng không có method gain. `getStartValue` trả Keyframe object
+  (số ở `.value`, đã xử lý qua `kfNumber`). → cần điều tra audio-gain-specific.
+- ⚠️ **param-VALUE persistence** (exposure màu, gain) nói chung CHƯA verify:
+  test mới xác nhận COMPONENT add/remove (đếm) + method chạy không lỗi, CHƯA xác
+  nhận giá-trị-param thực sự áp. `keyframe.position` settable chưa chắc.
+- `_debug.audioProbe`/`markerProbe` giữ làm công cụ dò khi điều tra tiếp.
