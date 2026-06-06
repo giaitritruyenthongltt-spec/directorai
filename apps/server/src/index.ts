@@ -143,6 +143,7 @@ async function main(): Promise<void> {
     port: config.server.wsPort,
     logger,
     fallbackAdapter: mockAdapter,
+    requirePanelForMutation: config.server.requirePanelForMutation,
     onNlQuery: nlRouter
       ? async (input) => {
           if (!routedAdapterRef.current) throw new Error('Adapter not ready');

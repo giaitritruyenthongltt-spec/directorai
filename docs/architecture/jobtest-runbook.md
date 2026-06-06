@@ -147,6 +147,29 @@ trong 1 executeTransaction không xen await).
   nhận giá-trị-param thực sự áp. `keyframe.position` settable chưa chắc.
 - `_debug.audioProbe`/`markerProbe` giữ làm công cụ dò khi điều tra tiếp.
 
+## OBSERVABILITY — Log mutation (audit "job có cắt thật không") — 2026-06-06
+
+Nâng cấp toàn diện log (P1→P4). Mọi lệnh sửa timeline giờ CÓ dấu vết tra được.
+
+- **Ghi ở đâu:** `callPanel` (ws-server) là CHOKEPOINT mọi lệnh tới panel → bắt
+  CẢ mutation phát từ composite/plan (safe.applyPlan), không chỉ forward trực tiếp.
+  Đường mock (không panel) ghi riêng trong `handleInboundRequest`.
+- **Event `ops.log`:** `mutate` / `mutate.error` với `adapter:'real'|'mock'`, `rid`
+  (correlation), `params` (ý định), `result` (kết quả), `durationMs`, `error`.
+  `lean()` lược field khổng lồ (tracks/markers/clips); file xoay vòng 5MB (`.1`).
+- **GUARD:** env `REQUIRE_PANEL_FOR_MUTATION=1` → mutation lúc KHÔNG có panel bị
+  TỪ CHỐI (error rõ) thay vì âm thầm chạy mock = "thành công giả". Mặc định tắt
+  (mock-test vẫn chạy). `config.server.requirePanelForMutation`.
+- **P2 lỗi:** panel trả `error.data{method,stack,params}`; server log nguyên cụm.
+- **P3 bền:** LogDrawer đẩy warn/error về server (`_panel.log` → ops.log) → còn
+  sau reload/crash panel.
+- **Xem:** trong panel box _"Nhật ký vận hành"_ (bấm dòng bung chi tiết) ·
+  `pnpm tsx tools/tail-ops.ts --filter mutate` (màu, mock vàng) · raw JSONL.
+- **Audit nhanh:** `grep '"event":"mutate".*"adapter":"real"' ~/.directorai/ops.log`
+- **Test:** `apps/server/src/__tests__/ops-log.test.ts` (lean/recordMutation/xoay
+  vòng) + `ws-mutation-log.test.ts` (mock-log · read-không-log · guard từ chối).
+  Live: `node tools/test-mutate-log.mjs` (rename thật + tự revert).
+
 ## RECUT — Cầu nối "Tách & Tái dựng" (phát hiện quyết định 2026-06-06)
 
 Mục tiêu: đưa 1 video HOÀN THIỆN → tách lại các cảnh gốc (editable) để tái dựng

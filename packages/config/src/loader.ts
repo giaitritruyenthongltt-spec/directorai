@@ -53,6 +53,10 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
       host: env('SERVER_HOST'),
       port: env('SERVER_PORT') ? Number(env('SERVER_PORT')) : undefined,
       wsPort: env('WS_PORT') ? Number(env('WS_PORT')) : undefined,
+      requirePanelForMutation:
+        env('REQUIRE_PANEL_FOR_MUTATION') === '1' ||
+        env('REQUIRE_PANEL_FOR_MUTATION') === 'true' ||
+        undefined,
     },
     llm: {
       provider: env('LLM_PROVIDER') as 'anthropic' | 'openai' | 'gemini' | undefined,

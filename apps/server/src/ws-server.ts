@@ -51,6 +51,11 @@ export interface WsServerOptions {
    * over WS, not just inside the Director plan executor.
    */
   onComposite?: (method: string, params: unknown) => Promise<unknown | null>;
+  /**
+   * P1 — Khi true, TỪ CHỐI method mutating nếu không có panel (chống "thành
+   * công giả" trên mock). Mặc định false. Đặt qua env REQUIRE_PANEL_FOR_MUTATION.
+   */
+  requirePanelForMutation?: boolean;
 }
 
 export interface RunningWsServer {
@@ -355,43 +360,19 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
     }
 
     // If a panel is connected and this is a tool call, forward to panel.
+    // (Mutation logging xảy ra TRONG callPanel — chokepoint DUY NHẤT, bắt cả
+    // mutation phát từ composite/plan, không chỉ forward trực tiếp.)
     if (activePanel && activePanel !== ws && activePanel.readyState === activePanel.OPEN) {
-      const rid = `r${++ridSeq}`;
-      const mutating = isMutatingMethod(req.method);
-      const t0 = Date.now();
       try {
         const result = await callPanel(req.method, req.params);
-        // P1 — AUDIT: mutation chạy trên panel THẬT (real).
-        if (mutating) {
-          opsLog.recordMutation({
-            rid,
-            method: req.method,
-            adapter: 'real',
-            ok: true,
-            durationMs: Date.now() - t0,
-            params: req.params,
-            result,
-          });
-        }
         send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
       } catch (err) {
-        // P2 — ngữ cảnh lỗi đầy đủ: method + params + data(stack) từ panel.
+        // P2 — ngữ cảnh lỗi đầy đủ: message + data(method/stack/params) từ panel.
         const data = (err as { data?: unknown })?.data;
         opts.logger.warn(
-          { rid, method: req.method, params: req.params, err: String(err), data },
+          { method: req.method, params: req.params, err: String(err), data },
           'Panel RPC error'
         );
-        if (mutating) {
-          opsLog.recordMutation({
-            rid,
-            method: req.method,
-            adapter: 'real',
-            ok: false,
-            durationMs: Date.now() - t0,
-            params: req.params,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        }
         send(ws, {
           jsonrpc: '2.0',
           id: req.id,
@@ -406,11 +387,37 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
     }
 
     // No panel: dispatch locally on the mock fallback, with progress tracking.
-    // P1 — CẢNH BÁO: mutation lúc không có panel = chạy MOCK, KHÔNG đụng timeline.
     const ridMock = `r${++ridSeq}`;
     const mutatingMock = isMutatingMethod(req.method);
     const t0Mock = Date.now();
     if (mutatingMock) {
+      // P1 — GUARD: nếu yêu cầu panel cho mutation → TỪ CHỐI (không "thành công giả").
+      if (opts.requirePanelForMutation) {
+        opsLog.recordMutation({
+          rid: ridMock,
+          method: req.method,
+          adapter: 'mock',
+          ok: false,
+          durationMs: 0,
+          params: req.params,
+          error: 'REQUIRE_PANEL_FOR_MUTATION: không có panel Premiere kết nối',
+        });
+        opts.logger.warn(
+          { rid: ridMock, method: req.method },
+          '⛔ TỪ CHỐI mutation: không có panel (REQUIRE_PANEL_FOR_MUTATION bật)'
+        );
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message:
+              'Không có panel Premiere kết nối — mutation bị từ chối (REQUIRE_PANEL_FOR_MUTATION). Mở panel DirectorAI trong Premiere rồi thử lại.',
+          },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      // CẢNH BÁO: mutation lúc không có panel = chạy MOCK, KHÔNG đụng timeline thật.
       opts.logger.warn(
         { rid: ridMock, method: req.method },
         '⚠️ MUTATION trên MOCK (không có panel) — KHÔNG đụng timeline thật'
@@ -468,7 +475,7 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
     else handler.reject(new Error(msg.error.message));
   };
 
-  const callPanel = <T = unknown>(
+  const rawCallPanel = <T = unknown>(
     method: string,
     params?: unknown,
     timeoutMs = DEFAULT_PANEL_CALL_TIMEOUT
@@ -491,6 +498,47 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       const req: JsonRpcRequest = { jsonrpc: '2.0', id, method, params };
       send(activePanel, req);
     });
+  };
+
+  /**
+   * P1 — `callPanel` là CHOKEPOINT mọi lệnh gửi tới panel (forward trực tiếp
+   * LẪN lệnh primitive phát từ composite/plan). Log mutation TẠI ĐÂY ⇒ bắt
+   * TOÀN BỘ cắt/ghép, kể cả trong safe.applyPlan. Read (non-mutating) bỏ qua.
+   */
+  const callPanel = <T = unknown>(
+    method: string,
+    params?: unknown,
+    timeoutMs = DEFAULT_PANEL_CALL_TIMEOUT
+  ): Promise<T> => {
+    if (!isMutatingMethod(method)) return rawCallPanel<T>(method, params, timeoutMs);
+    const rid = `r${++ridSeq}`;
+    const t0 = Date.now();
+    return rawCallPanel<T>(method, params, timeoutMs).then(
+      (result) => {
+        opsLog.recordMutation({
+          rid,
+          method,
+          adapter: 'real',
+          ok: true,
+          durationMs: Date.now() - t0,
+          params,
+          result,
+        });
+        return result;
+      },
+      (err: unknown) => {
+        opsLog.recordMutation({
+          rid,
+          method,
+          adapter: 'real',
+          ok: false,
+          durationMs: Date.now() - t0,
+          params,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    );
   };
 
   wss.on('connection', (ws) => {

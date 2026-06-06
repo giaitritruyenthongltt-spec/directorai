@@ -56,14 +56,25 @@ export function lean(v: unknown, maxLen = 240): unknown {
   }
 }
 
-class OpsLog {
-  private readonly path: string;
+export class OpsLog {
+  private resolvedPath: string | null = null;
   private initialized = false;
   private bytes = -1; // -1 = chưa seed từ file hiện có
 
-  constructor() {
-    const root = process.env.DIRECTORAI_DATA_DIR ?? join(homedir(), '.directorai');
-    this.path = join(root, 'ops.log');
+  /** `root`/`maxBytes` để TEST. Mặc định: DIRECTORAI_DATA_DIR | ~/.directorai, 5MB. */
+  constructor(
+    private readonly rootOverride?: string,
+    private readonly maxBytes: number = MAX_BYTES
+  ) {}
+
+  private get path(): string {
+    if (!this.resolvedPath) {
+      // Đọc env LAZY (lúc ghi đầu) → test set DIRECTORAI_DATA_DIR trước record() là đủ.
+      const root =
+        this.rootOverride ?? process.env.DIRECTORAI_DATA_DIR ?? join(homedir(), '.directorai');
+      this.resolvedPath = join(root, 'ops.log');
+    }
+    return this.resolvedPath;
   }
 
   private ensureDir(): void {
@@ -82,7 +93,7 @@ class OpsLog {
   }
 
   private rotateIfNeeded(addLen: number): void {
-    if (this.bytes + addLen <= MAX_BYTES) return;
+    if (this.bytes + addLen <= this.maxBytes) return;
     try {
       renameSync(this.path, `${this.path}.1`); // ghi đè .1 cũ
     } catch {
