@@ -549,3 +549,115 @@ interface MarkersInst {
   createAddMarkerAction(...args: unknown[]): unknown;
   createRemoveMarkerAction(marker: unknown): unknown;
 }
+
+/**
+ * C15 — Probe param audio (Volume/Level) + keyframe: trả displayName/startValue
+ * mọi param, members của keyframe object, và set Level rồi đọc lại để hiểu
+ * value-semantics. Tự khôi phục. Gọi qua _debug.audioProbe.
+ */
+export async function audioProbe(): Promise<Record<string, unknown>> {
+  if (!ppro) return { error: 'not in UXP' };
+  const out: Record<string, unknown> = {};
+  const pp = ppro as Record<string, unknown>;
+  const Proj = pp.Project as { getActiveProject: () => Promise<unknown> };
+  const volLevel = async (): Promise<{
+    proj: {
+      executeTransaction: (
+        cb: (c: { addAction: (a: unknown) => void }) => void,
+        l: string
+      ) => Promise<boolean>;
+    };
+    lp: Record<string, (...a: unknown[]) => unknown> & { displayName?: string };
+    vol: { getParamCount?: () => Promise<number>; getParam?: (i: number) => Promise<unknown> };
+  } | null> => {
+    const proj = (await Proj.getActiveProject()) as {
+      getActiveSequence: () => Promise<unknown>;
+      executeTransaction: (
+        cb: (c: { addAction: (a: unknown) => void }) => void,
+        l: string
+      ) => Promise<boolean>;
+    };
+    const seq = (await proj.getActiveSequence()) as {
+      getAudioTrack: (i: number) => Promise<unknown>;
+    };
+    const track = (await seq.getAudioTrack(0)) as {
+      getTrackItems: (t: number, b: boolean) => Promise<unknown[]>;
+    };
+    const items = await track.getTrackItems(1, false);
+    const item = items[0] as { getComponentChain: () => Promise<unknown> };
+    const chain = (await item.getComponentChain()) as {
+      getComponentCount: () => Promise<number>;
+      getComponentAtIndex: (i: number) => Promise<unknown>;
+    };
+    const count = await chain.getComponentCount();
+    for (let i = 0; i < count; i++) {
+      const c = (await chain.getComponentAtIndex(i)) as {
+        getMatchName: () => Promise<string>;
+        getDisplayName: () => Promise<string>;
+        getParamCount?: () => Promise<number>;
+        getParam?: (i: number) => Promise<unknown>;
+      };
+      const dn = await c.getDisplayName();
+      if (/volume/i.test(dn) && !/channel/i.test(dn)) {
+        const pc = (await c.getParamCount?.()) ?? 0;
+        let lp: unknown = null;
+        for (let j = 0; j < pc; j++) {
+          const p = (await c.getParam?.(j)) as { displayName?: string };
+          if (/level/i.test(p?.displayName ?? '')) {
+            lp = p;
+            break;
+          }
+        }
+        if (!lp) lp = await c.getParam?.(0);
+        return { proj, lp: lp as never, vol: c };
+      }
+    }
+    return null;
+  };
+
+  try {
+    const a = await volLevel();
+    if (!a) return { error: 'no Volume component' };
+    const pc = (await a.vol.getParamCount?.()) ?? 0;
+    const params: unknown[] = [];
+    for (let i = 0; i < pc; i++) {
+      const p = (await a.vol.getParam?.(i)) as {
+        displayName?: string;
+        getStartValue?: () => Promise<number>;
+      };
+      let sv: unknown;
+      try {
+        sv = await p.getStartValue?.();
+      } catch (e) {
+        sv = `err:${String(e).slice(0, 30)}`;
+      }
+      params.push({ i, displayName: p?.displayName, startValue: sv });
+    }
+    out.volParams = params;
+    out.levelDisplayName = (a.lp as { displayName?: string }).displayName;
+    out.levelBefore = await (a.lp.getStartValue as () => Promise<number>)?.();
+    // tạo keyframe -6 → dump members + thử đọc value
+    const kf = await a.lp.createKeyframe(-6);
+    out.keyframeMembers = listMembers(kf);
+    out.keyframeValueProp = (kf as { value?: unknown }).value;
+    // set value
+    const act = a.lp.createSetValueAction(kf);
+    await a.proj.executeTransaction((c) => c.addAction(act), 'probe setLevel -6');
+    // đọc lại FRESH
+    const b = await volLevel();
+    out.levelAfterSet = await (b?.lp.getStartValue as () => Promise<number>)?.();
+    // khôi phục
+    if (b && typeof out.levelBefore === 'number') {
+      const kf0 = await b.lp.createKeyframe(out.levelBefore as number);
+      await b.proj.executeTransaction(
+        (c) => c.addAction(b.lp.createSetValueAction(kf0)),
+        'probe restore'
+      );
+      const c2 = await volLevel();
+      out.levelRestored = await (c2?.lp.getStartValue as () => Promise<number>)?.();
+    }
+  } catch (e) {
+    out.err = e instanceof Error ? e.message : String(e);
+  }
+  return out;
+}

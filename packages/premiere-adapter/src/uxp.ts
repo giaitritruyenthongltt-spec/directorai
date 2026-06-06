@@ -113,10 +113,24 @@ interface CompAM {
 }
 interface ParamAM {
   displayName?: string;
-  getStartValue?: () => Promise<number> | number;
+  getStartValue?: () => Promise<unknown> | unknown;
   createKeyframe?: (v: number) => Promise<unknown> | unknown;
   createSetValueAction?: (kf: unknown) => PProAction;
   createAddKeyframeAction?: (kf: unknown) => PProAction;
+}
+
+/** PPro26 — Keyframe value: số nằm ở `.value` (đôi khi lồng 1 cấp). */
+function kfNumber(v: unknown): number {
+  if (typeof v === 'number') return v;
+  if (v && typeof v === 'object') {
+    const inner = (v as { value?: unknown }).value;
+    if (typeof inner === 'number') return inner;
+    if (inner && typeof inner === 'object') {
+      const i2 = (inner as { value?: unknown }).value;
+      if (typeof i2 === 'number') return i2;
+    }
+  }
+  return 0;
 }
 export class UXPPremiereAdapter implements IPremiereAdapter {
   readonly kind = 'uxp' as const;
@@ -749,17 +763,48 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
 
   // ─── Keyframes ────────────────────────────────────────────────────────────
 
+  /** PPro26 — tìm param theo displayName trong 1 component. */
+  private async paramByName(comp: CompAM, name: string): Promise<ParamAM | null> {
+    const pc = (await comp.getParamCount?.()) ?? 0;
+    const want = name.toLowerCase();
+    for (let i = 0; i < pc; i++) {
+      const p = (await comp.getParam?.(i)) as ParamAM | null;
+      const dn = (p?.displayName ?? '').toLowerCase();
+      if (p && (dn === want || dn.includes(want))) return p;
+    }
+    return null;
+  }
+
   async addKeyframe(input: KeyframeInput): Promise<void> {
-    await this.mutate('addKeyframe', async () => {
-      const { item } = await this.findTrackItem(input.clipId);
-      const chain = await item.getComponentChain();
-      const comps = await chain.getComponents();
-      const comp = comps.find(
-        (c) => c.matchName === input.effectId || c.displayName === input.effectId
+    // PPro26 ACTION-MODEL: createKeyframe(value) → set keyframe.position (TIME)
+    // → createAddKeyframeAction(kf). Đường cũ getComponents/getParam(name)/addKey
+    // KHÔNG tồn tại trên 26.
+    const { item } = await this.findTrackItem(input.clipId);
+    const { comps } = await this.chainComponents(item);
+    const comp = comps.find(
+      (c) =>
+        c.matchName === input.effectId ||
+        c.displayName === input.effectId ||
+        c.matchName.includes(input.effectId)
+    );
+    if (!comp) throw new NotFoundError('Effect', input.effectId);
+    const param = await this.paramByName(comp.comp, input.paramName);
+    if (!param?.createKeyframe || !param.createAddKeyframeAction) {
+      throw new AdapterError(
+        'UXP',
+        `addKeyframe: param "${input.paramName}" không hỗ trợ keyframe`
       );
-      if (!comp) throw new NotFoundError('Effect', input.effectId);
-      const param = await comp.getParam(input.paramName);
-      await param.addKey(this.secondsToTick(input.time), input.value);
+    }
+    const value = typeof input.value === 'number' ? input.value : 0;
+    const kf = (await param.createKeyframe(value)) as { position?: unknown };
+    try {
+      kf.position = this.secondsToTick(input.time);
+    } catch {
+      /* position có thể read-only trên 1 số bản */
+    }
+    this.invalidateClipCache();
+    await this.runTransaction('Thêm keyframe', (compound) => {
+      compound.addAction(param.createAddKeyframeAction!(kf));
     });
   }
 
@@ -919,13 +964,14 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
   async getAudioGain(clipId: string): Promise<number> {
     const { item } = await this.findTrackItem(clipId);
     const level = await this.audioLevelParam(item);
-    const v = await level?.getStartValue?.();
-    return typeof v === 'number' ? v : 0;
+    // PPro26: getStartValue() trả Keyframe object, số nằm ở `.value` (có thể lồng).
+    return kfNumber(await level?.getStartValue?.());
   }
 
   async addAudioFade(input: AudioFadeInput): Promise<void> {
-    // PPro26: fade = keyframe trên Level qua createKeyframe + createAddKeyframeAction.
-    // (Đường cũ level.addKey KHÔNG tồn tại.) Giữ giản lược: đặt 2 mốc gain.
+    // PPro26: fade = 2 keyframe trên Level, mỗi keyframe đặt `.position` (TIME,
+    // clip-relative 0..duration) + value (dB). createKeyframe + position +
+    // createAddKeyframeAction. (Đường cũ level.addKey KHÔNG tồn tại.)
     const { item } = await this.findTrackItem(input.clipId);
     const level = await this.audioLevelParam(item);
     if (!level?.createKeyframe || !level.createAddKeyframeAction) {
@@ -934,12 +980,28 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
         'addAudioFade: param Level không hỗ trợ keyframe trên host này'
       );
     }
-    const lo = await level.createKeyframe(-60);
-    const hi = await level.createKeyframe(0);
+    const [startT, endT] = await Promise.all([item.getStartTime(), item.getEndTime()]);
+    const dur = endT.seconds - startT.seconds;
+    // Vị trí keyframe clip-relative (0 = đầu clip).
+    const t1 = input.type === 'in' ? 0 : Math.max(0, dur - input.durationSec);
+    const v1 = input.type === 'in' ? -60 : 0;
+    const t2 = input.type === 'in' ? Math.min(dur, input.durationSec) : dur;
+    const v2 = input.type === 'in' ? 0 : -60;
+    const mkKf = async (val: number, posSec: number): Promise<unknown> => {
+      const kf = (await level.createKeyframe!(val)) as { position?: unknown };
+      try {
+        kf.position = this.secondsToTick(posSec);
+      } catch {
+        /* position read-only */
+      }
+      return kf;
+    };
+    const kf1 = await mkKf(v1, t1);
+    const kf2 = await mkKf(v2, t2);
     this.invalidateClipCache();
     await this.runTransaction('Thêm fade âm thanh', (compound) => {
-      compound.addAction(level.createAddKeyframeAction!(input.type === 'in' ? lo : hi));
-      compound.addAction(level.createAddKeyframeAction!(input.type === 'in' ? hi : lo));
+      compound.addAction(level.createAddKeyframeAction!(kf1));
+      compound.addAction(level.createAddKeyframeAction!(kf2));
     });
   }
 
