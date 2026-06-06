@@ -146,3 +146,35 @@ trong 1 executeTransaction không xen await).
   test mới xác nhận COMPONENT add/remove (đếm) + method chạy không lỗi, CHƯA xác
   nhận giá-trị-param thực sự áp. `keyframe.position` settable chưa chắc.
 - `_debug.audioProbe`/`markerProbe` giữ làm công cụ dò khi điều tra tiếp.
+
+## RECUT — Cầu nối "Tách & Tái dựng" (phát hiện quyết định 2026-06-06)
+
+Mục tiêu: đưa 1 video HOÀN THIỆN → tách lại các cảnh gốc (editable) để tái dựng
+chống-trùng. Đã dò LIVE qua kênh B (WS `_debug.importProbe`/`sedProbe` + reload UDT):
+
+- ❌ **FCPXML CHẾT cho auto-import UXP.** `project.importFiles([x.fcpxml])` ném
+  dialog **"File Import Failure — file format not supported"** (CHẶN handler vì
+  modal). `importFiles` chỉ nhận MEDIA. `project.importSequences` KHÔNG phải
+  importer FCPXML — nó import sequence từ **.prproj khác** (báo "Not Enough
+  Parameters" khi đưa path). → Bỏ cầu nối FCPXML ở đường tự-động.
+- ✅ **NATIVE Scene Edit Detection là cầu nối ĐÚNG** (pure UXP, không sidecar-cắt,
+  không dialog). Recipe đã verify LIVE (video test 36s → **21 cảnh**, tự dọn sạch):
+  1. `proj.importFiles([videoPath])` — import mp4 (rootItems +1).
+  2. tìm clip mới trong `(await (await proj.getRootItem()).getItems())` theo tên.
+  3. `proj.createSequenceFromMedia(name, [clip])` → Sequence (cả video = 1 clip V1).
+  4. `proj.setActiveSequence(seq)`.
+  5. `const sel = await seq.getSelection()` (TrackItemSelection bound vào seq —
+     KHÔNG dùng `TrackItemSelection.createEmptySelection()` → "Not Enough Parameters");
+     `for (item of track0.getTrackItems(1,false)) sel.addItem(item, true)` (arg2 =
+     skipDuplicateCheck); `await seq.setSelection(sel)`.
+  6. `await SequenceUtils.performSceneEditDetectionOnSelection('ApplyCuts', sel)` →
+     cắt clip thành N cảnh. Hằng: `SEQUENCE_OPERATION_APPLYCUT='ApplyCuts'`,
+     `CREATEMARKER='CreateMarkers'`, `CREATESUBCLIP='CreateSubclips'`.
+  7. Dọn: `proj.deleteSequence(seq)` + `root.createRemoveItemAction(clip)` qua
+     `executeTransaction`.
+- Kiến trúc tab MVP: SED (cắt cảnh native) → áp transform chống-trùng bằng các
+  tool ghi-thật đã verify (reorder/trim/speed/màu/reframe). KHÔNG cần FCPXML.
+- Phương pháp tự-điều-khiển: **kênh B** (WS + sửa panel + webpack build + click
+  Reload trong UDT @ `(right−388, top+252)` + chạy probe WS). Kênh A (pixel menu)
+  - kênh C (UIA) KHÔNG dùng được vì menu/dialog Premiere là custom (UIA mù) và máy
+    điều khiển từ xa (focus phím chập chờn).

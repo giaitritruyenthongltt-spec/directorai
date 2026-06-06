@@ -551,6 +551,265 @@ interface MarkersInst {
 }
 
 /**
+ * RECUT — Probe import FCPXML → sequence. PPro26 Project có importSequences /
+ * createSequenceFromMedia / importFiles. Thử lần lượt, đo số sequence trước/sau,
+ * dạng nào +1 là ĐÚNG. Tự XOÁ sequence mới (deleteSequence) để sạch project.
+ * Gọi qua RPC _debug.importProbe. (Đường tiến tới auto-import cho tab Tách & Tái dựng.)
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * RECUT SED — Validate native Scene Edit Detection end-to-end:
+ *   importFiles(mp4) → createSequenceFromMedia → setSelection(clip)
+ *   → SequenceUtils.performSceneEditDetectionOnSelection('ApplyCuts')
+ *   → đếm số track item (= số cảnh). TỰ DỌN: deleteSequence + removeItem + khôi phục active.
+ * Gọi qua RPC _debug.sedProbe.
+ */
+export async function sedProbe(path?: string): Promise<Record<string, unknown>> {
+  if (!ppro) return { error: 'not in UXP' };
+  const VIDEO = path ?? 'E:\\T11\\_recut_test.mp4';
+  const out: Record<string, unknown> = { video: VIDEO };
+  const pp = ppro as Record<string, any>;
+  const base = (VIDEO.split(/[\\/]/).pop() ?? '').replace(/\.[^.]+$/, '');
+  const fp = async (): Promise<any> => await pp.Project.getActiveProject();
+  const rootItems = async (): Promise<any[]> => {
+    const p = await fp();
+    const r = await p.getRootItem();
+    const it = await r.getItems();
+    return Array.isArray(it) ? it : [];
+  };
+  const vItems = async (): Promise<any[]> => {
+    const p = await fp();
+    const s = await p.getActiveSequence();
+    const t = await s.getVideoTrack(0);
+    const it = await t.getTrackItems(1, false);
+    return Array.isArray(it) ? it : [];
+  };
+
+  try {
+    const proj0 = await fp();
+    const origSeq = await proj0.getActiveSequence();
+    out.origActive = origSeq?.name ?? null;
+
+    // 1. import mp4
+    const before = (await rootItems()).length;
+    const projI = await fp();
+    await projI.importFiles([VIDEO]);
+    const items = await rootItems();
+    out.rootItems = `${before}->${items.length}`;
+    // tìm clip vừa import (theo tên)
+    let clip: any = null;
+    for (const it of items) {
+      const nm = it?.name ?? '';
+      if (typeof nm === 'string' && nm.includes(base)) clip = it;
+    }
+    out.foundClip = clip?.name ?? '(none)';
+    if (!clip) {
+      out.error = 'imported clip not found';
+      return out;
+    }
+
+    // 2. createSequenceFromMedia
+    const projC = await fp();
+    let seq: any;
+    try {
+      seq = await projC.createSequenceFromMedia('RECUT_SED_PROBE', [clip]);
+    } catch (e) {
+      // thử cast ClipProjectItem
+      const CPI = pp.ClipProjectItem;
+      const c2 = CPI?.cast?.(clip) ?? clip;
+      seq = await (await fp()).createSequenceFromMedia('RECUT_SED_PROBE', [c2]);
+    }
+    out.seqCreated = seq?.name ?? '(none)';
+    const projA = await fp();
+    try {
+      await projA.setActiveSequence?.(seq);
+    } catch (e) {
+      out.setActiveErr = (e instanceof Error ? e.message : String(e)).slice(0, 80);
+    }
+
+    // 3. chọn track item(s) của video — dùng seq.getSelection() (đã bound vào seq).
+    //    Giữ chuỗi await tối thiểu để object UXP không chết (Trục B).
+    out.itemsBeforeSED = (await vItems()).length;
+    let sel: any = null;
+    try {
+      const sFresh = await (await fp()).getActiveSequence();
+      const track = await sFresh.getVideoTrack(0);
+      const its = await track.getTrackItems(1, false);
+      sel = await sFresh.getSelection();
+      for (const it of its) sel.addItem(it, true); // skipDuplicateCheck=true
+      await sFresh.setSelection(sel);
+      out.selItems = (await sel.getTrackItems?.())?.length ?? 'n/a';
+      out.selSet = true;
+    } catch (e) {
+      out.selBuildErr = (e instanceof Error ? e.message : String(e)).slice(0, 120);
+    }
+
+    // 4. Scene Edit Detection (native)
+    try {
+      const ok = await pp.SequenceUtils.performSceneEditDetectionOnSelection('ApplyCuts', sel);
+      out.sedOk = ok;
+    } catch (e) {
+      out.sedErr = (e instanceof Error ? e.message : String(e)).slice(0, 160);
+    }
+    // chờ Premiere xử lý
+    await new Promise((r) => setTimeout(r, 2500));
+    out.itemsAfterSED = (await vItems()).length;
+    out.scenesDetected = (out.itemsAfterSED as number) - (out.itemsBeforeSED as number) + 1;
+
+    // 5. DỌN: xoá sequence + clip + khôi phục active
+    try {
+      const projD = await fp();
+      await projD.deleteSequence?.(seq);
+      out.seqDeleted = true;
+    } catch (e) {
+      out.seqDeleteErr = (e instanceof Error ? e.message : String(e)).slice(0, 80);
+    }
+    try {
+      const projR = await fp();
+      const root = await projR.getRootItem();
+      // tìm lại clip theo tên (object cũ có thể chết)
+      const it2 = (await root.getItems()).find((x: any) => (x?.name ?? '').includes(base));
+      if (it2) {
+        await projR.executeTransaction(
+          (c: any) => c.addAction(root.createRemoveItemAction(it2)),
+          'recut probe cleanup clip'
+        );
+        out.clipRemoved = true;
+      }
+    } catch (e) {
+      out.clipRemoveErr = (e instanceof Error ? e.message : String(e)).slice(0, 80);
+    }
+  } catch (e) {
+    out.fatal = e instanceof Error ? e.message : String(e);
+  }
+  return out;
+}
+
+export async function importProbe(path?: string): Promise<Record<string, unknown>> {
+  if (!ppro) return { error: 'not in UXP' };
+  const FCPXML = path ?? 'E:\\T11\\_recut_test_recut.fcpxml';
+  const out: Record<string, unknown> = { fcpxml: FCPXML };
+  const pp = ppro as Record<string, any>;
+
+  // helper-class members (có thể chứa importer tĩnh)
+  for (const n of ['ProjectUtils', 'SequenceUtils']) {
+    try {
+      out[`static_${n}`] = listMembers(pp[n]);
+    } catch (e) {
+      out[`static_${n}_err`] = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  const freshProj = async (): Promise<any> => await pp.Project.getActiveProject();
+  const seqList = async (): Promise<any[]> => {
+    try {
+      const p = await freshProj();
+      const s = await p.getSequences?.();
+      return Array.isArray(s) ? s : [];
+    } catch {
+      return [];
+    }
+  };
+  const count = async (): Promise<number> => (await seqList()).length;
+
+  // arity + root accessor
+  try {
+    const p0 = await freshProj();
+    out.importSequencesArity = p0.importSequences?.length ?? null;
+    out.importFilesArity = p0.importFiles?.length ?? null;
+    out.createSeqFromMediaArity = p0.createSequenceFromMedia?.length ?? null;
+    out.hasGetRootItem = typeof p0.getRootItem;
+    out.hasRootItemProp = typeof p0.rootItem;
+  } catch (e) {
+    out.arityErr = e instanceof Error ? e.message : String(e);
+  }
+
+  const tryVariant = async (label: string, fn: (proj: any) => Promise<unknown>): Promise<void> => {
+    const before = await count();
+    try {
+      const proj = await freshProj();
+      const ret = await fn(proj);
+      const after = await count();
+      const added = after > before;
+      out[label] =
+        `before=${before} after=${after}${added ? ' ✓✓ SEQ ADDED' : ''} ret=` +
+        (ret === undefined
+          ? 'undefined'
+          : Array.isArray(ret)
+            ? `array[${ret.length}]`
+            : typeof ret);
+      if (added) {
+        try {
+          const seqs = await seqList();
+          const ns = seqs[seqs.length - 1];
+          out[`${label}_newName`] = ns?.name ?? (await ns?.getName?.());
+          const projC = await freshProj();
+          await projC.deleteSequence?.(ns);
+          out[`${label}_cleaned`] = (await count()) === before;
+        } catch (e) {
+          out[`${label}_cleanupErr`] = (e instanceof Error ? e.message : String(e)).slice(0, 100);
+        }
+      }
+    } catch (e) {
+      out[label] = `THREW: ${(e instanceof Error ? e.message : String(e)).slice(0, 140)}`;
+    }
+  };
+
+  // DUMP THUẦN (không mutate) — nắm API cho native Scene Edit Detection:
+  //  createSequenceFromMedia(name, clipItems[], bin?) + performSceneEditDetectionOnSelection(op, selection)
+  void FCPXML;
+  void tryVariant;
+  try {
+    const proj = await freshProj();
+    const root = await proj.getRootItem?.();
+    out.rootItemMembers = listMembers(root);
+    // cách liệt kê item con của root (tìm clip đã import)
+    for (const fn of ['getItems', 'getChildItems', 'children', 'getItemCount']) {
+      try {
+        const r = await (root as any)?.[fn]?.();
+        out[`root_${fn}`] = Array.isArray(r) ? `array[${r.length}]` : typeof r;
+      } catch (e) {
+        out[`root_${fn}_err`] = (e instanceof Error ? e.message : String(e)).slice(0, 60);
+      }
+    }
+  } catch (e) {
+    out.rootErr = e instanceof Error ? e.message : String(e);
+  }
+  try {
+    const proj = await freshProj();
+    const seq = await proj.getActiveSequence?.();
+    if (seq) {
+      out.seqSelectMembers = listMembers(seq).filter((m) =>
+        /select|track|item|subseq|caption/i.test(m)
+      );
+      // thử lấy selection hiện có
+      for (const fn of ['getSelection', 'getSelectedTrackItems']) {
+        try {
+          const sel = await (seq as any)?.[fn]?.();
+          out[`seq_${fn}`] = sel === undefined ? 'undefined' : listMembers(sel);
+        } catch (e) {
+          out[`seq_${fn}_err`] = (e instanceof Error ? e.message : String(e)).slice(0, 60);
+        }
+      }
+    }
+  } catch (e) {
+    out.seqErr = e instanceof Error ? e.message : String(e);
+  }
+  // SequenceEditor + TrackItemSelection classes
+  for (const n of ['SequenceEditor', 'TrackItemSelection', 'VideoClipTrackItem']) {
+    try {
+      out[`static_${n}`] = listMembers(pp[n]);
+    } catch (e) {
+      out[`static_${n}_err`] = e instanceof Error ? e.message : String(e);
+    }
+  }
+  out.SED_APPLYCUT = pp.SequenceUtils?.SEQUENCE_OPERATION_APPLYCUT;
+  out.SED_CREATEMARKER = pp.SequenceUtils?.SEQUENCE_OPERATION_CREATEMARKER;
+  out.SED_CREATESUBCLIP = pp.SequenceUtils?.SEQUENCE_OPERATION_CREATESUBCLIP;
+  return out;
+}
+
+/**
  * C15 — Probe param audio (Volume/Level) + keyframe: trả displayName/startValue
  * mọi param, members của keyframe object, và set Level rồi đọc lại để hiểu
  * value-semantics. Tự khôi phục. Gọi qua _debug.audioProbe.
