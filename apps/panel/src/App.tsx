@@ -15,6 +15,7 @@ import { ContextTab } from './components/ContextTab.js';
 import { DirectorTab } from './components/DirectorTab.js';
 import { AutoTab } from './components/AutoTab.js';
 import { FilmTab } from './components/FilmTab.js';
+import { RecutTab } from './components/RecutTab.js';
 import { AnalysisTab } from './components/AnalysisTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
 import { SessionProvider } from './state/session.js';
@@ -24,12 +25,13 @@ import { initLogCapture, pushLog, setLogSink } from './bridge/log-store.js';
 import './styles/tokens.css';
 import './App.css';
 
-export type ActiveTab = 'film' | 'auto' | 'analysis' | 'director' | 'chat' | 'context';
+export type ActiveTab = 'film' | 'auto' | 'recut' | 'analysis' | 'director' | 'chat' | 'context';
 
 /** R1 — Nhãn + ICON (SVG, không tofu) cho từng tab. */
 const TAB_META: Record<ActiveTab, { label: string; icon: IconName }> = {
   film: { label: 'Phim dài', icon: 'film' },
   auto: { label: 'Tự động', icon: 'zap' },
+  recut: { label: 'Tách & Tái dựng', icon: 'scissors' },
   analysis: { label: 'Báo cáo', icon: 'report' },
   director: { label: 'Đạo diễn', icon: 'clapperboard' },
   chat: { label: 'Trò chuyện', icon: 'chat' },
@@ -41,7 +43,7 @@ const TAB_META: Record<ActiveTab, { label: string; icon: IconName }> = {
  *   Dựng phim (Phim/Tự động/Báo cáo) · Trợ lý (Đạo diễn/Chat) · Nâng cao (Ngữ cảnh).
  */
 const TAB_GROUPS: { id: string; label: string; icon: IconName; tabs: ActiveTab[] }[] = [
-  { id: 'build', label: 'Dựng phim', icon: 'film', tabs: ['film', 'auto', 'analysis'] },
+  { id: 'build', label: 'Dựng phim', icon: 'film', tabs: ['film', 'auto', 'recut', 'analysis'] },
   { id: 'assist', label: 'Trợ lý', icon: 'sparkles', tabs: ['director', 'chat'] },
   { id: 'advanced', label: 'Nâng cao', icon: 'sliders', tabs: ['context'] },
 ];
@@ -278,6 +280,7 @@ export function App(): React.ReactElement {
         <main className="main-content">
           {activeTab === 'film' && <FilmTab />}
           {activeTab === 'auto' && <AutoTab />}
+          {activeTab === 'recut' && <RecutTab />}
           {activeTab === 'director' && <DirectorTab />}
           {activeTab === 'analysis' && <AnalysisTab />}
           {activeTab === 'chat' && <ChatLog entries={logs} />}

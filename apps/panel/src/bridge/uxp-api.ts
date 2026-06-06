@@ -686,6 +686,89 @@ export async function sedProbe(path?: string): Promise<Record<string, unknown>> 
 }
 
 /**
+ * RECUT R1 — Phân mảnh cảnh (production). Như sedProbe nhưng GIỮ sequence + trả
+ * danh sách cảnh (index/start/duration). Lane A: video đã-dựng → sequence cắt-cảnh
+ * editable. Gọi qua RPC `recut.detectScenes`.
+ */
+export async function recutDetectScenes(videoPath?: string): Promise<Record<string, unknown>> {
+  if (!ppro) return { error: 'not in UXP' };
+  const VIDEO = videoPath;
+  if (!VIDEO) return { error: 'thiếu videoPath' };
+  const out: Record<string, unknown> = { video: VIDEO };
+  const pp = ppro as Record<string, any>;
+  const base = (VIDEO.split(/[\\/]/).pop() ?? '').replace(/\.[^.]+$/, '');
+  const fp = async (): Promise<any> => await pp.Project.getActiveProject();
+  const rootItems = async (): Promise<any[]> => {
+    const p = await fp();
+    const r = await p.getRootItem();
+    const it = await r.getItems();
+    return Array.isArray(it) ? it : [];
+  };
+  const vItems = async (): Promise<any[]> => {
+    const p = await fp();
+    const s = await p.getActiveSequence();
+    const t = await s.getVideoTrack(0);
+    const it = await t.getTrackItems(1, false);
+    return Array.isArray(it) ? it : [];
+  };
+  try {
+    // 1. import video (mp4) — bỏ qua nếu đã có project item cùng tên
+    let items = await rootItems();
+    let clip = items.find((it) => typeof it?.name === 'string' && it.name.includes(base));
+    if (!clip) {
+      await (await fp()).importFiles([VIDEO]);
+      items = await rootItems();
+      clip = items.find((it) => typeof it?.name === 'string' && it.name.includes(base));
+    }
+    if (!clip) {
+      out.error = 'không tìm thấy clip sau import';
+      return out;
+    }
+    // 2. tạo sequence từ clip
+    const projC = await fp();
+    let seq: any;
+    try {
+      seq = await projC.createSequenceFromMedia(`Recut — ${base}`, [clip]);
+    } catch {
+      const CPI = pp.ClipProjectItem;
+      const c2 = CPI?.cast?.(clip) ?? clip;
+      seq = await (await fp()).createSequenceFromMedia(`Recut — ${base}`, [c2]);
+    }
+    out.sequenceId = seq?.guid?.toString?.() ?? seq?.name ?? null;
+    out.sequenceName = seq?.name ?? null;
+    await (await fp()).setActiveSequence?.(seq);
+    // 3. chọn clip + Scene Edit Detection ('ApplyCuts')
+    const sFresh = await (await fp()).getActiveSequence();
+    const track = await sFresh.getVideoTrack(0);
+    const its = await track.getTrackItems(1, false);
+    const sel = await sFresh.getSelection();
+    for (const it of its) sel.addItem(it, true);
+    await sFresh.setSelection(sel);
+    const ok = await pp.SequenceUtils.performSceneEditDetectionOnSelection('ApplyCuts', sel);
+    out.sedOk = ok;
+    await new Promise((r) => setTimeout(r, 2500));
+    // 4. liệt kê cảnh (KHÔNG dọn — giữ sequence cho Lane A)
+    const after = await vItems();
+    const scenes: any[] = [];
+    for (let i = 0; i < after.length; i++) {
+      const it = after[i];
+      const st = await it.getStartTime?.();
+      const du = await it.getDuration?.();
+      scenes.push({
+        index: i,
+        startSec: Number(st?.seconds ?? 0),
+        durationSec: Number(du?.seconds ?? 0),
+      });
+    }
+    out.sceneCount = scenes.length;
+    out.scenes = scenes;
+  } catch (e) {
+    out.error = e instanceof Error ? e.message : String(e);
+  }
+  return out;
+}
+
+/**
  * SPIKES S1/S5/S4 — kiểm 3 ẩn số chốt phạm vi MVP recut:
  *  S1: `color`/Lumetri Exposure SET value có PERSIST không (đọc lại)?
  *  S5: Transform `Scale` SET value persist không → quyết flip/crop làm được trong Premiere?

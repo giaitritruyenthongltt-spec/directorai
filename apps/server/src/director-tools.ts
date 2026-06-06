@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Logger } from '@directorai/shared';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
-import type { Clip } from '@directorai/core';
+import type { Clip, Seconds } from '@directorai/core';
 import { EFFECT_PRESETS, pickColorPresetForMood } from '@directorai/effect-library';
 import { listModuleInfos } from '@directorai/modules';
 import { buildFcpxml, type FcpTimeline } from '@directorai/fcpxml';
@@ -264,6 +264,13 @@ export class CompositeTools {
         return this.applyLookByScene(
           params as { sequenceId?: string; defaultPreset?: string; sampleCount?: number }
         );
+      case 'recut.applyDedup':
+        return this.recutApplyDedup(
+          params as {
+            sequenceId: string;
+            options?: { rename?: boolean; trimTailSec?: number; trimHeadSec?: number };
+          }
+        );
       default:
         return null;
     }
@@ -294,7 +301,103 @@ export class CompositeTools {
       'safe.applyPlan',
       'timeline.cutOnBeats',
       'color.applyLookByScene',
+      'recut.applyDedup',
     ];
+  }
+
+  /**
+   * RECUT R2 — Tái dựng chống-trùng cơ bản (Lane A, op ĐÃ verify live).
+   * Target theo clipId DUY NHẤT (né nhập nhằng path cùng-source); lặp theo
+   * THỨ TỰ start (ổn định vì rename không đổi start, tỉa-đuôi không đổi start).
+   * Checkpoint trước khi ghi. KHÔNG làm reorder (cần xử lý same-source ở executor).
+   */
+  private async recutApplyDedup(params: {
+    sequenceId: string;
+    options?: { rename?: boolean; trimTailSec?: number; trimHeadSec?: number };
+  }): Promise<{
+    applied: number;
+    sceneCount: number;
+    checkpointId: string | null;
+    steps: { clipId: string; op: string; ok: boolean; error?: string }[];
+  }> {
+    const seqId = params.sequenceId;
+    const opt = params.options ?? { rename: true };
+    const byStart = (a: Clip, b: Clip): number =>
+      (a.timelineRange?.start ?? 0) - (b.timelineRange?.start ?? 0);
+    const videoClips = async (): Promise<Clip[]> =>
+      (await this.deps.adapter.listClips(seqId)).filter((c) => c.kind === 'video').sort(byStart);
+
+    const clips0 = await videoClips();
+    const N = clips0.length;
+    const steps: { clipId: string; op: string; ok: boolean; error?: string }[] = [];
+
+    // Checkpoint trước ghi (hoàn tác = Ctrl-Z; checkpoint = mốc tham chiếu).
+    let checkpointId: string | null = null;
+    if (this.deps.checkpoints) {
+      try {
+        const snap = await this.deps.checkpoints.snapshot(
+          this.deps.adapter,
+          `recut dedup ${seqId}`
+        );
+        checkpointId = (snap as { id?: string })?.id ?? null;
+      } catch (e) {
+        this.deps.logger.warn({ err: String(e) }, 'recut: checkpoint snapshot lỗi (bỏ qua)');
+      }
+    }
+
+    let applied = 0;
+    // PASS 1 — rename "Cảnh N" (ổn định, không đổi start)
+    if (opt.rename !== false) {
+      for (let i = 0; i < N; i++) {
+        const fresh = await videoClips();
+        const t = fresh[i];
+        if (!t) continue;
+        const name = `Cảnh ${i + 1}`;
+        if (t.name === name) continue;
+        try {
+          await this.deps.adapter.renameClip(t.id, name);
+          steps.push({ clipId: t.id, op: `rename→${name}`, ok: true });
+          applied++;
+        } catch (e) {
+          steps.push({
+            clipId: t.id,
+            op: 'rename',
+            ok: false,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
+    // PASS 2 — tỉa đuôi mỗi cảnh (giảm out, KHÔNG đổi start → id/order ổn định)
+    if (opt.trimTailSec && opt.trimTailSec > 0) {
+      for (let i = 0; i < N; i++) {
+        const fresh = await videoClips();
+        const t = fresh[i];
+        if (!t) continue;
+        const inS = t.sourceRange?.start ?? 0;
+        const outS = t.sourceRange?.end ?? 0;
+        const newOut = Math.max(inS + 0.5, outS - opt.trimTailSec);
+        if (newOut >= outS - 1e-3) continue; // quá ngắn → bỏ
+        try {
+          await this.deps.adapter.setClipInOut(t.id, inS as Seconds, newOut as Seconds);
+          steps.push({
+            clipId: t.id,
+            op: `trimTail ${outS.toFixed(2)}→${newOut.toFixed(2)}`,
+            ok: true,
+          });
+          applied++;
+        } catch (e) {
+          steps.push({
+            clipId: t.id,
+            op: 'trimTail',
+            ok: false,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
+    this.deps.logger.info({ seqId, N, applied }, 'recut.applyDedup xong');
+    return { applied, sceneCount: N, checkpointId, steps };
   }
 
   // ─── context.understandClip (AI-1 — Vision) ───────────────────────────

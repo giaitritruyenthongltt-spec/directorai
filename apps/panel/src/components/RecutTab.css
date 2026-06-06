@@ -1,0 +1,101 @@
+.recut-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4, 12px);
+  padding: var(--sp-4, 12px);
+}
+.recut-help {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 8px);
+  font-size: var(--fs-sm, 12px);
+  color: var(--text-dim, #999);
+  margin-bottom: var(--sp-3, 8px);
+}
+.recut-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  margin-bottom: var(--sp-3, 8px);
+  background: var(--bg, #1e1e1e);
+  color: var(--text, #eee);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 4px;
+  font-size: var(--fs-sm, 12px);
+}
+.recut-seqname {
+  font-size: var(--fs-xs, 11px);
+  color: var(--text-dim, #999);
+  margin-bottom: var(--sp-3, 8px);
+}
+.recut-scenes {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 4px;
+}
+.recut-scene-row {
+  display: flex;
+  gap: var(--sp-3, 8px);
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--bg, #1e1e1e);
+  font-size: var(--fs-xs, 11px);
+}
+.recut-scene-i {
+  flex: 1;
+  color: var(--text, #eee);
+}
+.recut-scene-t {
+  color: var(--accent, #5b9dff);
+  min-width: 48px;
+  text-align: right;
+}
+.recut-scene-at {
+  color: var(--text-dim, #999);
+  min-width: 56px;
+  text-align: right;
+}
+.recut-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 8px);
+  font-size: var(--fs-sm, 12px);
+  color: var(--text, #eee);
+  margin-bottom: var(--sp-3, 8px);
+}
+.recut-num {
+  width: 64px;
+  padding: 2px 6px;
+  background: var(--bg, #1e1e1e);
+  color: var(--text, #eee);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 4px;
+}
+.recut-unit {
+  color: var(--text-dim, #999);
+  font-size: var(--fs-xs, 11px);
+}
+.recut-note {
+  font-size: var(--fs-xs, 11px);
+  color: var(--text-dim, #999);
+  margin-top: var(--sp-3, 8px);
+  line-height: 1.4;
+}
+.recut-result {
+  font-size: var(--fs-sm, 12px);
+  color: var(--text, #eee);
+  margin-bottom: var(--sp-3, 8px);
+}
+.recut-steps {
+  max-height: 200px;
+  overflow: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--fs-xs, 11px);
+  color: var(--text-dim, #999);
+}
+.recut-step {
+  padding: 1px 4px;
+}
+.recut-step.bad {
+  color: var(--error, #ff6b6b);
+}
