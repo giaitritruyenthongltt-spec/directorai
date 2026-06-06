@@ -63,14 +63,19 @@ function fmt(line: string, args: Args): string | null {
     'plan.step.start': '\x1b[34m', // blue
     'plan.step.end': '\x1b[32m', // green
     'plan.step.error': '\x1b[31m', // red
+    mutate: '\x1b[32m', // green — mutation thật OK
+    'mutate.error': '\x1b[31m', // red
     'rpc.in': '\x1b[37m', // gray
     'rpc.out': '\x1b[37m',
     'rpc.error': '\x1b[31m',
     'panel.lifecycle': '\x1b[90m', // dim
+    'panel.log': '\x1b[33m', // yellow
     'panel.error': '\x1b[31m',
   };
   const RESET = '\x1b[0m';
-  const c = COLOR[event] ?? '';
+  // Nhãn adapter NỔI BẬT: real=xanh, mock=vàng đậm (cảnh báo "không thật").
+  let c = COLOR[event] ?? '';
+  if (event.startsWith('mutate') && evt.adapter === 'mock') c = '\x1b[33m\x1b[1m';
 
   const rest: string[] = [];
   for (const [k, v] of Object.entries(evt)) {

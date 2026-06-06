@@ -29,6 +29,14 @@ export function LogDrawer(): React.ReactElement {
   const items = useSyncExternalStore(subscribeLogs, getLogs);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggleRow = (id: number): void =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const errN = items.reduce((n, i) => n + (i.level === 'error' ? 1 : 0), 0);
   const warnN = items.reduce((n, i) => n + (i.level === 'warn' ? 1 : 0), 0);
@@ -38,7 +46,10 @@ export function LogDrawer(): React.ReactElement {
     const text = items
       .slice()
       .reverse()
-      .map((i) => `[${fmtTime(i.ts)}] ${i.level.toUpperCase()} ${i.src}: ${i.msg}`)
+      .map(
+        (i) =>
+          `[${fmtTime(i.ts)}] ${i.level.toUpperCase()} ${i.src}: ${i.msg}${i.detail ? `\n    ${i.detail}` : ''}`
+      )
       .join('\n');
     try {
       void navigator.clipboard?.writeText?.(text);
@@ -90,10 +101,19 @@ export function LogDrawer(): React.ReactElement {
           ) : (
             shown.map((i) => (
               <div key={i.id} className={`logrow lv-${i.level}`}>
-                <span className="logrow-ts">{fmtTime(i.ts)}</span>
-                <span className={`logrow-lv lv-${i.level}`}>{i.level}</span>
-                <span className="logrow-src">{i.src}</span>
-                <span className="logrow-msg">{i.msg}</span>
+                <ClickBox
+                  className={`logrow-head${i.detail ? ' has-detail' : ''}`}
+                  onClick={() => i.detail && toggleRow(i.id)}
+                >
+                  {i.detail && (
+                    <Icon name={expanded.has(i.id) ? 'chevronDown' : 'chevronRight'} size={11} />
+                  )}
+                  <span className="logrow-ts">{fmtTime(i.ts)}</span>
+                  <span className={`logrow-lv lv-${i.level}`}>{i.level}</span>
+                  <span className="logrow-src">{i.src}</span>
+                  <span className="logrow-msg">{i.msg}</span>
+                </ClickBox>
+                {i.detail && expanded.has(i.id) && <pre className="logrow-detail">{i.detail}</pre>}
               </div>
             ))
           )}

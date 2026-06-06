@@ -11,9 +11,10 @@ import {
   PROGRESS_CANCEL_METHOD,
   type ProgressCancelParams,
 } from '@directorai/shared';
-import type { IPremiereAdapter } from '@directorai/premiere-adapter';
+import { type IPremiereAdapter, isMutatingMethod } from '@directorai/premiere-adapter';
 import { dispatchRpc } from './rpc-dispatcher.js';
 import { ProgressBus } from './progress-bus.js';
+import { opsLog } from './ops-log.js';
 
 export type NlQueryHandler = (input: { prompt: string; maxTurns?: number }) => Promise<unknown>;
 export type ContextHandler = (method: string, params: unknown) => Promise<unknown>;
@@ -79,6 +80,7 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
   let activePanel: WebSocket | null = null;
   const pending = new Map<number, PendingResponse>();
   let outboundIdSeq = 1_000_000; // separate from inbound id space
+  let ridSeq = 0; // P1/P4 — correlation id mỗi RPC để lần 1 job xuyên log
 
   // P4.02 — progress bus + per-op originating-socket map. We need the
   // map so an event tied to an opId is forwarded only to the socket that
@@ -354,17 +356,49 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
 
     // If a panel is connected and this is a tool call, forward to panel.
     if (activePanel && activePanel !== ws && activePanel.readyState === activePanel.OPEN) {
+      const rid = `r${++ridSeq}`;
+      const mutating = isMutatingMethod(req.method);
+      const t0 = Date.now();
       try {
         const result = await callPanel(req.method, req.params);
+        // P1 — AUDIT: mutation chạy trên panel THẬT (real).
+        if (mutating) {
+          opsLog.recordMutation({
+            rid,
+            method: req.method,
+            adapter: 'real',
+            ok: true,
+            durationMs: Date.now() - t0,
+            params: req.params,
+            result,
+          });
+        }
         send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
       } catch (err) {
-        opts.logger.warn({ method: req.method, err }, 'Panel RPC error');
+        // P2 — ngữ cảnh lỗi đầy đủ: method + params + data(stack) từ panel.
+        const data = (err as { data?: unknown })?.data;
+        opts.logger.warn(
+          { rid, method: req.method, params: req.params, err: String(err), data },
+          'Panel RPC error'
+        );
+        if (mutating) {
+          opsLog.recordMutation({
+            rid,
+            method: req.method,
+            adapter: 'real',
+            ok: false,
+            durationMs: Date.now() - t0,
+            params: req.params,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
         send(ws, {
           jsonrpc: '2.0',
           id: req.id,
           error: {
             code: RpcErrorCode.ADAPTER_ERROR,
             message: err instanceof Error ? err.message : 'Panel call failed',
+            ...(data !== undefined ? { data } : {}),
           },
         } satisfies JsonRpcErrorResponse);
       }
@@ -372,12 +406,33 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
     }
 
     // No panel: dispatch locally on the mock fallback, with progress tracking.
+    // P1 — CẢNH BÁO: mutation lúc không có panel = chạy MOCK, KHÔNG đụng timeline.
+    const ridMock = `r${++ridSeq}`;
+    const mutatingMock = isMutatingMethod(req.method);
+    const t0Mock = Date.now();
+    if (mutatingMock) {
+      opts.logger.warn(
+        { rid: ridMock, method: req.method },
+        '⚠️ MUTATION trên MOCK (không có panel) — KHÔNG đụng timeline thật'
+      );
+    }
     const { opId, signal } = progress.start(req.method);
     opOrigin.set(opId, ws);
     try {
       const result = await dispatchRpc(req.method, req.params, opts.fallbackAdapter, {
         signal,
       });
+      if (mutatingMock) {
+        opsLog.recordMutation({
+          rid: ridMock,
+          method: req.method,
+          adapter: 'mock',
+          ok: true,
+          durationMs: Date.now() - t0Mock,
+          params: req.params,
+          result,
+        });
+      }
       progress.end(opId, 'completed');
       send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
     } catch (err) {
@@ -471,10 +526,21 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
         } else if (m === '_panel.error') {
           // L1 — panel-side window error or unhandled rejection.
           opts.logger.error({ params }, 'panel error reported');
+          opsLog.record({ event: 'panel.error', ...(params as Record<string, unknown>) });
         } else if (m === '_panel.console') {
           // A4 — forward panel console.* to server log for live debug.
           const p = params as { level?: string; text?: string };
           opts.logger.info({ panelConsole: p.text }, `panel console [${p.level}]`);
+        } else if (m === '_panel.log') {
+          // P3 — log panel BỀN: error/warn từ LogDrawer đẩy về ops.log để
+          // còn dấu vết sau khi panel reload/crash.
+          const p = (params ?? {}) as { level?: string; src?: string; msg?: string };
+          opsLog.record({
+            event: 'panel.log',
+            level: p.level ?? 'info',
+            src: p.src ?? 'panel',
+            msg: typeof p.msg === 'string' ? p.msg.slice(0, 1000) : String(p.msg),
+          });
         }
       }
     });

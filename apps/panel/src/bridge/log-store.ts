@@ -16,12 +16,21 @@ export interface LogItem {
   level: LogLevel;
   src: string;
   msg: string;
+  /** P4 — nội dung đầy đủ (params/result/stack) để bung xem chi tiết. */
+  detail?: string;
 }
 
 const MAX = 300;
 let items: LogItem[] = [];
 let seq = 0;
 const subs = new Set<() => void>();
+
+/** P3 — sink đẩy log (warn/error) ra ngoài (server ops.log) để BỀN sau crash. */
+type LogSink = (it: { level: LogLevel; src: string; msg: string }) => void;
+let sink: LogSink | null = null;
+export function setLogSink(fn: LogSink | null): void {
+  sink = fn;
+}
 
 function emit(): void {
   subs.forEach((f) => f());
@@ -36,11 +45,29 @@ function safeStr(v: unknown): string {
   }
 }
 
-/** Thêm 1 dòng log (mới nhất ở đầu mảng). */
-export function pushLog(level: LogLevel, src: string, msg: unknown): void {
-  const text = safeStr(msg).slice(0, 2000);
-  items = [{ id: ++seq, ts: Date.now(), level, src, msg: text }, ...items].slice(0, MAX);
+/** Thêm 1 dòng log (mới nhất ở đầu mảng). `detail` = nội dung đầy đủ để bung. */
+export function pushLog(level: LogLevel, src: string, msg: unknown, detail?: unknown): void {
+  const full = safeStr(msg);
+  const text = full.slice(0, 300);
+  const det =
+    detail !== undefined
+      ? safeStr(detail).slice(0, 8000)
+      : full.length > 300
+        ? full.slice(0, 8000)
+        : undefined;
+  items = [{ id: ++seq, ts: Date.now(), level, src, msg: text, detail: det }, ...items].slice(
+    0,
+    MAX
+  );
   emit();
+  // P3 — chỉ đẩy warn/error ra server (info quá nhiều, giữ nhẹ).
+  if (sink && level !== 'info') {
+    try {
+      sink({ level, src, msg: det ?? text });
+    } catch {
+      // không để sink làm sập
+    }
+  }
 }
 
 export function getLogs(): LogItem[] {

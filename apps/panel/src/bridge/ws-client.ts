@@ -205,12 +205,16 @@ class WsClient {
         result: result === undefined ? null : result,
       } satisfies JsonRpcSuccess);
     } catch (err) {
+      // P2 — gửi kèm ngữ cảnh: stack + method + params để server/log hiểu
+      // ĐÚNG bug (không chỉ message trơ "Connection to object lost").
+      const stack = err instanceof Error ? err.stack?.slice(0, 1200) : undefined;
       this.sendRaw({
         jsonrpc: '2.0',
         id: req.id,
         error: {
           code: RpcErrorCode.ADAPTER_ERROR,
           message: err instanceof Error ? err.message : String(err),
+          data: { method: req.method, stack, params: req.params },
         },
       } satisfies JsonRpcErrorResponse);
       this.emit({

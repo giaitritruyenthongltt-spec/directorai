@@ -20,7 +20,7 @@
  *   tail -f ~/.directorai/ops.log       # raw JSONL
  */
 
-import { mkdirSync, appendFileSync } from 'node:fs';
+import { mkdirSync, appendFileSync, statSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -31,9 +31,35 @@ interface OpsEvent {
   [k: string]: unknown;
 }
 
+/** P3 — xoay vòng khi file vượt ngưỡng (giữ 1 file .1 cũ). */
+const MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * P1/P3 — Rút gọn 1 giá trị cho log: cắt chuỗi dài, lược object/array to,
+ * BỎ các field khổng lồ (tracks/markers/clips) để dòng log GỌN, đọc được.
+ */
+export function lean(v: unknown, maxLen = 240): unknown {
+  if (v === null || v === undefined) return v;
+  if (typeof v === 'string')
+    return v.length > maxLen ? `${v.slice(0, maxLen)}…(+${v.length - maxLen})` : v;
+  if (typeof v !== 'object') return v;
+  const DROP = new Set(['tracks', 'markers', 'clips', 'segments', 'thumbnail', 'frames']);
+  try {
+    const compact = JSON.stringify(v, (k, val) => {
+      if (DROP.has(k) && Array.isArray(val)) return `[${val.length} mục — lược]`;
+      if (typeof val === 'string' && val.length > maxLen) return `${val.slice(0, maxLen)}…`;
+      return val;
+    });
+    return compact.length > maxLen * 4 ? `${compact.slice(0, maxLen * 4)}…` : JSON.parse(compact);
+  } catch {
+    return String(v).slice(0, maxLen);
+  }
+}
+
 class OpsLog {
   private readonly path: string;
   private initialized = false;
+  private bytes = -1; // -1 = chưa seed từ file hiện có
 
   constructor() {
     const root = process.env.DIRECTORAI_DATA_DIR ?? join(homedir(), '.directorai');
@@ -44,10 +70,25 @@ class OpsLog {
     if (this.initialized) return;
     try {
       mkdirSync(dirname(this.path), { recursive: true });
-      this.initialized = true;
     } catch {
       // best-effort
     }
+    try {
+      this.bytes = statSync(this.path).size;
+    } catch {
+      this.bytes = 0;
+    }
+    this.initialized = true;
+  }
+
+  private rotateIfNeeded(addLen: number): void {
+    if (this.bytes + addLen <= MAX_BYTES) return;
+    try {
+      renameSync(this.path, `${this.path}.1`); // ghi đè .1 cũ
+    } catch {
+      // best-effort
+    }
+    this.bytes = 0;
   }
 
   record(event: OpsEvent): void {
@@ -58,10 +99,40 @@ class OpsLog {
         ...event,
       }) + '\n';
     try {
+      this.rotateIfNeeded(line.length);
       appendFileSync(this.path, line, 'utf-8');
+      this.bytes += line.length;
     } catch {
       // Swallow — ops log is best-effort, never crash hot path.
     }
+  }
+
+  /**
+   * P1 — Ghi 1 MUTATION (lệnh sửa timeline) với đủ ngữ cảnh để AUDIT:
+   * real/mock, params (ý định), result (kết quả thực), thời gian, lỗi.
+   */
+  recordMutation(m: {
+    rid: string;
+    method: string;
+    adapter: 'real' | 'mock';
+    ok: boolean;
+    durationMs: number;
+    params?: unknown;
+    result?: unknown;
+    error?: string;
+  }): void {
+    this.record({
+      event: m.ok ? 'mutate' : 'mutate.error',
+      rid: m.rid,
+      method: m.method,
+      adapter: m.adapter,
+      ok: m.ok,
+      durationMs: m.durationMs,
+      ...(m.params !== undefined ? { params: lean(m.params) } : {}),
+      ...(m.ok && m.result !== undefined ? { result: lean(m.result) } : {}),
+      ...(m.error ? { error: m.error } : {}),
+      ...(m.adapter === 'mock' ? { mockWarning: 'KHÔNG đụng timeline thật' } : {}),
+    });
   }
 
   /** Log a starting RPC + return a finalizer to log completion. */

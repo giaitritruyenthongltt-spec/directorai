@@ -20,7 +20,7 @@ import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-clien
 import { SessionProvider } from './state/session.js';
 import { Icon, type IconName } from './components/Icon.js';
 import { LogDrawer } from './components/LogDrawer.js';
-import { initLogCapture, pushLog } from './bridge/log-store.js';
+import { initLogCapture, pushLog, setLogSink } from './bridge/log-store.js';
 import './styles/tokens.css';
 import './App.css';
 
@@ -75,6 +75,15 @@ export function App(): React.ReactElement {
   // Box log trong panel — bắt console/lỗi để check bug không cần UDT.
   useEffect(() => {
     initLogCapture();
+    // P3 — đẩy warn/error ra server ops.log (bền sau reload/crash panel).
+    setLogSink((it) => {
+      try {
+        wsClient.notify('_panel.log', it);
+      } catch {
+        // bỏ qua nếu WS chưa sẵn sàng
+      }
+    });
+    return () => setLogSink(null);
   }, []);
 
   // L1 — Send mount lifecycle + global error events to server log
@@ -162,7 +171,15 @@ export function App(): React.ReactElement {
     const unsubLog = wsClient.onLog((entry) => {
       setLogs((prev) => [entry, ...prev].slice(0, 500)); // keep last 500 entries
       // Đổ vào box Nhật ký vận hành (lọc lỗi/ngữ cảnh nhanh).
-      pushLog(entry.error ? 'error' : 'info', 'ws', entry.error ?? entry.result ?? entry.type);
+      const label = entry.method ? `${entry.type} · ${entry.method}` : entry.type;
+      const detail =
+        entry.error ?? (entry.result !== undefined ? JSON.stringify(entry.result) : undefined);
+      pushLog(
+        entry.error ? 'error' : 'info',
+        'ws',
+        entry.error ? `${label}: ${entry.error}` : label,
+        detail
+      );
     });
     wsClient.connect();
     return () => {
