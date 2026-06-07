@@ -84,6 +84,44 @@
   }
 }
 
+/* Phóng to / thu nhỏ giao diện (A− / % / A+) */
+.zoom-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--layer-2);
+}
+.zoom-btn,
+.zoom-pct {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  padding: var(--sp-2) var(--sp-3);
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.zoom-btn:hover:not(:disabled),
+.zoom-pct:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.zoom-pct {
+  min-width: 42px;
+  text-align: center;
+  color: var(--text);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
 .reconnect-btn {
   display: inline-flex;
   align-items: center;

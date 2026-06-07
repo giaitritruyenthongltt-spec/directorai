@@ -15,9 +15,10 @@
       "label": {
         "default": "DirectorAI"
       },
-      "minimumSize": { "width": 320, "height": 480 },
-      "maximumSize": { "width": 800, "height": 2048 },
-      "preferredDockedSize": { "width": 400, "height": 600 },
+      "minimumSize": { "width": 360, "height": 420 },
+      "maximumSize": { "width": 2048, "height": 2048 },
+      "preferredDockedSize": { "width": 480, "height": 820 },
+      "preferredFloatingSize": { "width": 760, "height": 1000 },
       "icons": [
         {
           "width": 23,
