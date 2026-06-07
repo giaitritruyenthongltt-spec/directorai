@@ -9,7 +9,7 @@ await new Promise((res, rej) => {
   ws.once('error', rej);
   setTimeout(() => rej(new Error('timeout')), 5000);
 });
-function call(m, p = {}, t = 120000) {
+function call(m, p = {}, t = 400000) {
   const myId = id++;
   return new Promise((res, rej) => {
     const to = setTimeout(() => {

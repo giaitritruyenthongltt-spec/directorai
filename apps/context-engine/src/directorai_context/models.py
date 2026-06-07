@@ -44,8 +44,15 @@ class SceneRequest(BaseModel):
     """Request to detect scene cuts."""
 
     media_path: str
-    threshold: float | None = None
+    # 'content' (ngưỡng cố định) | 'adaptive' (rolling-avg, bền chuyển động)
+    detector: str | None = None
+    threshold: float | None = None  # cho ContentDetector
+    adaptive_threshold: float | None = None  # cho AdaptiveDetector
     min_scene_len_sec: float | None = None
+    thumbnails: bool = False  # kèm ảnh xem-trước (data-URI) mỗi cảnh để duyệt cắt
+    thumb_width: int | None = None
+    group: bool = False  # gom shot→cảnh ngữ-nghĩa (histogram màu shot kề nhau)
+    group_threshold: float | None = None  # 0..1, cao = gộp ít (nhiều nhóm hơn)
 
 
 class Scene(BaseModel):
@@ -55,6 +62,18 @@ class Scene(BaseModel):
     start: float
     end: float
     duration: float
+    thumb: str | None = None  # 'data:image/jpeg;base64,...' (nếu xin thumbnails)
+
+
+class SceneGroup(BaseModel):
+    """Nhóm CẢNH ngữ-nghĩa = gộp nhiều shot kề nhau giống nhau (cùng bối cảnh)."""
+
+    index: int
+    start: float
+    end: float
+    duration: float
+    shot_indices: list[int]  # các shot (cảnh) thành viên
+    shot_count: int
 
 
 class SceneResult(BaseModel):
@@ -62,6 +81,9 @@ class SceneResult(BaseModel):
 
     media_path: str
     scenes: list[Scene]
+    detector: str = "content"  # phương pháp đã dùng
+    fps: float = 0.0
+    groups: list[SceneGroup] = []  # gom shot→cảnh ngữ-nghĩa (nếu xin group)
 
 
 class AudioSeparateRequest(BaseModel):
@@ -79,6 +101,7 @@ class AudioSeparateResult(BaseModel):
     stems: dict[str, str]  # {'vocals': path, 'no_vocals': path, ...}
     device: str
     elapsed_ms: int
+    cached: bool = False  # True nếu tái dùng stems cache (không chạy lại Demucs)
 
 
 class RecutRecipe(BaseModel):
@@ -111,6 +134,20 @@ class RecutRenderResult(BaseModel):
     applied: list[str]
     elapsed_ms: int
     error: str | None = None
+
+
+class ProbeRequest(BaseModel):
+    """Đọc thông số media (cho cut-list FCPXML / batch)."""
+
+    media_path: str
+
+
+class ProbeResult(BaseModel):
+    width: int
+    height: int
+    fps: float
+    duration: float
+    has_audio: bool
 
 
 class BeatRequest(BaseModel):

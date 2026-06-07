@@ -8,22 +8,41 @@ FFmpeg (flip/crop/speed/color/grain — tầm thường) + Demucs (tách/bỏ/th
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+from directorai_context.config import get_settings
 from directorai_context.logger import log
 
 
+def _parse_fps(rate: str | None) -> float:
+    """'30000/1001' → 29.97; '30' → 30.0; lỗi → 0.0."""
+    if not rate:
+        return 0.0
+    try:
+        if "/" in rate:
+            num, den = rate.split("/", 1)
+            d = float(den)
+            return float(num) / d if d else 0.0
+        return float(rate)
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
+
 def _ffprobe(video: str) -> dict:
-    """Đọc duration + width/height + có audio không qua ffprobe."""
+    """Đọc duration + width/height + fps + có audio không qua ffprobe."""
     out = subprocess.run(
         [
             "ffprobe", "-v", "error",
-            "-show_entries", "stream=index,codec_type,width,height:format=duration",
+            "-show_entries",
+            "stream=index,codec_type,width,height,r_frame_rate:format=duration",
             "-of", "json", video,
         ],
         capture_output=True, text=True, check=True,
@@ -36,9 +55,18 @@ def _ffprobe(video: str) -> dict:
     return {
         "width": int(vid.get("width", 0)),
         "height": int(vid.get("height", 0)),
+        "fps": _parse_fps(vid.get("r_frame_rate")),
         "duration": dur,
         "has_audio": has_audio,
     }
+
+
+def probe_media(video: str) -> dict:
+    """Public probe: {width,height,fps,duration,has_audio}. Cho cut-list FCPXML."""
+    src = Path(video)
+    if not src.exists():
+        raise FileNotFoundError(video)
+    return _ffprobe(str(src))
 
 
 def _torch_device() -> str:
@@ -50,21 +78,58 @@ def _torch_device() -> str:
         return "cpu"
 
 
-def separate_audio(media_path: str, model: str = "htdemucs", mode: str = "vocals") -> dict:
+def _stems_base_dir(src: Path) -> Path:
+    """Thư mục stems = ~/.directorai/cache/recut_stems/<hash-abspath>. B3 — KHÔNG
+    ghi vào thư mục input của user (tránh rác kho gốc 3000 tập); hash theo abspath
+    để 2 file cùng tên ở 2 thư mục khác nhau (S1/ep01, S2/ep01) không đè stems."""
+    h = hashlib.sha1(str(src.resolve()).encode("utf-8")).hexdigest()[:12]
+    return get_settings().cache_dir / "recut_stems" / h
+
+
+def _stems_fresh(stem_dir: Path, src: Path) -> bool:
+    """Stems còn dùng được nếu mọi .wav mới HƠN (>=) file nguồn."""
+    try:
+        smt = src.stat().st_mtime
+        wavs = list(stem_dir.glob("*.wav"))
+        return bool(wavs) and all(w.stat().st_mtime >= smt for w in wavs)
+    except OSError:
+        return False
+
+
+def separate_audio(
+    media_path: str,
+    model: str = "htdemucs",
+    mode: str = "vocals",
+    out_dir: str | None = None,
+) -> dict:
     """Tách stem bằng Demucs. mode='vocals' → 2 stem (vocals + no_vocals).
 
-    Trả {ok, out_dir, stems:{vocals,no_vocals}, device, elapsed_ms}.
+    Trả {ok, out_dir, stems:{vocals,no_vocals}, device, elapsed_ms, cached}.
+    Có CACHE: nếu stems đã tồn tại và mới hơn nguồn → tái dùng (Demucs ~26s/clip).
     """
     t0 = time.time()
     src = Path(media_path)
     if not src.exists():
         raise FileNotFoundError(media_path)
-    out_dir = src.parent / "_recut_stems"
-    out_dir.mkdir(exist_ok=True)
-    device = _torch_device()
+    base = Path(out_dir) if out_dir else _stems_base_dir(src)
+    base.mkdir(parents=True, exist_ok=True)
+    stem_dir = base / model / src.stem
 
+    # CACHE hit — đủ stem cần + còn tươi.
+    if stem_dir.exists():
+        cached = {w.stem: str(w) for w in stem_dir.glob("*.wav")}
+        need = {"vocals", "no_vocals"} if mode == "vocals" else set(cached.keys())
+        if cached and need.issubset(cached.keys()) and _stems_fresh(stem_dir, src):
+            elapsed = int((time.time() - t0) * 1000)
+            log.info("demucs_cache_hit", stems=list(cached.keys()))
+            return {
+                "ok": True, "out_dir": str(stem_dir), "stems": cached,
+                "device": "cache", "elapsed_ms": elapsed, "cached": True,
+            }
+
+    device = _torch_device()
     # sys.executable = interpreter venv đang chạy sidecar (đảm bảo có demucs).
-    cmd = [sys.executable, "-m", "demucs", "-n", model, "-o", str(out_dir), "--device", device]
+    cmd = [sys.executable, "-m", "demucs", "-n", model, "-o", str(base), "--device", device]
     if mode == "vocals":
         cmd += ["--two-stems", "vocals"]
     cmd += [str(src)]
@@ -73,13 +138,15 @@ def separate_audio(media_path: str, model: str = "htdemucs", mode: str = "vocals
     if proc.returncode != 0:
         raise RuntimeError(f"demucs exit {proc.returncode}: {proc.stderr[-400:]}")
 
-    stem_dir = out_dir / model / src.stem
     stems: dict[str, str] = {}
     for wav in stem_dir.glob("*.wav"):
         stems[wav.stem] = str(wav)
     elapsed = int((time.time() - t0) * 1000)
     log.info("demucs_done", stems=list(stems.keys()), elapsed_ms=elapsed)
-    return {"ok": bool(stems), "out_dir": str(stem_dir), "stems": stems, "device": device, "elapsed_ms": elapsed}
+    return {
+        "ok": bool(stems), "out_dir": str(stem_dir), "stems": stems,
+        "device": device, "elapsed_ms": elapsed, "cached": False,
+    }
 
 
 def recut_render(
@@ -94,6 +161,11 @@ def recut_render(
     if not src.exists():
         raise FileNotFoundError(video_path)
     out = Path(out_path) if out_path else src.with_name(f"{src.stem}_recut.mp4")
+    # B9 — chặn ghi đè CHÍNH file nguồn (đọc+ghi cùng path → hỏng file).
+    if out.resolve() == src.resolve():
+        out = src.with_name(f"{src.stem}_recut.mp4")
+        if out.resolve() == src.resolve():
+            raise ValueError("out_path trùng video nguồn")
     probe = _ffprobe(str(src))
     W, H = probe["width"], probe["height"]
     has_audio = probe.get("has_audio", False)
@@ -134,7 +206,7 @@ def recut_render(
     if bgm in ("strip", "replace") and has_audio:
         try:
             sep = separate_audio(str(src))
-        except Exception as e:  # noqa: BLE001 — degrade mềm: vẫn render visual
+        except Exception as e:  # degrade mềm: vẫn render visual
             demucs_error = str(e)[-200:]
             log.warning("demucs_unavailable_degrade", error=demucs_error)
             sep = {"stems": {}}
@@ -142,29 +214,30 @@ def recut_render(
         if vocals:
             audio_inputs += ["-i", vocals]  # input 1 = vocals
             audio_changed = True
-            if bgm == "strip":
-                base_alabel = "1:a"  # chỉ giọng (bỏ nhạc nền)
-                applied.append("strip_bgm")
-            elif bgm == "replace" and recipe.get("new_bgm_path"):
-                audio_inputs += ["-i", recipe["new_bgm_path"]]  # input 2 = nhạc mới
+            new_bgm = recipe.get("new_bgm_path")
+            new_bgm_ok = bool(new_bgm) and Path(str(new_bgm)).exists()
+            if bgm == "replace" and new_bgm_ok:
+                audio_inputs += ["-i", str(new_bgm)]  # input 2 = nhạc mới
                 gain = float(recipe.get("bgm_gain_db") or -6.0)
                 extra_chain = (
                     f"[2:a]volume={gain}dB[bg];[1:a][bg]amix=inputs=2:duration=first[abase]"
                 )
                 base_alabel = "abase"
                 applied.append("replace_bgm")
+            else:
+                # strip, HOẶC replace nhưng thiếu/sai file nhạc → AN TOÀN: bỏ nhạc
+                # (giữ giọng) thay vì im lặng giữ nguyên audio gốc (đòn dedup hỏng).
+                base_alabel = "1:a"
+                if bgm == "replace":
+                    applied.append("replace_no_bgm→strip")
+                else:
+                    applied.append("strip_bgm")
 
     speed_a = abs(speed - 1.0) > 1e-3
     # Chỉ xử lý audio khi video CÓ audio stream (clip ghép có thể không có).
     has_audio_work = has_audio and (audio_changed or speed_a)
 
-    # ── Lắp lệnh ffmpeg ──────────────────────────────────────────────────
-    vcodec = (
-        ["-c:v", "h264_nvenc", "-preset", "p4", "-b:v", "8M"]
-        if use_nvenc
-        else ["-c:v", "libx264", "-crf", "20"]
-    )
-    cmd = ["ffmpeg", "-y", "-i", str(src), *audio_inputs]
+    # ── Lắp filtergraph + map (chung cho mọi codec) ──────────────────────
     fc: list[str] = []
     if vf:
         fc.append(f"[0:v]{','.join(vf)}[vout]")
@@ -187,21 +260,76 @@ def recut_render(
         else:
             amap = base_alabel  # strip: '1:a' (map thẳng, không qua filter)
 
-    if fc:
-        cmd += ["-filter_complex", ";".join(fc)]
-    cmd += ["-map", vmap, "-map", amap]
-    cmd += [*vcodec, "-c:a", "aac", "-b:a", "192k", str(out)]
+    # B12/16 — ghi ATOMIC: render ra .part.<ext> rồi rename. FFmpeg bị kill giữa
+    # chừng KHÔNG để lại file _recut.mp4 hỏng (mà skip-existing tưởng đã xong).
+    # GIỮ đuôi gốc (.mp4) để ffmpeg suy ra muxer — '.part' trơ → "Unable to
+    # choose output format".
+    tmp_out = out.with_suffix(f".part{out.suffix}")
+
+    def assemble(vcodec_args: list[str]) -> list[str]:
+        cmd = ["ffmpeg", "-y", "-i", str(src), *audio_inputs]
+        if fc:
+            cmd += ["-filter_complex", ";".join(fc)]
+        cmd += ["-map", vmap, "-map", amap, *vcodec_args]
+        cmd += ["-c:a", "aac", "-b:a", "192k", str(tmp_out)]
+        return cmd
+
+    # B17 — bitrate theo ĐỘ PHÂN GIẢI (8M cứng làm 4K vỡ, 480p phí). x264 dùng
+    # CRF (đã độc-lập-độ-phân-giải). NVENC dùng -b:v scale theo chiều cao.
+    def _target_bitrate(h: int) -> str:
+        if h >= 2000:
+            return "40M"  # 4K
+        if h >= 1300:
+            return "18M"  # 1440p
+        if h >= 1000:
+            return "10M"  # 1080p
+        if h >= 700:
+            return "6M"  # 720p
+        return "3M"  # ≤480p
+
+    vbit = _target_bitrate(H) if H else "8M"
+    nvenc_args = [
+        "-c:v", "h264_nvenc", "-preset", "p4",
+        "-b:v", vbit, "-maxrate", vbit, "-bufsize", vbit,
+    ]
+    x264_args = ["-c:v", "libx264", "-crf", "20", "-preset", "medium"]
 
     log.info("recut_ffmpeg", applied=applied, nvenc=use_nvenc)
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    encoder = "nvenc" if use_nvenc else "x264"
+    proc = subprocess.run(
+        assemble(nvenc_args if use_nvenc else x264_args), capture_output=True, text=True
+    )
+    # B1 — NVENC fail (driver/không có/đầy session) → fallback CPU libx264. Tránh
+    # cả batch 3000 chết vì 1 vấn đề encoder.
+    if proc.returncode != 0 and use_nvenc:
+        log.warning("nvenc_failed_fallback_x264", err=proc.stderr[-300:])
+        encoder = "x264(fallback)"
+        applied.append("cpu_fallback")
+        proc = subprocess.run(assemble(x264_args), capture_output=True, text=True)
+
     if proc.returncode != 0:
+        with contextlib.suppress(OSError):
+            tmp_out.unlink(missing_ok=True)
         return {
             "ok": False, "out_path": str(out), "duration_sec": probe["duration"],
             "audio_changed": audio_changed, "applied": applied,
             "elapsed_ms": int((time.time() - t0) * 1000),
             "error": proc.stderr[-600:],
         }
+
+    # rename atomic .part → out
+    try:
+        os.replace(str(tmp_out), str(out))
+    except OSError as e:
+        return {
+            "ok": False, "out_path": str(out), "duration_sec": probe["duration"],
+            "audio_changed": audio_changed, "applied": applied,
+            "elapsed_ms": int((time.time() - t0) * 1000),
+            "error": f"rename .part lỗi: {e}",
+        }
+
     out_dur = _ffprobe(str(out))["duration"] if out.exists() else 0.0
+    applied.append(f"enc:{encoder}")
     if demucs_error:
         applied.append("bgm_skipped(demucs_unavailable)")
     return {

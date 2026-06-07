@@ -43,8 +43,17 @@ class Settings(BaseSettings):
     whisper_compute_type: str = "int8"
 
     # Scene detect
-    scene_threshold: float = 27.0
-    scene_min_scene_len: float = 1.0
+    # detector: 'content' (ContentDetector, ngưỡng HSV cố định) hoặc
+    # 'adaptive' (AdaptiveDetector, so delta với trung-bình-trượt cục bộ —
+    # bền với chuyển động mạnh của footage Nerf: pan/nổ/chớp nòng).
+    scene_detector: str = "content"
+    scene_threshold: float = 27.0  # ContentDetector
+    scene_adaptive_threshold: float = 3.0  # AdaptiveDetector (tỉ lệ vượt rolling-avg)
+    scene_min_scene_len: float = 1.0  # giây — cảnh ngắn hơn sẽ bị gộp
+    scene_thumb_width: int = 192  # px — bề rộng thumbnail xem trước
+    # gom shot→cảnh: ngưỡng tương-quan histogram (HSV) giữa 2 shot kề nhau;
+    # >= ngưỡng → cùng 1 cảnh (cùng bối cảnh). 0.6 = vừa.
+    scene_group_threshold: float = 0.6
 
     # Beat
     beat_sample_rate: int = 22_050

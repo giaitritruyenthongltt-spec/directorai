@@ -132,6 +132,59 @@ async function sidecarPost<T>(path: string, payload: object): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * R4 — Dựng FcpTimeline từ cut-list (N sub-đoạn của 1 NGUỒN, nối tiếp nhau trên
+ * spine). Mỗi cảnh → 1 clip editable tại đúng in-point gốc. Người dùng Import
+ * FCPXML → sequence editable khớp y cut-list adaptive (hợp nhất preview↔editable;
+ * UXP không có razor nên đi đường FCPXML). Hàm THUẦN → test không cần sidecar.
+ */
+export function scenesToRecutTimeline(
+  videoPath: string,
+  scenes: { startSec: number; durationSec: number }[],
+  probe: { width: number; height: number; fps: number; duration: number; hasAudio: boolean },
+  name?: string
+): FcpTimeline {
+  let t = 0;
+  const clips = scenes.map((s, i) => {
+    const clip = {
+      assetPath: videoPath,
+      name: `Cảnh ${i + 1}`,
+      timelineStartSec: t,
+      sourceInSec: s.startSec,
+      durationSec: s.durationSec,
+      speed: 1,
+      assetDurationSec: probe.duration || undefined,
+      hasAudio: probe.hasAudio,
+    };
+    t += s.durationSec;
+    return clip;
+  });
+  return {
+    name: name ?? 'Recut cut-list',
+    fps: probe.fps > 0 ? probe.fps : 30,
+    width: probe.width || 1920,
+    height: probe.height || 1080,
+    clips,
+  };
+}
+
+/**
+ * FB2 — Khử TRÙNG đường dẫn clip (giữ thứ tự xuất hiện đầu). 1 file dùng nhiều
+ * lần trên timeline → clipPaths lặp → planner Vision phân tích lặp, ăn hết cap
+ * 150, tốn cost/thời gian Gemini; dead-air phân tích lặp. Dedupe trước khi gửi.
+ */
+export function dedupePaths(paths: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of paths) {
+    const key = String(p ?? '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
 export interface CompositeToolDeps {
   readonly adapter: IPremiereAdapter;
   readonly logger: Logger;
@@ -275,8 +328,27 @@ export class CompositeTools {
         return this.recutBatchProcess(
           params as { videoPath: string; outPath?: string; recipe?: Record<string, unknown> }
         );
+      case 'recut.detectScenesSidecar':
+        return this.recutDetectScenesSidecar(
+          params as {
+            videoPath: string;
+            detector?: string;
+            threshold?: number;
+            minSceneLenSec?: number;
+            thumbnails?: boolean;
+          }
+        );
       case 'recut.separateAudio':
         return this.recutSeparateAudio(params as { videoPath: string; mode?: string });
+      case 'recut.buildCutListFcpxml':
+        return this.recutBuildCutListFcpxml(
+          params as {
+            videoPath: string;
+            scenes?: { startSec: number; durationSec: number }[];
+            detector?: string;
+            fileName?: string;
+          }
+        );
       default:
         return null;
     }
@@ -309,7 +381,9 @@ export class CompositeTools {
       'color.applyLookByScene',
       'recut.applyDedup',
       'recut.batch.process',
+      'recut.detectScenesSidecar',
       'recut.separateAudio',
+      'recut.buildCutListFcpxml',
     ];
   }
 
@@ -420,6 +494,302 @@ export class CompositeTools {
       recipe: params.recipe ?? {},
       use_nvenc: true,
     });
+  }
+
+  /**
+   * RECUT — phân mảnh cảnh QUA SIDECAR (PySceneDetect, không cần Premiere).
+   * Khác `recut.detectScenes` (Premiere SED, độ-nhạy mặc định, không chỉnh được):
+   * đường này CHỌN được detector + ngưỡng + min-len, và kèm thumbnail xem-trước
+   * để DUYỆT điểm cắt. detector 'adaptive' bền với chuyển động mạnh (Nerf action);
+   * 'content' = ngưỡng cố định kiểu cũ. Ngưỡng được map đúng theo detector.
+   */
+  private async recutDetectScenesSidecar(params: {
+    videoPath: string;
+    detector?: string;
+    threshold?: number;
+    minSceneLenSec?: number;
+    thumbnails?: boolean;
+    group?: boolean;
+    groupThreshold?: number;
+  }): Promise<{
+    detector: string;
+    fps: number;
+    sceneCount: number;
+    scenes: {
+      index: number;
+      startSec: number;
+      endSec: number;
+      durationSec: number;
+      thumb?: string | null;
+    }[];
+    groups: {
+      index: number;
+      startSec: number;
+      endSec: number;
+      durationSec: number;
+      shotIndices: number[];
+      shotCount: number;
+    }[];
+  }> {
+    const det = (params.detector ?? 'adaptive').toLowerCase();
+    const body: Record<string, unknown> = {
+      media_path: params.videoPath,
+      detector: det,
+      min_scene_len_sec: params.minSceneLenSec ?? null,
+      thumbnails: params.thumbnails ?? true,
+      group: params.group ?? false,
+      group_threshold: params.groupThreshold ?? null,
+    };
+    // Ngưỡng có ý nghĩa KHÁC nhau giữa 2 detector (content≈27 vs adaptive≈3).
+    if (params.threshold != null) {
+      if (det === 'adaptive') body.adaptive_threshold = params.threshold;
+      else body.threshold = params.threshold;
+    }
+    const r = await sidecarPost<{
+      detector: string;
+      fps: number;
+      scenes: { index: number; start: number; end: number; duration: number; thumb?: string }[];
+      groups?: {
+        index: number;
+        start: number;
+        end: number;
+        duration: number;
+        shot_indices: number[];
+        shot_count: number;
+      }[];
+    }>('/scenes', body);
+    return {
+      detector: r.detector,
+      fps: r.fps,
+      sceneCount: r.scenes.length,
+      scenes: r.scenes.map((s) => ({
+        index: s.index,
+        startSec: s.start,
+        endSec: s.end,
+        durationSec: s.duration,
+        thumb: s.thumb ?? null,
+      })),
+      groups: (r.groups ?? []).map((g) => ({
+        index: g.index,
+        startSec: g.start,
+        endSec: g.end,
+        durationSec: g.duration,
+        shotIndices: g.shot_indices,
+        shotCount: g.shot_count,
+      })),
+    };
+  }
+
+  /**
+   * RECUT R1+R3 — Xử lý CẢ THƯ MỤC headless (đòn 3000-tập). Vòng lặp đặt ở
+   * server: liệt kê file (Node fs) → gọi sidecar /recut/render từng file. Báo
+   * tiến độ per-file (ctx.onProgress), DỪNG giữa các file khi bị Hủy
+   * (ctx.signal.aborted), BỎ QUA file đã có output (skipExisting), và TIẾP TỤC
+   * khi 1 file lỗi (continue-on-error). KHÔNG nằm trong maybeHandle vì cần ctx
+   * (signal + progress) — ws-server gọi trực tiếp qua hook onRecutBatch.
+   */
+  async recutBatchFolder(
+    rawParams: unknown,
+    ctx: {
+      signal: AbortSignal;
+      onProgress: (done: number, total: number, label?: string) => void;
+    }
+  ): Promise<{
+    folder: string;
+    outDir: string;
+    total: number;
+    done: number;
+    failed: number;
+    skipped: number;
+    cancelled: boolean;
+    files: {
+      src: string;
+      ok: boolean;
+      outPath?: string;
+      skipped?: boolean;
+      applied?: string[];
+      elapsedMs?: number;
+      error?: string;
+    }[];
+  }> {
+    const params = (rawParams ?? {}) as {
+      folder?: string;
+      outDir?: string;
+      recipe?: Record<string, unknown>;
+      recursive?: boolean;
+      pattern?: string;
+      skipExisting?: boolean;
+      limit?: number;
+    };
+    const folder = params.folder?.trim();
+    if (!folder) throw new Error('thiếu folder');
+    const root = path.resolve(folder);
+    const rootStat = await fs.stat(root).catch(() => null);
+    if (!rootStat?.isDirectory()) throw new Error(`không phải thư mục: ${root}`);
+    const outDir = params.outDir?.trim()
+      ? path.resolve(params.outDir.trim())
+      : path.join(root, '_recut_out');
+    await fs.mkdir(outDir, { recursive: true });
+
+    const exts = (params.pattern ?? 'mp4,mov,mkv,avi,m4v')
+      .split(/[;,]/)
+      .map((s) =>
+        s
+          .trim()
+          .replace(/^\*?\.?/, '')
+          .toLowerCase()
+      )
+      .filter(Boolean);
+    const skipExisting = params.skipExisting !== false;
+
+    // Liệt kê file video (đệ quy nếu recursive); né thư mục output để không
+    // tái-xử-lý file đã render.
+    const found: string[] = [];
+    const walk = async (dir: string): Promise<void> => {
+      const ents: Dirent[] = await fs.readdir(dir, { withFileTypes: true });
+      for (const e of ents) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (path.resolve(full) === outDir) continue;
+          if (params.recursive) await walk(full);
+        } else if (e.isFile() && exts.includes(path.extname(e.name).slice(1).toLowerCase())) {
+          found.push(full);
+        }
+      }
+    };
+    await walk(root);
+    found.sort((a, b) => a.localeCompare(b));
+    const files = params.limit && params.limit > 0 ? found.slice(0, params.limit) : found;
+    const total = files.length;
+    ctx.onProgress(0, total, `0/${total}`);
+
+    const results: {
+      src: string;
+      ok: boolean;
+      outPath?: string;
+      skipped?: boolean;
+      applied?: string[];
+      elapsedMs?: number;
+      error?: string;
+    }[] = [];
+    let done = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      if (ctx.signal.aborted) break;
+      const src = files[i];
+      if (!src) continue;
+      // B2 — tên output DUY NHẤT theo đường-dẫn-tương-đối (né trùng tên giữa các
+      // thư mục con khi recursive: S1/ep01 & S2/ep01 → S1__ep01 & S2__ep01).
+      const rel = path.relative(root, src);
+      const stem = rel.replace(/\.[^.]+$/, '').replace(/[\\/]+/g, '__');
+      const base = path.basename(src, path.extname(src));
+      const out = path.join(outDir, `${stem}_recut.mp4`);
+      // skip-existing CHỈ khi file thật sự hoàn chỉnh (size > 0); file .part dở
+      // dang đã được render atomic dọn sạch nên không lọt vào đây.
+      const outStat = await fs.stat(out).catch(() => null);
+      if (skipExisting && outStat && outStat.size > 0) {
+        results.push({ src, ok: true, outPath: out, skipped: true });
+        skipped++;
+        ctx.onProgress(i + 1, total, `bỏ qua ${base}`);
+        continue;
+      }
+      const t0 = Date.now();
+      try {
+        const r = await sidecarPost<{
+          ok: boolean;
+          out_path: string;
+          applied: string[];
+          error?: string | null;
+        }>('/recut/render', {
+          video_path: src,
+          out_path: out,
+          recipe: params.recipe ?? {},
+          use_nvenc: true,
+        });
+        if (r.ok) done++;
+        else failed++;
+        results.push({
+          src,
+          ok: r.ok,
+          outPath: r.out_path,
+          applied: r.applied,
+          elapsedMs: Date.now() - t0,
+          error: r.error ?? undefined,
+        });
+      } catch (e) {
+        failed++;
+        results.push({
+          src,
+          ok: false,
+          elapsedMs: Date.now() - t0,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+      ctx.onProgress(i + 1, total, `${i + 1}/${total} ${base}`);
+    }
+
+    const cancelled = ctx.signal.aborted;
+    this.deps.logger.info(
+      { folder: root, total, done, failed, skipped, cancelled },
+      'recut.batch.folder xong'
+    );
+    return { folder: root, outDir, total, done, failed, skipped, cancelled, files: results };
+  }
+
+  /**
+   * RECUT R4 — Cut-list adaptive → SEQUENCE EDITABLE qua FCPXML. UXP PPro26
+   * KHÔNG có razor để cắt clip ở timecode tuỳ ý, nên đi đường FCPXML: 1 nguồn
+   * tách thành N sub-đoạn editable đúng điểm cắt → người dùng Import vào Premiere
+   * (File ▸ Import) ra sequence sửa được (kéo/xoá/đảo cảnh). Hợp nhất "xem-trước
+   * tinh-chỉnh-được" với "timeline editable". scenes truyền vào, hoặc tự dò
+   * (adaptive) nếu rỗng.
+   */
+  private async recutBuildCutListFcpxml(params: {
+    videoPath: string;
+    scenes?: { startSec: number; durationSec: number }[];
+    detector?: string;
+    fileName?: string;
+  }): Promise<{ path: string; bytes: number; clips: number; fps: number }> {
+    if (!params.videoPath) throw new Error('thiếu videoPath');
+    const probe = await sidecarPost<{
+      width: number;
+      height: number;
+      fps: number;
+      duration: number;
+      has_audio: boolean;
+    }>('/probe', { media_path: params.videoPath });
+
+    let scenes = params.scenes;
+    if (!scenes || scenes.length === 0) {
+      const det = await this.recutDetectScenesSidecar({
+        videoPath: params.videoPath,
+        detector: params.detector ?? 'adaptive',
+        thumbnails: false,
+      });
+      scenes = det.scenes.map((s) => ({ startSec: s.startSec, durationSec: s.durationSec }));
+    }
+    if (!scenes.length) throw new Error('không phát hiện cảnh nào để dựng cut-list');
+
+    const base = path.basename(params.videoPath).replace(/\.[^.]+$/, '');
+    const tl = scenesToRecutTimeline(
+      params.videoPath,
+      scenes,
+      {
+        width: probe.width,
+        height: probe.height,
+        fps: probe.fps,
+        duration: probe.duration,
+        hasAudio: probe.has_audio,
+      },
+      `Recut — ${base}`
+    );
+    const res = await this.exportFcpxml({
+      timeline: tl,
+      fileName: params.fileName ?? `recut-${base}`,
+    });
+    return { ...res, fps: tl.fps };
   }
 
   /** RECUT — tách nhạc nền / voice (Demucs): trả {stems:{vocals,no_vocals}}. */
@@ -699,6 +1069,7 @@ export class CompositeTools {
     htmlPath: string;
   }> {
     if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const clipPaths = dedupePaths(params.clipPaths); // AN1 — khử trùng (đếm + CV đúng)
     const threshold = params.threshold ?? 0.5;
     // CV prefilter (rẻ) — không gọi Gemini.
     const pf = await sidecarPost<{
@@ -711,14 +1082,14 @@ export class CompositeTools {
       }[];
       suspects: number;
     }>('/vision/filter_bad', {
-      clip_paths: params.clipPaths,
+      clip_paths: clipPaths,
       threshold,
       sample_interval_sec: 0.33,
     });
-    const cl = await this.clusterClips({ clipPaths: params.clipPaths });
+    const cl = await this.clusterClips({ clipPaths });
     const rows = pf.prefilter ?? [];
     const summary = {
-      total: params.clipPaths.length,
+      total: clipPaths.length,
       suspects: pf.suspects ?? rows.filter((r) => r.is_suspect).length,
       clusters: cl.n_clusters,
       reduction: cl.reduction,
@@ -837,11 +1208,12 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
   ): Promise<EditPlanResult> {
     if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
     if (!params.goal?.trim()) throw new Error('goal required');
+    const clipPaths = dedupePaths(params.clipPaths); // FB2 — khử trùng
     const interval = params.frames ? 1.0 / params.frames : 0.33;
     // LF1 — chuẩn hóa structure về tên sidecar mong đợi ("3act").
     const structure = params.structure === 'three_act' ? '3act' : (params.structure ?? undefined);
     const res = await sidecarPost<EditPlanResult>('/vision/build_edit_plan', {
-      clip_paths: params.clipPaths,
+      clip_paths: clipPaths,
       goal: params.goal,
       sample_interval_sec: interval,
       // LF8 — cap Vision cho phim dài (400+ clip): mặc định 150, lấy mẫu đều.
@@ -1387,6 +1759,7 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
     }
   > {
     if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const clipPaths = dedupePaths(params.clipPaths); // FB2 — khử trùng
     const r = await sidecarPost<{
       steps: EditPlanStep[];
       analyzed: number;
@@ -1395,7 +1768,7 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       total_disables: number;
       estimated_saved_sec: number;
     }>('/audio/dead_air', {
-      clip_paths: params.clipPaths,
+      clip_paths: clipPaths,
       min_silence_sec: params.minSilenceSec ?? 1.0,
       keep_padding_sec: params.keepPaddingSec ?? 0.25,
       threshold_db: params.thresholdDb ?? -40.0,

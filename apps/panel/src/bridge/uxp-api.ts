@@ -746,7 +746,25 @@ export async function recutDetectScenes(videoPath?: string): Promise<Record<stri
     await sFresh.setSelection(sel);
     const ok = await pp.SequenceUtils.performSceneEditDetectionOnSelection('ApplyCuts', sel);
     out.sedOk = ok;
-    await new Promise((r) => setTimeout(r, 2500));
+    // B8 — đợi SED XONG = số trackitem ỔN ĐỊNH (thay vì đợi cứng 2.5s). Video
+    // dài SED chạy lâu hơn → đợi cứng sẽ đếm khi CHƯA xong → sai/thiếu cảnh.
+    // Có cắt (cnt>1) ổn định 1.5s → xong sớm; không cắt → bỏ chờ sau ~4s; trần 30s.
+    let prev = -1;
+    let stable = 0;
+    let polls = 0;
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const cnt = (await vItems()).length;
+      polls = i + 1;
+      if (cnt === prev) {
+        stable++;
+        if (stable >= (cnt > 1 ? 3 : 8)) break;
+      } else {
+        stable = 0;
+        prev = cnt;
+      }
+    }
+    out.sedPolls = polls;
     // 4. liệt kê cảnh (KHÔNG dọn — giữ sequence cho Lane A)
     const after = await vItems();
     const scenes: any[] = [];

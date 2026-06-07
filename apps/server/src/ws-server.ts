@@ -52,6 +52,19 @@ export interface WsServerOptions {
    */
   onComposite?: (method: string, params: unknown) => Promise<unknown | null>;
   /**
+   * R1+R3 — Batch xử-lý-cả-thư-mục headless (`recut.batch.folder`). Tách khỏi
+   * onComposite vì chạy nhiều phút/giờ → cần AbortSignal (Hủy) + onProgress
+   * (tiến độ per-file). ws-server mở 1 op trên ProgressBus, forward update về
+   * panel theo socket gốc, và abort khi panel gửi progress.cancel.
+   */
+  onRecutBatch?: (
+    params: unknown,
+    ctx: {
+      signal: AbortSignal;
+      onProgress: (done: number, total: number, label?: string) => void;
+    }
+  ) => Promise<unknown>;
+  /**
    * P1 — Khi true, TỪ CHỐI method mutating nếu không có panel (chống "thành
    * công giả" trên mock). Mặc định false. Đặt qua env REQUIRE_PANEL_FOR_MUTATION.
    */
@@ -135,6 +148,50 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       const { opId } = (req.params ?? {}) as ProgressCancelParams;
       const ok = opId ? progress.cancel(opId) : false;
       send(ws, { jsonrpc: '2.0', id: req.id, result: { ok } } satisfies JsonRpcSuccess);
+      return;
+    }
+
+    // R1+R3 — recut.batch.folder: batch headless dài (phút/giờ) với tiến độ +
+    // Hủy. Mở op trên ProgressBus → forward update theo socket gốc; Hủy =
+    // progress.cancel → AbortSignal → vòng lặp batch dừng giữa các file.
+    if (req.method === 'recut.batch.folder') {
+      if (!opts.onRecutBatch) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: { code: RpcErrorCode.METHOD_NOT_FOUND, message: 'recut.batch.folder unavailable' },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      const { opId, signal } = progress.start(req.method);
+      opOrigin.set(opId, ws);
+      try {
+        const result = await opts.onRecutBatch(req.params, {
+          signal,
+          onProgress: (done, total, label) => progress.update(opId, done, { total, label }),
+        });
+        progress.end(opId, signal.aborted ? 'cancelled' : 'completed');
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        const cancelled =
+          signal.aborted ||
+          (typeof err === 'object' &&
+            err !== null &&
+            (err as { name?: string }).name === 'AbortError');
+        progress.end(
+          opId,
+          cancelled ? 'cancelled' : 'error',
+          err instanceof Error ? err.message : String(err)
+        );
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: cancelled ? RpcErrorCode.CANCELLED : RpcErrorCode.INTERNAL_ERROR,
+            message: err instanceof Error ? err.message : 'batch failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
       return;
     }
 

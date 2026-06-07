@@ -29,6 +29,8 @@ from directorai_context.models import (
     SceneResult,
     AudioSeparateRequest,
     AudioSeparateResult,
+    ProbeRequest,
+    ProbeResult,
     RecutRenderRequest,
     RecutRenderResult,
     SearchHit,
@@ -243,6 +245,12 @@ def create_app() -> FastAPI:
                 req.media_path,
                 threshold=req.threshold,
                 min_scene_len_sec=req.min_scene_len_sec,
+                detector=req.detector,
+                adaptive_threshold=req.adaptive_threshold,
+                thumbnails=req.thumbnails,
+                thumb_width=req.thumb_width,
+                group=req.group,
+                group_threshold=req.group_threshold,
             )
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
@@ -275,6 +283,16 @@ def create_app() -> FastAPI:
                 use_nvenc=req.use_nvenc,
             )
             return RecutRenderResult(**r)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.post("/probe", response_model=ProbeResult)
+    async def post_probe(req: ProbeRequest) -> ProbeResult:
+        """Đọc width/height/fps/duration/has_audio (cho cut-list FCPXML)."""
+        from directorai_context.modules.recut_pipeline import probe_media
+
+        try:
+            return ProbeResult(**probe_media(req.media_path))
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
 

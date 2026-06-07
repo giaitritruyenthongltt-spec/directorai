@@ -209,4 +209,88 @@ bgm:{ mode:'keep'|'strip'|'replace', source?:'lib'|'aigen', libDir? } } }`
 - FCPXML bridge (CHẾT). Razor UXP (không có). Cày 3000 qua Premiere (không headless).
 - Flip/crop/grain/speed trong Premiere (set-param effect vướng PPro26) → làm ở FFmpeg.
 - Bỏ Premiere hết headless → mất USP "tỉa tót editable tập hot" → giữ Lane A.
-  </content>
+
+## Bổ sung — Quy tắc phân mảnh cảnh + nâng cấp (2026-06-07)
+
+**Quy tắc cắt KHÔNG ngẫu nhiên** — đo độ khác giữa 2 khung hình kề nhau, vượt
+ngưỡng → điểm cắt (đúng nơi người dựng cắt cứng). Có 2 đường:
+
+- **Lane A `recut.detectScenes`** = Premiere native SED (`performSceneEditDetection`),
+  độ-nhạy MẶC ĐỊNH, KHÔNG chỉnh được qua API, KHÔNG preview. Giữ lại vì cho
+  sequence editable để "Tái dựng".
+- **Đường MỚI `recut.detectScenesSidecar`** = PySceneDetect, CHỌN được detector
+  (`content` ngưỡng cố định / `adaptive` rolling-avg — bền chuyển động Nerf) +
+  ngưỡng + min-len + **thumbnail xem-trước** mỗi cảnh (data-URI). Đường này là
+  source-of-truth tinh-chỉnh-được, feed Lane B headless.
+
+**Thực nghiệm trên KIENKH_TAP2.mp4** (baseline Premiere SED = 70 cảnh):
+
+| cấu hình         | #cảnh  | nhận xét                                        |
+| ---------------- | ------ | ----------------------------------------------- |
+| content-27 (cũ)  | 61     | THIẾU ~9 cú cắt (under-cut cảnh nền giống nhau) |
+| content-15       | 82     | over-cut                                        |
+| **adaptive-3.0** | **75** | **sát editor-truth nhất**                       |
+| adaptive-1.5     | 87     | over-cut                                        |
+
+→ Chốt mặc định UI = **adaptive @ 3.0**. ContentDetector-27 cũ bỏ sót ~13% cú cắt
+trên footage action. Live WS verify: detector=adaptive, fps=30, 75 cảnh, 75/75
+thumbnail (~5KB/ảnh). Tests: `tests/test_scene.py` (7/7). Smoke:
+`tools/run-recut-adv.mjs`.
+
+**Còn mở:** gom shot→cảnh-ngữ-nghĩa (Gemini Vision); áp cut-list của đường sidecar
+ngược vào sequence Premiere (hiện 2 đường tách biệt: preview vs editable).
+
+## Bổ sung 2 — Hoàn thiện R1–R4 (2026-06-07)
+
+**R1+R3 — Batch cả thư mục + tiến độ/Hủy.** Vòng lặp batch đặt ở SERVER
+(`recut.batch.folder`, hook `onRecutBatch` ở ws-server): Node fs liệt kê file →
+gọi sidecar `/recut/render` từng tập → `progress.update` mỗi file (forward về
+panel theo socket gốc), Hủy = `progress.cancel`→AbortSignal dừng GIỮA các file,
+skip-existing (chạy tiếp lần sau), continue-on-error. Đây là đòn 3000-tập. UI:
+section "Xử lý cả thư mục" + thanh tiến độ + nút Hủy. Live: 2/2 tập, output ở
+`_recut_out`. Server tests 120→124.
+
+**R2 — Gom shot→cảnh ngữ-nghĩa (CV, 0 API).** `scene.py._group_scenes`: so
+histogram HSV frame-giữa 2 shot KỀ nhau (HISTCMP_CORREL ≥ ngưỡng 0.6 → cùng bối
+cảnh). Trả `SceneResult.groups`. Trả lời trực tiếp "shot vs cảnh". Live KIENKH:
+**75 shot → 27 cảnh** ngữ-nghĩa. UI: toggle "Gom thành cảnh" + danh sách nhóm.
+
+**R4 — Cut-list adaptive → sequence EDITABLE qua FCPXML.** UXP PPro26 KHÔNG có
+razor → đi đường FCPXML: `recut.buildCutListFcpxml` probe (`/probe`) + dò
+adaptive → `scenesToRecutTimeline` (1 nguồn tách N sub-đoạn nối tiếp, mỗi đoạn
+giữ đúng in-point gốc) → `buildFcpxml` ghi `~/.directorai/exports/`. Người dùng
+File ▸ Import = sequence sửa được. Hợp nhất preview(tinh-chỉnh)↔editable. Live
+KIENKH: FCPXML 75 clip (1 asset, 75 asset-clip). Unit test `recut-cutlist.test.ts`
+(4) cho hàm thuần. Tests `test_scene.py` (9).
+
+**Tổng:** server 124/124, python scene+models 15/15, typecheck/build sạch. Smoke:
+`tools/run-batch-folder.mjs`, `tools/run-recut-adv.mjs` (group), `tools/run-cutlist.mjs`.
+
+## Bổ sung 3 — Audit production-ready, fix theo phase (2026-06-07)
+
+**Phase A — Reliability lõi (recut_pipeline + batchFolder):**
+
+- B1 NVENC fail → **fallback libx264** (máy không GPU/đầy session không làm chết cả batch 3000). applied ghi `cpu_fallback` + `enc:`.
+- B12/16 **ghi atomic** `.part.<ext>`→rename (kill giữa chừng không để file `_recut.mp4` hỏng mà skip-existing tưởng xong). Lưu ý: temp PHẢI giữ đuôi gốc (ffmpeg suy muxer; `.part` trơ → "Unable to choose output format" — bắt được khi verify).
+- B2 batch recursive **tên output duy nhất** theo đường-dẫn-tương-đối (`S1__ep01`/`S2__ep01`, hết ghi đè im lặng); skip-existing kiểm size>0.
+- B9 chặn `out == src`.
+- Verify live: batch recursive 2/2, output đúng tên, không còn `.part`, `enc:nvenc`.
+
+**Phase B — Audio/Demucs:**
+
+- B3 stems → `~/.directorai/cache/recut_stems/<hash-abspath>` (KHÔNG bẩn thư mục input; hash abspath né trùng S1/ep01 vs S2/ep01) + **cache** (mtime), tái dùng không chạy lại Demucs.
+- B5 "thay nhạc" thiếu/sai file → **strip an toàn** (không im lặng giữ BGM gốc); UI thêm ô đường-dẫn-nhạc-mới khi chọn replace.
+- B6 gộp 2 nút "Tách" trùng thành 1.
+- Verify live: stems vào cache (không vào input), cache-hit `device=cache cached=true`, strip OK.
+
+**Phase C — Detection bền:**
+
+- B4 video 0-cú-cắt → **fallback 1 cảnh** cả video (preview/cut-list không vỡ). Verify: 1-shot→1 cảnh; KIENKH vẫn 75.
+- B8 Premiere SED: **poll số trackitem ổn định** thay đợi cứng 2.5s (video dài không bị đếm thiếu). (cần Premiere panel để verify live.)
+
+**Phase D — UX/chất lượng:**
+
+- B17 **bitrate theo độ phân giải** (480p 3M → 4K 40M; thay 8M cứng làm 4K vỡ). Verify: 360p ra ~3.6M.
+- B7 clear kết quả cũ (FCPXML) khi phân mảnh lại; thông báo "thư mục rỗng"; prefix lỗi theo khu vực ([Phân mảnh]/[Hàng loạt]/[FCPXML]).
+
+**Còn để ngỏ (không chặn production):** hủy giữa-render (chỉ hủy giữa-file); dọn cache stems tự động (hiện cache ở thư mục biết được, xoá tay); reorder-cảnh thông minh (để AI planner).

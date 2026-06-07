@@ -165,6 +165,11 @@ async function main(): Promise<void> {
       compositeTools.current
         ? compositeTools.current.maybeHandle(method, params)
         : Promise.resolve(null),
+    // R1+R3 — batch cả thư mục (cần signal + progress) qua hook riêng.
+    onRecutBatch: (params, ctx) =>
+      compositeTools.current
+        ? compositeTools.current.recutBatchFolder(params, ctx)
+        : Promise.reject(new Error('composite tools chưa sẵn sàng')),
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 
