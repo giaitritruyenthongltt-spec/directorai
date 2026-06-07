@@ -140,7 +140,7 @@ def analyze_audio(media_path: str, *, sample_rate: int = 22050) -> AudioAnalysis
         else:
             tempo_val = float(tempo)
         beats_list = [float(b) for b in beats]
-    except Exception:  # noqa: BLE001
+    except Exception:
         tempo_val = None
         beats_list = []
 

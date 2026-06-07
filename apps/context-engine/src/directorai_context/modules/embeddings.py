@@ -126,7 +126,7 @@ def embed_ingest_result(result: IngestResult) -> int:
             )
 
     if result.scenes:
-        for i, sc in enumerate(result.scenes.scenes):
+        for sc in result.scenes.scenes:
             ids.append(f"{media_id}:scene:{sc.index}")
             docs.append(f"scene {sc.index} from {sc.start:.2f}s to {sc.end:.2f}s")
             metas.append(

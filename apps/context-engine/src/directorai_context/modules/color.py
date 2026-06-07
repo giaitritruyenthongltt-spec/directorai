@@ -62,9 +62,9 @@ def _kmeans_dominants(image_bgr: np.ndarray, k: int = 5) -> list[DominantColor]:
         b, g, r = centers[i]
         dominants.append(
             DominantColor(
-                r=int(round(r)),
-                g=int(round(g)),
-                b=int(round(b)),
+                r=round(r),
+                g=round(g),
+                b=round(b),
                 fraction=float(counts[i] / total) if total > 0 else 0.0,
             )
         )

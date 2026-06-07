@@ -143,7 +143,7 @@ def _framing_score(gray: np.ndarray) -> float:
 
 
 def score_frame(bgr: np.ndarray) -> QualityScore:
-    """Score a single frame. `bgr` is OpenCV's native H×W×3 uint8."""
+    """Score a single frame. `bgr` is OpenCV's native H x W x 3 uint8."""
     if bgr.ndim != 3 or bgr.shape[2] != 3:
         raise ValueError("score_frame expects a 3-channel BGR image")
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)

@@ -7,7 +7,7 @@ This DB is for metadata, scores, plans, and audit logs.
 from __future__ import annotations
 
 import datetime as dt
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import (
     JSON,
@@ -24,7 +24,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 class Base(DeclarativeBase):
     """Common base — gives us .metadata for create_all + Alembic autogenerate."""
 
-    type_annotation_map = {dict[str, Any]: JSON}
+    type_annotation_map: ClassVar = {dict[str, Any]: JSON}
 
 
 def _now() -> dt.datetime:

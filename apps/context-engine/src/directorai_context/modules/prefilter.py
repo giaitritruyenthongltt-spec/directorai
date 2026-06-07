@@ -48,7 +48,7 @@ def prefilter_clips(
                     "reason": reason,
                 }
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("prefilter_clip_failed", media=path, error=str(e))
             # Lỗi đọc → coi là nghi để Vision xem (an toàn).
             out.append(
@@ -107,7 +107,7 @@ def filter_bad(
                 keep.append(item)
             else:
                 review.append(item)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("filter_bad_vision_failed", media=path, error=str(e))
             review.append({"clip_path": path, "reason": f"Vision lỗi: {e}", "by": "error"})
 

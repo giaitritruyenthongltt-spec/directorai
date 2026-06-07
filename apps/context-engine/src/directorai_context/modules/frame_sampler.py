@@ -29,7 +29,7 @@ class SampledFrame:
     time_sec: float  # timestamp in the source
     width: int
     height: int
-    image: np.ndarray  # H × W × 3 uint8, BGR
+    image: np.ndarray  # H x W x 3 uint8, BGR
 
     def to_jpeg(self, quality: int = 85) -> bytes:
         """Encode the frame as JPEG bytes. Useful for sending to vision APIs."""
@@ -125,7 +125,7 @@ def _resize_max_dim(image: np.ndarray, max_dim: int) -> np.ndarray:
     if longest <= max_dim:
         return image
     scale = max_dim / longest
-    new_size = (int(round(w * scale)), int(round(h * scale)))
+    new_size = (round(w * scale), round(h * scale))
     return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
 
 

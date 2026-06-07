@@ -43,7 +43,7 @@ def analyze_clip_path(media_path: str, sample_count: int = 5) -> dict[str, objec
         if total_frames <= 0:
             raise RuntimeError(f"No frames in media: {media_path}")
         n = max(1, min(sample_count, total_frames))
-        indices = [int(round(i * (total_frames - 1) / max(1, n - 1))) for i in range(n)]
+        indices = [round(i * (total_frames - 1) / max(1, n - 1)) for i in range(n)]
         frames = []
         for idx in indices:
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)

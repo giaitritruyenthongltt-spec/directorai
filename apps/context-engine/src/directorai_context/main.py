@@ -11,10 +11,9 @@ from directorai_context import __version__
 from directorai_context.config import get_settings
 from directorai_context.jobs import JobNotFound, get_queue
 from directorai_context.logger import log
-from directorai_context.modules.hardware import probe as probe_hardware
-from directorai_context.storage import init_db
-from directorai_context.storage import repositories as store
 from directorai_context.models import (
+    AudioSeparateRequest,
+    AudioSeparateResult,
     BeatRequest,
     BeatResult,
     ClusterRequest,
@@ -25,15 +24,13 @@ from directorai_context.models import (
     FilterBadRequest,
     IngestRequest,
     IngestResult,
-    SceneRequest,
-    SceneResult,
-    AudioSeparateRequest,
-    AudioSeparateResult,
     ProbeRequest,
     ProbeResult,
+    RecutCancelRequest,
     RecutRenderRequest,
     RecutRenderResult,
-    RecutCancelRequest,
+    SceneRequest,
+    SceneResult,
     SearchHit,
     SearchRequest,
     SearchResult,
@@ -43,6 +40,9 @@ from directorai_context.models import (
     VisionRequest,
     VisionResult,
 )
+from directorai_context.modules.hardware import probe as probe_hardware
+from directorai_context.storage import init_db
+from directorai_context.storage import repositories as store
 
 
 def create_app() -> FastAPI:
@@ -187,7 +187,7 @@ def create_app() -> FastAPI:
 
                 msg_id = msg.get("id")
                 method = msg.get("method", "")
-                params = msg.get("params") or {}
+                msg.get("params") or {}
 
                 try:
                     if method == "ping":
@@ -212,7 +212,7 @@ def create_app() -> FastAPI:
                         )
                         continue
                     await ws.send_text(json.dumps({"id": msg_id, "result": result}))
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     log.error("ws_handler_error", method=method, error=str(e))
                     await ws.send_text(
                         json.dumps(
@@ -233,7 +233,7 @@ def create_app() -> FastAPI:
             return transcribe(req.media_path, language=req.language)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("transcribe_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -333,7 +333,7 @@ def create_app() -> FastAPI:
             return understand_clip(req.media_path, frames=frames)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("understand_clip_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -369,7 +369,7 @@ def create_app() -> FastAPI:
         for path in vision_paths:
             try:
                 understandings.append(understand_clip(path, frames=frames))
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.error("video_map_clip_failed", media=path, error=str(e))
                 errors.append({"clip_path": path, "error": str(e)})
 
@@ -381,7 +381,7 @@ def create_app() -> FastAPI:
 
         try:
             video_map = build_video_map(understandings, goal=req.goal)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("video_map_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -429,7 +429,7 @@ def create_app() -> FastAPI:
         for path in vision_paths:
             try:
                 understandings.append(understand_clip(path, frames=frames))
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.error("edit_plan_clip_failed", media=path, error=str(e))
                 errors.append({"clip_path": path, "error": str(e)})
 
@@ -448,7 +448,7 @@ def create_app() -> FastAPI:
                 pacing_profile=req.pacing_profile,
                 structure=req.structure,
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("build_edit_plan_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -470,7 +470,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="clip_paths rỗng")
         try:
             return cluster_clips(req.clip_paths, max_distance=req.max_distance)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("cluster_clips_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -490,7 +490,7 @@ def create_app() -> FastAPI:
             frames = None
         try:
             return filter_bad(req.clip_paths, threshold=req.threshold, frames=frames)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("filter_bad_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -512,7 +512,7 @@ def create_app() -> FastAPI:
             return r.to_dict()
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("scene_classify_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -529,7 +529,7 @@ def create_app() -> FastAPI:
             return analyze_clip_path(req.media_path, sample_count=sample_count)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("color_analyze_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -546,7 +546,7 @@ def create_app() -> FastAPI:
             return detect_silences_in_file(req.media_path)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("silences_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -570,7 +570,7 @@ def create_app() -> FastAPI:
                 disable_if_silent_ratio=req.disable_if_silent_ratio,
                 min_kept_sec=req.min_kept_sec,
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("dead_air_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -599,7 +599,7 @@ def create_app() -> FastAPI:
         try:
             count = embed_ingest_result(req.ingest)
             return EmbedResult(media_path=req.ingest.media_path, indexed_count=count)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("embed_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -624,7 +624,7 @@ def create_app() -> FastAPI:
                     for h in raw
                 ],
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.error("search_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 

@@ -73,7 +73,7 @@ def ingest(req: IngestRequest, use_cache: bool = True) -> IngestResult:
 
         indexed = embed_ingest_result(result)
         log.info("ingest_indexed", key=key, indexed=indexed)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         # Indexing is best-effort — failure shouldn't block ingest result.
         log.warn("ingest_index_failed", key=key, error=str(e))
 

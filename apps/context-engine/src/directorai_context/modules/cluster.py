@@ -4,7 +4,7 @@ Nhiều clip trong 1 buổi quay rất giống nhau (cùng góc, cùng cảnh). 
 gọi Vision (Gemini) cho từng clip, ta GOM clip gần giống thành cụm rồi chỉ
 HIỂU 1 đại diện, suy ra cả cụm. Giảm mạnh số lần gọi Gemini.
 
-Dùng average-hash (aHash) 8×8 = 64-bit trên 1 khung giữa clip; gom theo
+Dùng average-hash (aHash) 8x8 = 64-bit trên 1 khung giữa clip; gom theo
 khoảng cách Hamming.
 """
 
@@ -14,7 +14,6 @@ import numpy as np
 
 from directorai_context.logger import log
 from directorai_context.modules import frame_sampler as fs
-
 
 # Ngưỡng độ lệch chuẩn (trên thang 0-255) coi 1 khung là "phẳng" (đen/trắng/
 # mờ đều) → KHÔNG đáng tin để gom cụm bằng aHash.
@@ -50,7 +49,7 @@ def clip_hash(media_path: str) -> int | None:
         if not frames:
             return None
         return _ahash(frames[0].image)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.error("clip_hash_failed", media=media_path, error=str(e))
         return None
 

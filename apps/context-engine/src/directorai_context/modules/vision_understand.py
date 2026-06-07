@@ -14,6 +14,7 @@ cho rẻ + nhanh.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 from pathlib import Path
@@ -169,12 +170,10 @@ def understand_clip(
     result["frames_used"] = len(jpegs)
 
     if use_cache:
-        try:
+        with contextlib.suppress(OSError):  # ghi cache lỗi không chặn kết quả
             _cache_path(_cache_key(path, n, model)).write_text(
                 json.dumps(result, ensure_ascii=False), encoding="utf-8"
             )
-        except OSError:
-            pass  # ghi cache lỗi không chặn kết quả
 
     result["_cached"] = False
     log.info(
