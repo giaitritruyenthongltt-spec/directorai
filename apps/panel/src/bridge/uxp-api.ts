@@ -230,8 +230,40 @@ export async function introspectPremiereApi(): Promise<Record<string, unknown>> 
     'Markers',
     'Marker',
     'MarkerType',
+    // ADJ-LAYER spike — tìm API tạo/chèn adjustment layer.
+    'SequenceEditor',
+    'ProjectUtils',
+    'SequenceUtils',
+    'ProjectItem',
+    'ClipProjectItem',
+    'FolderItem',
+    'Project',
   ]) {
     dumpStatic(n);
+  }
+  // ADJ-LAYER — quét MỌI member toàn module có chữ 'adjust' (bất kể hoa thường).
+  try {
+    const all = listMembers(ppro);
+    out.adjustLikeModule = all.filter((m) => /adjust/i.test(String(m)));
+    // Dò sâu instance SequenceEditor nếu tạo được từ sequence đang mở.
+    const proj2 = await ppro.Project?.getActiveProject?.();
+    const seq2 = await proj2?.getActiveSequence?.();
+    const SeqEd = (ppro as Record<string, unknown>).SequenceEditor as
+      | { getEditor?: (s: unknown) => unknown }
+      | (new (s: unknown) => unknown)
+      | undefined;
+    if (SeqEd && seq2) {
+      let inst: unknown;
+      try {
+        const getEd = (SeqEd as { getEditor?: (s: unknown) => unknown }).getEditor;
+        inst = getEd ? getEd.call(SeqEd, seq2) : new (SeqEd as new (s: unknown) => unknown)(seq2);
+      } catch (e) {
+        out.seqEditorCtorErr = e instanceof Error ? e.message : String(e);
+      }
+      if (inst) out.seqEditorInstance = listMembers(inst);
+    }
+  } catch (e) {
+    out.adjustProbeErr = e instanceof Error ? e.message : String(e);
   }
 
   // C11 — Markers PPro26: KHÔNG ở seq.markers. Dò pattern truy cập đúng.
