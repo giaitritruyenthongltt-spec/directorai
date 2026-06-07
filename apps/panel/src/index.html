@@ -31,14 +31,6 @@
     /* Phóng to/thu nhỏ TOÀN panel (nút A−/A+). zoom scale cả px token + layout. */
     #root { zoom: var(--ui-scale, 1); }
   </style>
-  <script>
-    /* Áp cỡ giao diện đã lưu NGAY (trước khi React mount) để tránh nháy. */
-    try {
-      var s = Number(localStorage.getItem('directorai.uiScale'));
-      if (s >= 0.8 && s <= 1.6)
-        document.documentElement.style.setProperty('--ui-scale', String(s));
-    } catch (e) {}
-  </script>
 </head>
 <body>
   <div id="root"></div>
