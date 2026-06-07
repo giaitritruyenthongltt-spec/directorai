@@ -10,6 +10,7 @@ import type {
   ExportInput,
   KeyframeInput,
   ColorParamsInput,
+  ColorReadResult,
   AudioGainInput,
   AudioFadeInput,
   TextOverlayInput,
@@ -123,6 +124,9 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   }
   setColorParams(input: ColorParamsInput): Promise<void> {
     return this.send<void>('color.setParams', input);
+  }
+  getColorParams(clipId: string): Promise<ColorReadResult> {
+    return this.send<ColorReadResult>('color.getParams', { clipId });
   }
 
   // Audio

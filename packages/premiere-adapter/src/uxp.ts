@@ -60,6 +60,7 @@ import type {
   ExportInput,
   KeyframeInput,
   ColorParamsInput,
+  ColorReadResult,
   AudioGainInput,
   AudioFadeInput,
   TextOverlayInput,
@@ -245,7 +246,22 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
       const trackId = `${trackKind}-${trackIndex}`;
       for (const it of items) {
         if (!it) continue;
-        const nid = (it as { nodeId?: unknown }).nodeId;
+        // ĐỐI XỨNG với resolveTrackItemId (translate): thử nodeId PROP rồi
+        // getNodeId() FUNC. Trước đây findTrackItem chỉ thử prop → khi clip thật
+        // chỉ có getNodeId() func, listClips dùng nodeId thật còn findTrackItem
+        // dựng synthetic → KHÔNG khớp → "clip not found" khi ghi (vd sửa màu).
+        let nid = (it as { nodeId?: unknown }).nodeId;
+        if (!(typeof nid === 'string' && nid.length > 0)) {
+          const getFn = (it as { getNodeId?: () => unknown }).getNodeId;
+          if (typeof getFn === 'function') {
+            try {
+              const v = getFn.call(it);
+              if (typeof v === 'string' && v.length > 0) nid = v;
+            } catch {
+              // bỏ qua
+            }
+          }
+        }
         if (typeof nid === 'string' && nid.length > 0) {
           cache.set(nid, { item: it, track, seq });
           if (nid === clipId) {
@@ -893,18 +909,25 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
     };
     const pc = (await lumetri.getParamCount?.()) ?? 0;
     const actions: PProAction[] = [];
+    const setKeys = new Set<string>(); // chỉ set LẦN ĐẦU mỗi slider (Lumetri có
+    // nhiều param trùng tên: "Saturation"/"Contrast" ở cả Basic + Creative/HSL —
+    // Basic Correction đứng TRƯỚC nên first-match = đúng slider cơ bản).
     for (let i = 0; i < pc; i++) {
       const param = (await lumetri.getParam?.(i)) as {
+        displayName?: string;
         getDisplayName?: () => Promise<string>;
         createKeyframe?: (v: number) => Promise<unknown> | unknown;
         createSetValueAction?: (kf: unknown) => PProAction;
       } | null;
       if (!param?.createSetValueAction || !param.createKeyframe) continue;
-      const dn = ((await param.getDisplayName?.()) ?? '').toLowerCase();
-      // Khớp tên: "exposure", "color temperature"→temperature, …
+      // PPro26: tên param ở getDisplayName() HOẶC displayName (property) — trước
+      // đây chỉ đọc method → rỗng → KHÔNG khớp slider nào → không ghi giá trị.
+      const dn = ((await param.getDisplayName?.()) ?? param.displayName ?? '').toLowerCase();
+      // Khớp CHÍNH XÁC (tránh "hue saturation curves" dính "saturation").
       const key = Object.keys(wanted).find(
-        (k) => wanted[k] !== undefined && (dn === k || dn.includes(k))
+        (k) => wanted[k] !== undefined && dn === k && !setKeys.has(k)
       );
+      if (key) setKeys.add(key);
       if (!key) continue;
       try {
         const kf = await param.createKeyframe(wanted[key] as number);
@@ -919,6 +942,63 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
         for (const a of actions) compound.addAction(a);
       });
     }
+  }
+
+  /**
+   * Đọc-lại param Lumetri của clip (verify áp màu chính xác). API đọc GIÁ TRỊ
+   * param chưa cố định trên PPro26 → thử lần lượt nhiều getter, đồng thời trả
+   * rawParamNames để chẩn đoán. Không ghi gì.
+   */
+  async getColorParams(clipId: string): Promise<ColorReadResult> {
+    const { item } = await this.findTrackItem(clipId);
+    const chain = (await item.getComponentChain()) as {
+      getComponentCount?: () => Promise<number>;
+      getComponentAtIndex?: (i: number) => Promise<unknown>;
+    };
+    const count = (await chain.getComponentCount?.()) ?? 0;
+    interface LumetriComp {
+      getParamCount?: () => Promise<number>;
+      getParam?: (i: number) => Promise<unknown>;
+    }
+    let lumetri: LumetriComp | null = null;
+    for (let i = 0; i < count; i++) {
+      const c = (await chain.getComponentAtIndex?.(i)) as
+        | (LumetriComp & { getMatchName?: () => Promise<string> })
+        | null;
+      const mn = (await c?.getMatchName?.()) ?? '';
+      if (mn.toLowerCase().includes('lumetri')) {
+        lumetri = c;
+        break;
+      }
+    }
+    if (!lumetri) return { hasLumetri: false, params: {} };
+    const lc: LumetriComp = lumetri;
+
+    const params: Record<string, number> = {};
+    const rawParamNames: string[] = [];
+    const pc = (await lc.getParamCount?.()) ?? 0;
+    for (let i = 0; i < pc; i++) {
+      // MIRROR setColorParams: param có displayName (prop) + getStartValue (đọc
+      // giá trị hiện tại). kfNumber() bóc số khỏi keyframe lồng — dùng chung
+      // với đường GHI nên đảm bảo đọc-lại đúng đơn vị đã ghi.
+      const param = (await lc.getParam?.(i)) as ParamAM | null;
+      if (!param) continue;
+      const dnFn = (param as { getDisplayName?: () => Promise<string> }).getDisplayName;
+      const dn = (param.displayName ?? (dnFn ? await dnFn.call(param) : '') ?? '').toString();
+      if (dn) rawParamNames.push(dn);
+      if (typeof param.getStartValue !== 'function') continue;
+      try {
+        const raw = await param.getStartValue();
+        const val = kfNumber(raw);
+        const k = dn.toLowerCase();
+        // Chỉ ghi LẦN ĐẦU: Lumetri có nhiều param trùng tên, Basic Correction
+        // đứng trước → giữ giá trị slider cơ bản (khớp với setColorParams).
+        if (!Number.isNaN(val) && k && !(k in params)) params[k] = val;
+      } catch {
+        // param không đọc được giá trị → bỏ qua
+      }
+    }
+    return { hasLumetri: true, params, rawParamNames };
   }
 
   // ─── Audio ────────────────────────────────────────────────────────────────

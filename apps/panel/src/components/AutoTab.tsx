@@ -17,10 +17,21 @@ import { wsClient } from '../bridge/ws-client.js';
 import { withTimeout, planTimeoutMs } from '../bridge/with-timeout.js';
 import { useSession, type SessionPlan } from '../state/session.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
+import { ColorLookPicker, type ColorLookValue, LOOKS } from './ColorLookPicker.js';
 import { HelpButton } from './HelpButton.js';
 import { Icon } from './Icon.js';
 import { ClickBox } from './ui/primitives.js';
 import './AutoTab.css';
+
+interface ColorApplyResult {
+  dryRun: boolean;
+  look: string;
+  intensity: number;
+  total: number;
+  applied: number;
+  failed: number;
+  details: { name?: string; look: string; params: Record<string, number>; ok: boolean }[];
+}
 
 const MODULES = MODULE_REGISTRY.map(moduleInfo);
 const DEFAULT_TICKED = MODULES.filter((m) => m.defaultEnabled).map((m) => m.id);
@@ -84,6 +95,46 @@ export function AutoTab(): React.ReactElement {
   const [applied, setApplied] = useState<ApplyResponse | null>(null);
   // AT6 — kế hoạch đã XEM TRƯỚC (đầy đủ steps) để GHI dùng lại đúng nó.
   const [previewPlan, setPreviewPlan] = useState<SessionPlan | null>(null);
+
+  // P2 — Sửa màu (module color_grade): look + cường độ + auto, nhớ qua reload.
+  const [colorCfg, setColorCfg] = useState<ColorLookValue>(() => {
+    try {
+      const raw = localStorage.getItem('directorai_color');
+      if (raw) return JSON.parse(raw) as ColorLookValue;
+    } catch {
+      // bỏ qua
+    }
+    return { look: 'teal_orange', intensity: 100, auto: false };
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('directorai_color', JSON.stringify(colorCfg));
+    } catch {
+      // bỏ qua
+    }
+  }, [colorCfg]);
+  const [colorBusy, setColorBusy] = useState<'preview' | 'write' | null>(null);
+  const [colorRes, setColorRes] = useState<ColorApplyResult | null>(null);
+  const [colorWritten, setColorWritten] = useState<boolean>(false);
+
+  const runColor = async (dryRun: boolean): Promise<void> => {
+    setError(null);
+    setColorBusy(dryRun ? 'preview' : 'write');
+    try {
+      const r = await wsClient.call<ColorApplyResult>('color.applyLook', {
+        look: colorCfg.auto ? 'auto' : colorCfg.look,
+        intensity: colorCfg.intensity,
+        dryRun,
+        verify: !dryRun,
+      });
+      setColorRes(r);
+      setColorWritten(!dryRun);
+    } catch (e) {
+      setError(`[Màu] ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setColorBusy(null);
+    }
+  };
 
   // AT1 — CHỈ clip VIDEO (loại nhạc/audio để planner không phí cost + không lẫn
   // nhạc vào kế hoạch) + KHỬ TRÙNG.
@@ -300,6 +351,90 @@ export function AutoTab(): React.ReactElement {
           onChange={(e) => setCustomGoal(e.target.value)}
         />
       </section>
+
+      {ticked.has('color_grade') && (
+        <section className="auto-section">
+          <div className="auto-section-title">
+            <Icon name="sparkles" size={15} /> Sửa màu — chọn mẫu &amp; cường độ
+            <HelpButton
+              title="Sửa màu từng cảnh"
+              lines={[
+                'Chọn mẫu màu (Trong sáng/Điện ảnh/Ấm/Lạnh…) + cường độ, hoặc bật "Tự động theo cảnh".',
+                'Xem trước = đọc thông số sẽ ghi (không đổi gì). Duyệt & Ghi = áp Lumetri thật.',
+                'Hoàn tác bằng Ctrl-Z trong Premiere.',
+              ]}
+            />
+          </div>
+          <ColorLookPicker
+            value={colorCfg}
+            onChange={(v) => {
+              setColorCfg(v);
+              setColorRes(null);
+              setColorWritten(false);
+            }}
+          />
+          <div className="auto-actions">
+            <ClickBox
+              className="auto-btn preview"
+              disabled={colorBusy !== null}
+              onClick={() => void runColor(true)}
+            >
+              {colorBusy === 'preview' ? (
+                <>
+                  <Icon name="refresh" size={15} className="spin" /> Đang xem trước màu…
+                </>
+              ) : (
+                <>
+                  <Icon name="eye" size={15} /> Xem trước màu
+                </>
+              )}
+            </ClickBox>
+            <ClickBox
+              className="auto-btn apply"
+              disabled={colorBusy !== null || !colorRes || colorWritten || s.conn !== 'connected'}
+              title={
+                s.conn !== 'connected'
+                  ? 'Chưa kết nối Premiere'
+                  : !colorRes
+                    ? 'Hãy "Xem trước màu" trước'
+                    : 'Ghi Lumetri thật (Ctrl-Z để hoàn tác)'
+              }
+              onClick={() => {
+                if (window.confirm('Ghi màu Lumetri lên các clip? (Ctrl-Z để hoàn tác)')) {
+                  void runColor(false);
+                }
+              }}
+            >
+              {colorBusy === 'write' ? (
+                <>
+                  <Icon name="refresh" size={15} className="spin" /> Đang ghi màu…
+                </>
+              ) : (
+                <>
+                  <Icon name="check" size={15} /> Duyệt &amp; Ghi màu
+                </>
+              )}
+            </ClickBox>
+          </div>
+          {colorRes && (
+            <div className="auto-result">
+              <div className="auto-result-head">
+                {colorRes.dryRun ? 'Xem trước màu (chưa ghi)' : 'Đã ghi màu'} —{' '}
+                {colorCfg.auto
+                  ? 'Tự động theo cảnh'
+                  : (LOOKS.find((l) => l.id === colorCfg.look)?.label ?? colorCfg.look)}{' '}
+                · {colorCfg.intensity}% · {colorRes.total} clip
+                {!colorRes.dryRun && ` · ghi ${colorRes.applied}, lỗi ${colorRes.failed}`}
+              </div>
+              {colorRes.details?.[0] && (
+                <div className="auto-step-detail">
+                  Ví dụ {colorRes.details[0].name}: {JSON.stringify(colorRes.details[0].params)}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       {error && (
         <div className="auto-error">

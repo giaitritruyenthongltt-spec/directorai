@@ -22,6 +22,7 @@ import type {
   ExportInput,
   KeyframeInput,
   ColorParamsInput,
+  ColorReadResult,
   AudioGainInput,
   AudioFadeInput,
   TextOverlayInput,
@@ -425,6 +426,19 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     }
     const idx = clip.effects.indexOf(lumetri);
     clip.effects[idx] = { ...lumetri, params: newParams };
+  }
+
+  async getColorParams(clipId: string): Promise<ColorReadResult> {
+    const { clip } = this.findClip(clipId);
+    const lumetri = clip.effects.find(
+      (e) => e.matchName === 'AE.ADBE Lumetri' || e.matchName.toLowerCase().includes('lumetri')
+    );
+    if (!lumetri) return { hasLumetri: false, params: {} };
+    const params: Record<string, number> = {};
+    for (const p of lumetri.params) {
+      if (typeof p.value === 'number') params[p.name.toLowerCase()] = p.value;
+    }
+    return { hasLumetri: true, params, rawParamNames: lumetri.params.map((p) => p.name) };
   }
 
   async setAudioGain(input: AudioGainInput): Promise<void> {

@@ -18,6 +18,7 @@ import type {
   AudioFadeInput,
   AudioGainInput,
   ColorParamsInput,
+  ColorReadResult,
   CutClipInput,
   ExportInput,
   ImportFileInput,
@@ -28,7 +29,7 @@ import type {
   TransitionInput,
   TrimClipInput,
 } from '@directorai/premiere-adapter';
-import type { Clip, Effect, Marker, Project, Sequence, Track } from '@directorai/core';
+import type { Clip, Effect, Marker, Project, Seconds, Sequence, Track } from '@directorai/core';
 
 export class MockDaVinciAdapter implements INLEAdapter {
   readonly kind = 'davinci' as const;
@@ -64,6 +65,15 @@ export class MockDaVinciAdapter implements INLEAdapter {
   moveClip(input: MoveClipInput): Promise<Clip> {
     return this.inner.moveClip(input);
   }
+  setClipDisabled(clipId: string, disabled: boolean): Promise<void> {
+    return this.inner.setClipDisabled(clipId, disabled);
+  }
+  renameClip(clipId: string, newName: string): Promise<void> {
+    return this.inner.renameClip(clipId, newName);
+  }
+  setClipInOut(clipId: string, inSec: Seconds, outSec: Seconds): Promise<void> {
+    return this.inner.setClipInOut(clipId, inSec, outSec);
+  }
   deleteClip(clipId: string): Promise<void> {
     return this.inner.deleteClip(clipId);
   }
@@ -96,6 +106,9 @@ export class MockDaVinciAdapter implements INLEAdapter {
   }
   setColorParams(input: ColorParamsInput): Promise<void> {
     return this.inner.setColorParams(input);
+  }
+  getColorParams(clipId: string): Promise<ColorReadResult> {
+    return this.inner.getColorParams(clipId);
   }
   setAudioGain(input: AudioGainInput): Promise<void> {
     return this.inner.setAudioGain(input);

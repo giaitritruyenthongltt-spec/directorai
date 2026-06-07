@@ -20,6 +20,7 @@ import type {
   AudioFadeInput,
   AudioGainInput,
   ColorParamsInput,
+  ColorReadResult,
   CutClipInput,
   ExportInput,
   ImportFileInput,
@@ -91,6 +92,15 @@ export class DaVinciAdapter implements INLEAdapter {
   moveClip(input: MoveClipInput): Promise<Clip> {
     return this.invoke('timeline.moveClip', input);
   }
+  setClipDisabled(clipId: string, disabled: boolean): Promise<void> {
+    return this.invoke('timeline.setClipDisabled', { clipId, disabled });
+  }
+  renameClip(clipId: string, newName: string): Promise<void> {
+    return this.invoke('timeline.renameClip', { clipId, newName });
+  }
+  setClipInOut(clipId: string, inSec: number, outSec: number): Promise<void> {
+    return this.invoke('timeline.setClipInOut', { clipId, inSec, outSec });
+  }
   deleteClip(clipId: string): Promise<void> {
     return this.invoke('timeline.deleteClip', { clipId });
   }
@@ -133,6 +143,9 @@ export class DaVinciAdapter implements INLEAdapter {
   }
   setColorParams(input: ColorParamsInput): Promise<void> {
     return this.invoke('color.setParams', input);
+  }
+  getColorParams(clipId: string): Promise<ColorReadResult> {
+    return this.invoke('color.getParams', { clipId }) as Promise<ColorReadResult>;
   }
   setAudioGain(input: AudioGainInput): Promise<void> {
     return this.invoke('audio.setGain', input);

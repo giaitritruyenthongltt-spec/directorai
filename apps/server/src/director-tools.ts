@@ -19,7 +19,13 @@ import path from 'node:path';
 import type { Logger } from '@directorai/shared';
 import type { IPremiereAdapter } from '@directorai/premiere-adapter';
 import type { Clip, Seconds } from '@directorai/core';
-import { EFFECT_PRESETS, pickColorPresetForMood } from '@directorai/effect-library';
+import {
+  EFFECT_PRESETS,
+  pickColorPresetForMood,
+  getScaledLook,
+  getColorLook,
+  COLOR_LOOKS,
+} from '@directorai/effect-library';
 import { listModuleInfos } from '@directorai/modules';
 import { buildFcpxml, type FcpTimeline } from '@directorai/fcpxml';
 import { resolvePlan, type PlanPreview } from './plan-resolver.js';
@@ -315,6 +321,16 @@ export class CompositeTools {
         );
       case 'timeline.cutOnBeats':
         return this.cutOnBeats(params as { sequenceId: string; beats: number[]; clipId?: string });
+      case 'color.applyLook':
+        return this.applyLook(
+          params as {
+            sequenceId?: string;
+            look?: string;
+            intensity?: number;
+            dryRun?: boolean;
+            verify?: boolean;
+          }
+        );
       case 'color.applyLookByScene':
         return this.applyLookByScene(
           params as { sequenceId?: string; defaultPreset?: string; sampleCount?: number }
@@ -386,6 +402,7 @@ export class CompositeTools {
       'safe.previewPlan',
       'safe.applyPlan',
       'timeline.cutOnBeats',
+      'color.applyLook',
       'color.applyLookByScene',
       'recut.applyDedup',
       'recut.batch.process',
@@ -2137,5 +2154,134 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       'color.applyLookByScene complete'
     );
     return { graded, skipped, details };
+  }
+
+  /**
+   * Sửa màu từng cảnh (nâng cấp) — người dùng CHỌN look + cường độ. look='auto'
+   * → phân tích CV mỗi cảnh tự chọn look hợp mood. dryRun → preview (cảnh→9
+   * thông số sẽ ghi), không ghi. Ghi → setColorParams (Lumetri thật) rồi
+   * getColorParams đọc-lại để VERIFY chính xác. Undo = Ctrl-Z trong Premiere.
+   */
+  async applyLook(params: {
+    sequenceId?: string;
+    look?: string; // key trong COLOR_LOOKS, hoặc 'auto'
+    intensity?: number; // 0..100, mặc định 100
+    dryRun?: boolean;
+    verify?: boolean; // đọc-lại sau ghi (mặc định true)
+  }): Promise<{
+    dryRun: boolean;
+    look: string;
+    intensity: number;
+    total: number;
+    applied: number;
+    failed: number;
+    details: {
+      clipId: string;
+      name?: string;
+      look: string;
+      mood?: string;
+      params: Record<string, number>;
+      ok: boolean;
+      verified?: boolean;
+      reason?: string;
+    }[];
+  }> {
+    const seqId = params.sequenceId ?? (await this.deps.adapter.getActiveSequence())?.id;
+    if (!seqId) throw new Error('No active sequence');
+    const lookId = params.look ?? 'teal_orange';
+    const intensity = Math.min(100, Math.max(0, params.intensity ?? 100));
+    const dryRun = params.dryRun !== false ? params.dryRun === true : false;
+    const verify = params.verify !== false;
+    const isAuto = lookId === 'auto';
+    if (!isAuto && !getColorLook(lookId)) {
+      throw new Error(
+        `Look không hợp lệ: "${lookId}". Hợp lệ: ${COLOR_LOOKS.map((l) => l.id).join(', ')}`
+      );
+    }
+    const clips = (await this.deps.adapter.listClips(seqId)).filter((c) => c.kind === 'video');
+    let applied = 0;
+    let failed = 0;
+    const details: {
+      clipId: string;
+      name?: string;
+      look: string;
+      mood?: string;
+      params: Record<string, number>;
+      ok: boolean;
+      verified?: boolean;
+      reason?: string;
+    }[] = [];
+
+    for (const clip of clips) {
+      const path = clip.source?.path;
+      let chosen = lookId;
+      let mood: string | undefined;
+      if (isAuto && path) {
+        try {
+          const a = await this.analyzeColor({ clipPath: path });
+          mood = a.mood;
+          chosen = pickColorPresetForMood(mood as 'warm' | 'cool' | 'neutral' | 'dark' | 'bright');
+        } catch {
+          chosen = 'teal_orange';
+        }
+      } else if (isAuto && !path) {
+        chosen = 'teal_orange';
+      }
+      const recipe = getScaledLook(chosen, intensity) ?? {};
+      const pmap = recipe as Record<string, number>;
+      if (dryRun) {
+        details.push({
+          clipId: clip.id,
+          name: clip.name,
+          look: chosen,
+          mood,
+          params: pmap,
+          ok: true,
+        });
+        continue;
+      }
+      try {
+        await this.deps.adapter.setColorParams({ clipId: clip.id, ...recipe });
+        let verified: boolean | undefined;
+        if (verify) {
+          const read = await this.deps.adapter.getColorParams(clip.id);
+          verified = read.hasLumetri && Object.keys(read.params).length > 0;
+        }
+        applied++;
+        details.push({
+          clipId: clip.id,
+          name: clip.name,
+          look: chosen,
+          mood,
+          params: pmap,
+          ok: true,
+          verified,
+        });
+      } catch (e) {
+        failed++;
+        details.push({
+          clipId: clip.id,
+          name: clip.name,
+          look: chosen,
+          mood,
+          params: pmap,
+          ok: false,
+          reason: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+    this.deps.logger.info(
+      { seqId, look: lookId, intensity, dryRun, total: clips.length, applied, failed },
+      'color.applyLook complete'
+    );
+    return {
+      dryRun: !!dryRun,
+      look: lookId,
+      intensity,
+      total: clips.length,
+      applied,
+      failed,
+      details,
+    };
   }
 }
