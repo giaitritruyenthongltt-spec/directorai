@@ -1,0 +1,144 @@
+.analysis-tab {
+  padding: var(--sp-5) var(--sp-6) 40px;
+  color: var(--text);
+  font-size: var(--fs-base);
+  /* U-Wide — dùng nhiều bề ngang ở panel rộng. */
+  max-width: min(1040px, 100%);
+  margin: 0 auto;
+}
+.analysis-intro h2 {
+  font-size: 16px;
+  margin: 0 0 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.analysis-sub {
+  margin: 0 0 12px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.analysis-cliptext {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+.analysis-cliptext:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.analysis-clipcount {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: right;
+}
+.analysis-error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--error);
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.analysis-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+/* R7 — nhãn đánh giá clip (icon + chữ) */
+.analysis-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+.analysis-tag.bad {
+  color: var(--warn);
+}
+.analysis-tag.good {
+  color: var(--success);
+}
+.analysis-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.analysis-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.analysis-result {
+  margin-top: 14px;
+}
+.analysis-summary {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+.analysis-summary .warn {
+  color: var(--warn);
+}
+.analysis-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.analysis-table th,
+.analysis-table td {
+  border: 1px solid var(--border);
+  padding: 5px 7px;
+  text-align: left;
+}
+.analysis-table th {
+  background: var(--surface);
+}
+.analysis-table td:first-child {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.analysis-table tr.bad {
+  background: #3a2424;
+}
+.analysis-table tr.ok td:last-child {
+  color: var(--success);
+}
+.analysis-files {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.analysis-files code {
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--text);
+}
+.analysis-files-dir {
+  margin-top: 2px;
+  font-size: 11px;
+}

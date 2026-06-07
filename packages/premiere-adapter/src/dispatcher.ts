@@ -16,6 +16,8 @@ const MUTATING_METHODS = new Set([
   'timeline.moveClip',
   'timeline.deleteClip',
   'timeline.setClipDisabled',
+  'timeline.renameClip',
+  'timeline.setClipInOut',
   'effect.apply',
   'effect.remove',
   'media.import',
@@ -30,6 +32,7 @@ const MUTATING_METHODS = new Set([
   'audio.muteTrack',
   'text.addOverlay',
   'transition.apply',
+  'transition.remove',
 ]);
 
 export function isMutatingMethod(method: string): boolean {
@@ -104,6 +107,20 @@ const handlers: Record<string, RpcHandler> = {
       return a.setClipDisabled(params.clipId, params.disabled);
     },
   },
+  'timeline.renameClip': {
+    schema: z.object({ clipId: z.string(), newName: z.string().min(1) }),
+    run: (p, a) => {
+      const params = p as { clipId: string; newName: string };
+      return a.renameClip(params.clipId, params.newName);
+    },
+  },
+  'timeline.setClipInOut': {
+    schema: z.object({ clipId: z.string(), inSec: z.number(), outSec: z.number() }),
+    run: (p, a) => {
+      const params = p as { clipId: string; inSec: number; outSec: number };
+      return a.setClipInOut(params.clipId, params.inSec as Seconds, params.outSec as Seconds);
+    },
+  },
 
   'effect.apply': {
     schema: z.object({ clipId: z.string(), effectMatchName: z.string() }),
@@ -115,6 +132,10 @@ const handlers: Record<string, RpcHandler> = {
       const params = p as { clipId: string; effectId: string };
       return a.removeEffect(params.clipId, params.effectId);
     },
+  },
+  'effect.list': {
+    schema: z.object({ clipId: z.string() }),
+    run: (p, a) => a.listClipEffects((p as { clipId: string }).clipId),
   },
 
   'media.import': {
@@ -223,6 +244,10 @@ const handlers: Record<string, RpcHandler> = {
     schema: z.object({ clipId: z.string(), gainDb: z.number() }),
     run: (p, a) => a.setAudioGain(p as { clipId: string; gainDb: number }),
   },
+  'audio.getGain': {
+    schema: z.object({ clipId: z.string() }),
+    run: (p, a) => a.getAudioGain((p as { clipId: string }).clipId),
+  },
   'audio.addFade': {
     schema: z.object({
       clipId: z.string(),
@@ -298,6 +323,13 @@ const handlers: Record<string, RpcHandler> = {
         matchName: params.matchName,
         durationSec: params.durationSec as Seconds,
       });
+    },
+  },
+  'transition.remove': {
+    schema: z.object({ clipId: z.string(), atStart: z.boolean().optional() }),
+    run: (p, a) => {
+      const params = p as { clipId: string; atStart?: boolean };
+      return a.removeTransition(params.clipId, params.atStart ?? true);
     },
   },
   'transition.list': { schema: Empty, run: (_p, a) => a.listTransitions() },

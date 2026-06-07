@@ -1,0 +1,154 @@
+/* Box Nhật ký vận hành — thanh mỏng ở đáy, bung thành danh sách khi mở. */
+.logdrawer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: var(--layer-1);
+  font-size: var(--fs-sm);
+}
+
+.logdrawer-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 3px var(--sp-4);
+  min-height: 24px;
+  flex-wrap: wrap;
+}
+.logdrawer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-weight: 600;
+  user-select: none;
+}
+.logdrawer-toggle:hover {
+  color: var(--text);
+}
+.logdrawer-badge {
+  display: inline-block;
+  min-width: 16px;
+  text-align: center;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: #fff;
+}
+.logdrawer-badge.err {
+  background: var(--error);
+}
+.logdrawer-badge.warn {
+  background: var(--warn);
+}
+
+.logdrawer-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.logdrawer-filter {
+  padding: 1px var(--sp-3);
+  border-radius: var(--radius-pill);
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.logdrawer-filter:hover {
+  color: var(--text);
+}
+.logdrawer-filter.on {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.logdrawer-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.logdrawer-act:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.logdrawer-body {
+  max-height: 200px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: var(--fs-xs);
+}
+.logrow {
+  border-bottom: 1px solid var(--bg);
+}
+.logrow-head {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+  padding: 2px var(--sp-4);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.logrow-head.has-detail {
+  cursor: pointer;
+}
+.logrow-head.has-detail:hover {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.12));
+}
+.logrow.lv-error {
+  background: var(--error-bg);
+}
+.logrow-detail {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) 26px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+.logrow-ts {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.logrow-lv {
+  text-transform: uppercase;
+  font-weight: 700;
+  min-width: 34px;
+  flex-shrink: 0;
+}
+.logrow-lv.lv-error {
+  color: var(--error);
+}
+.logrow-lv.lv-warn {
+  color: var(--warn);
+}
+.logrow-lv.lv-info {
+  color: var(--text-dim);
+}
+.logrow-src {
+  color: var(--accent);
+  min-width: 40px;
+  flex-shrink: 0;
+}
+.logrow-msg {
+  flex: 1;
+  color: var(--text);
+}
+.logdrawer-empty {
+  padding: var(--sp-4);
+  color: var(--text-dim);
+  font-style: italic;
+}

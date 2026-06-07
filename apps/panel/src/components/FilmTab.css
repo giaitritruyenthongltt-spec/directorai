@@ -1,0 +1,234 @@
+/* UI4 — Tab Phim dài. */
+
+.film-tab {
+  padding: var(--sp-5) var(--sp-6) 40px;
+  color: var(--text);
+  font-size: var(--fs-base);
+  /* U-Wide — dùng nhiều bề ngang ở panel rộng (đỡ trống 2 bên), vẫn căn giữa. */
+  max-width: min(1040px, 100%);
+  margin: 0 auto;
+}
+.film-intro h2 {
+  font-size: var(--fs-xl);
+  margin: 0 0 2px;
+}
+.film-sub {
+  margin: 0 0 var(--sp-6);
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+  max-width: 70ch;
+}
+
+.film-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.film-hint {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 160px;
+}
+.film-folder-adv {
+  margin: var(--sp-3) 0 var(--sp-4);
+}
+.film-folder-adv > summary {
+  font-size: var(--fs-md);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: var(--sp-2) 0;
+}
+
+/* Thư mục gốc */
+.film-folder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.film-folderbox {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  resize: vertical;
+}
+.film-folderbox:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Template */
+.film-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.film-tpl {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-md);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.film-tpl:hover {
+  border-color: var(--accent);
+}
+.film-tpl.on {
+  border-color: var(--accent);
+  background: #2a3744;
+}
+.film-tpl-icon {
+  font-size: var(--fs-xl);
+}
+.film-tpl-desc {
+  margin: var(--sp-3) 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+}
+
+/* Dead-air + plan summary */
+.film-deadair {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  margin: var(--sp-4) 0;
+  font-size: var(--fs-md);
+}
+.film-plan {
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  margin-top: var(--sp-3);
+}
+.film-plan-strategy {
+  font-size: var(--fs-md);
+  line-height: 1.5;
+}
+.film-plan-count {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+/* G5 — danh sách bước có checkbox */
+.film-steps {
+  margin-bottom: var(--sp-4);
+}
+.film-steps-head {
+  font-size: var(--fs-md);
+  color: var(--text-dim);
+  margin-bottom: var(--sp-3);
+}
+.film-steplist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px; /* px thuần — UXP bỏ qua min()/vh */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.film-steplist li {
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+}
+.film-steplist li.off {
+  opacity: 0.45;
+}
+.film-steplist label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  cursor: pointer;
+  font-size: var(--fs-md);
+}
+.film-step-act {
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 64px;
+}
+.film-step-reason {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+/* Result */
+.film-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  margin-top: var(--sp-3);
+  font-size: var(--fs-md);
+}
+.film-note {
+  margin-top: var(--sp-3);
+  color: var(--warn);
+  font-size: var(--fs-sm);
+}
+.film-ovr {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+.film-ovr input {
+  width: 64px;
+  padding: 2px 6px;
+  background: var(--bg, #1e1e1e);
+  color: var(--text, #eee);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 4px;
+}
+.film-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2, 4px);
+  margin-top: var(--sp-3);
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+/* A2 — gợi ý thứ tự dựng theo mạch phim */
+.film-order {
+  margin-top: var(--sp-3);
+}
+.film-order-list {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.film-order-list li {
+  margin-bottom: 2px;
+}
+.film-order-reason {
+  color: var(--fg-muted);
+}

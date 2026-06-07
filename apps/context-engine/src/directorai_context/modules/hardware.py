@@ -70,7 +70,7 @@ def _detect_nvidia() -> GpuInfo:
                 timeout=5,
             ).decode("utf-8", errors="ignore")
             cuda_version = cuda_out.strip().splitlines()[0]
-        except Exception:  # noqa: BLE001
+        except Exception:
             cuda_version = ""
         return GpuInfo(
             available=True,
@@ -79,7 +79,7 @@ def _detect_nvidia() -> GpuInfo:
             cuda_version=cuda_version,
             driver_version=driver,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         return GpuInfo(available=False)
 
 
@@ -99,11 +99,11 @@ def _ram_gb() -> float:
                     timeout=5,
                 ).decode("utf-8", errors="ignore")
                 bytes_str = next(
-                    (l.strip() for l in out.splitlines() if l.strip().isdigit()), ""
+                    (ln.strip() for ln in out.splitlines() if ln.strip().isdigit()), ""
                 )
                 if bytes_str:
                     return int(bytes_str) / (1024**3)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
         return 8.0
 

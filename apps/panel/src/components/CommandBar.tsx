@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Icon } from './Icon.js';
 import './CommandBar.css';
 
 interface Props {
@@ -24,11 +25,16 @@ export function CommandBar({ onSubmit, disabled }: Props): React.ReactElement {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={disabled ? 'Connecting…' : 'get project  /  list sequences  /  list clips'}
+        placeholder={
+          disabled
+            ? 'Đang kết nối…'
+            : 'Hỏi/ra lệnh tiếng Việt rồi Enter (nút Chạy nằm trong từng tab)'
+        }
         disabled={disabled}
       />
       <button
         className="send-btn"
+        title="Gửi"
         onClick={() => {
           if (value.trim()) {
             onSubmit(value.trim());
@@ -37,7 +43,7 @@ export function CommandBar({ onSubmit, disabled }: Props): React.ReactElement {
         }}
         disabled={disabled || !value.trim()}
       >
-        ▶
+        <Icon name="send" size={16} />
       </button>
     </div>
   );

@@ -1,0 +1,152 @@
+/**
+ * UI1 — Design tokens (chuẩn hóa giao diện).
+ *
+ * Màu CƠ BẢN (--bg/--surface/--accent/--text…) định nghĩa ở index.html :root
+ * để có ngay lúc cold-start (tránh nháy). File này THÊM phần còn lại của hệ
+ * thống và quan trọng nhất: ALIAS các biến --ui-* (mà DirectorTab/HelpButton/
+ * WorkflowDiagram đang dùng kèm fallback hardcode) về token chuẩn → cả panel
+ * ăn theo 1 nguồn màu, themeable (chuẩn bị cho UI8 đồng bộ theme Premiere).
+ */
+
+:root {
+  /* ── Alias --ui-* → token chuẩn (bỏ hardcode rải rác) ─────────────── */
+  --ui-text: var(--text);
+  --ui-text-secondary: var(--text-dim);
+  --ui-bg-secondary: var(--surface);
+  --ui-bg-tertiary: var(--bg);
+  --ui-bg-hover: #383838;
+  --ui-border: var(--border);
+
+  /* ── Accent phụ (gom các hex #818cf8/#93c5fd/#6366f1 rải rác) ─────── */
+  --accent-soft: #93c5fd;
+  --accent-strong: #6366f1;
+  --accent-done-a: #10b981;
+  --accent-done-b: #34d399;
+
+  /* ── Thang KHOẢNG CÁCH (gốc 4px) ─────────────────────────────────── */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 20px;
+  --sp-8: 24px;
+
+  /* ── Thang CHỮ ───────────────────────────────────────────────────── */
+  --fs-xs: 10px;
+  --fs-sm: 11px;
+  --fs-md: 12px;
+  --fs-base: 13px;
+  --fs-lg: 14px;
+  --fs-xl: 16px;
+  --fs-2xl: 20px;
+
+  /* ── Bo góc ──────────────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 16px;
+
+  /* ── Đổ bóng + lớp phủ (nhất quán modal/popover) ─────────────────── */
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.55);
+  --overlay: rgba(0, 0, 0, 0.55);
+
+  /* ── Nhịp chuyển động ────────────────────────────────────────────── */
+  --t-fast: 0.15s;
+  --t-med: 0.22s;
+
+  /* ── R2 — LỚP BỀ MẶT (elevation) — chiều sâu thị giác ────────────── */
+  --layer-1: var(--surface); /* thanh điều hướng, header */
+  --layer-2: #353535; /* thẻ nổi (card) trên nền */
+  --layer-3: #3f3f3f; /* hover/raised */
+
+  /* ── R2 — Dải ACCENT + trạng thái (gom, đồng bộ Premiere-blue) ───── */
+  --accent-bg: rgba(91, 155, 213, 0.14); /* nền nhạt theo accent */
+  --accent-ring: rgba(91, 155, 213, 0.45); /* vòng focus */
+  --grad-accent: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  --success-bg: rgba(76, 175, 80, 0.14);
+  --warn-bg: rgba(255, 152, 0, 0.14);
+  --error-bg: rgba(244, 67, 54, 0.14);
+
+  /* ── R2 — Đổ bóng theo độ cao ────────────────────────────────────── */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --ring-focus: 0 0 0 2px var(--accent-ring);
+}
+
+/* ── Icon = <span> ĐƯỢC set kích thước, bọc <img> PNG fill 100%. ─────────
+ * UXP render PNG trong <img> nhưng KHÔNG tôn trọng width/height TRÊN img →
+ * set kích thước ở span (UXP tôn trọng box span/div), img phủ 100% span. */
+.icon {
+  display: inline-block;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+/* Quay icon "đang xử lý" (refresh) khi gắn class .spin. */
+.icon.spin {
+  animation: icon-spin 0.9s linear infinite;
+}
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/**
+ * UI8 — Đồng bộ theme với host Premiere (học từ SADESIGN: panel "dính" host).
+ * Premiere UXP có thể honor prefers-color-scheme; ngoài ra App.tsx set
+ * [data-theme] thủ công nếu đọc được độ sáng host. Khi sáng → đảo palette.
+ */
+:root[data-theme='light'],
+:root.theme-light {
+  --bg: #f3f3f3;
+  --surface: #ffffff;
+  --border: #d0d0d0;
+  --accent: #2f6fb0;
+  --accent-hover: #255a91;
+  --text: #1f1f1f;
+  --text-dim: #6a6a6a;
+  --ui-bg-hover: #e8e8e8;
+}
+
+/* L5 — Thanh cuộn MỎNG theo theme (thay scrollbar webview mặc định to/xấu). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+  background-clip: content-box;
+}
+
+@media (prefers-color-scheme: light) {
+  /* Chỉ áp khi KHÔNG ép theme thủ công (data-theme rỗng). */
+  :root:not([data-theme]) {
+    --bg: #f3f3f3;
+    --surface: #ffffff;
+    --border: #d0d0d0;
+    --accent: #2f6fb0;
+    --accent-hover: #255a91;
+    --text: #1f1f1f;
+    --text-dim: #6a6a6a;
+    --ui-bg-hover: #e8e8e8;
+  }
+}

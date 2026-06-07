@@ -3,6 +3,8 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
+    "gen:icons": "node ../../tools/gen-ui-icons.mjs",
+    "prebuild": "node ../../tools/gen-ui-icons.mjs",
     "dev": "webpack --config webpack.config.js --mode development --watch",
     "build": "webpack --config webpack.config.js --mode production",
     "test": "vitest run",
@@ -11,6 +13,7 @@
   },
   "dependencies": {
     "@directorai/core": "workspace:*",
+    "@directorai/modules": "workspace:*",
     "@directorai/premiere-adapter": "workspace:*",
     "@directorai/shared": "workspace:*",
     "@directorai/telemetry": "workspace:*",

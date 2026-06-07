@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 
@@ -10,8 +11,20 @@ import structlog
 from directorai_context.config import get_settings
 
 
+def _force_utf8_streams() -> None:
+    """Windows mặc định console code page cp1252 → log tiếng Việt (vd 'ự')
+    sẽ ném UnicodeEncodeError và làm sập request. Ép stdout/stderr về UTF-8
+    (errors='replace' để KHÔNG bao giờ sập vì log)."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            with contextlib.suppress(ValueError, OSError):
+                reconfigure(encoding="utf-8", errors="replace")
+
+
 def setup_logging() -> structlog.BoundLogger:
     """Configure structlog for the application."""
+    _force_utf8_streams()
     level = getattr(logging, get_settings().log_level.upper(), logging.INFO)
 
     logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level)

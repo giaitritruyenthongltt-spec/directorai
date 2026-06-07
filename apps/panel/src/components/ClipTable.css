@@ -1,0 +1,123 @@
+/* UI6 — Bảng duyệt clip. */
+
+.clt-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.clt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.clt-search {
+  flex: 1;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--fs-md);
+}
+.clt-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.clt-count {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Hộp danh sách clip: cuộn riêng (thanh kéo), header sticky. max-height đặt
+ * INLINE bằng px (thu gọn 5 dòng / mở rộng 14 dòng) — KHÔNG dùng min()/vh vì
+ * UXP bỏ qua → danh sách từng tràn cả panel. */
+.clt-scroll {
+  overflow-y: auto;
+}
+/* Toggle thu gọn/mở rộng danh sách. */
+.clt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.clt-toggle:hover {
+  color: var(--text);
+}
+.clt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+.clt-th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  text-align: left;
+  padding: var(--sp-3) var(--sp-4);
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+}
+.clt-th-active {
+  color: var(--accent);
+}
+.clt-arrow {
+  font-size: var(--fs-xs);
+}
+.clt-table td {
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--bg);
+}
+/* L8 — hàng đệm virtualize: chỉ giữ chiều cao, không viền/nền/padding. */
+.clt-spacer td {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.clt-spacer:hover td {
+  background: transparent;
+}
+.clt-table tr:hover td {
+  background: var(--ui-bg-hover);
+}
+.clt-name {
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.clt-kind {
+  color: var(--text-dim);
+}
+.clt-path {
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+  direction: rtl;
+  text-align: left;
+}
+.clt-path-missing {
+  color: var(--warn);
+  direction: ltr;
+}
+.clt-more,
+.clt-empty {
+  padding: var(--sp-4);
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}

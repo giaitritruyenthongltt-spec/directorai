@@ -44,8 +44,16 @@ class SceneRequest(BaseModel):
     """Request to detect scene cuts."""
 
     media_path: str
-    threshold: float | None = None
+    # 'content' (ngưỡng cố định) | 'adaptive' (rolling-avg, bền chuyển động)
+    detector: str | None = None
+    threshold: float | None = None  # cho ContentDetector
+    adaptive_threshold: float | None = None  # cho AdaptiveDetector
     min_scene_len_sec: float | None = None
+    thumbnails: bool = False  # kèm ảnh xem-trước (data-URI) mỗi cảnh để duyệt cắt
+    thumb_width: int | None = None
+    group: bool = False  # gom shot→cảnh ngữ-nghĩa (histogram màu shot kề nhau)
+    group_threshold: float | None = None  # 0..1, cao = gộp ít (nhiều nhóm hơn)
+    semantic: bool = False  # A3 — gán nhãn ngữ-nghĩa từng nhóm (Gemini Vision)
 
 
 class Scene(BaseModel):
@@ -55,6 +63,19 @@ class Scene(BaseModel):
     start: float
     end: float
     duration: float
+    thumb: str | None = None  # 'data:image/jpeg;base64,...' (nếu xin thumbnails)
+
+
+class SceneGroup(BaseModel):
+    """Nhóm CẢNH ngữ-nghĩa = gộp nhiều shot kề nhau giống nhau (cùng bối cảnh)."""
+
+    index: int
+    start: float
+    end: float
+    duration: float
+    shot_indices: list[int]  # các shot (cảnh) thành viên
+    shot_count: int
+    label: str | None = None  # A3 — nhãn ngữ-nghĩa (Gemini Vision), vd "phục kích"
 
 
 class SceneResult(BaseModel):
@@ -62,6 +83,89 @@ class SceneResult(BaseModel):
 
     media_path: str
     scenes: list[Scene]
+    detector: str = "content"  # phương pháp đã dùng
+    fps: float = 0.0
+    groups: list[SceneGroup] = []  # gom shot→cảnh ngữ-nghĩa (nếu xin group)
+
+
+class AudioSeparateRequest(BaseModel):
+    """Tách stem audio bằng Demucs (tách nhạc nền / voice)."""
+
+    media_path: str
+    model: str = "htdemucs"
+    # 'vocals' (2-stem: vocals + no_vocals) hoặc '4stem'
+    mode: str = "vocals"
+
+
+class AudioSeparateResult(BaseModel):
+    ok: bool
+    out_dir: str
+    stems: dict[str, str]  # {'vocals': path, 'no_vocals': path, ...}
+    device: str
+    elapsed_ms: int
+    cached: bool = False  # True nếu tái dùng stems cache (không chạy lại Demucs)
+
+
+class RecutRecipe(BaseModel):
+    """Công thức chống-trùng (FFmpeg + Demucs)."""
+
+    flip: bool = False  # lật ngang (hflip) — phá pHash
+    crop_pct: float = 0.0  # zoom-crop % (0..10) — đổi khung hình
+    reframe: bool = False  # A1 — crop hướng về chủ thể (YOLO) thay vì giữa khung
+    speed: float = 1.0  # đổi tốc độ video (0.9..1.15) + atempo audio
+    saturation: float = 1.0  # eq saturation
+    brightness: float = 0.0  # eq brightness (-0.1..0.1)
+    contrast: float = 1.0  # A5 — eq contrast (0.9..1.1)
+    gamma: float = 1.0  # A5 — eq gamma (0.9..1.1)
+    hue_deg: float = 0.0  # A5 — xoay hue (độ, -30..30) — đổi tông màu, phá Content-ID màu
+    grain: float = 0.0  # noise cường độ (0..20)
+    # A7 — chống "reused content": xoá metadata nguồn + gắn title/comment riêng.
+    strip_metadata: bool = True
+    title: str | None = None
+    comment: str | None = None
+    # B2 — dọn stems Demucs sau render (tránh phình cache khi batch 3000 tập).
+    cleanup_stems: bool = False
+    # BGM: keep | strip (bỏ nhạc, giữ voice) | replace (voice + nhạc mới)
+    bgm: str = "keep"
+    new_bgm_path: str | None = None
+    bgm_gain_db: float = -6.0
+
+
+class RecutRenderRequest(BaseModel):
+    video_path: str
+    out_path: str | None = None  # mặc định: <video>_recut.mp4
+    recipe: RecutRecipe = RecutRecipe()
+    use_nvenc: bool = True
+    job_id: str | None = None  # B1 — đăng ký để hủy giữa-render
+
+
+class RecutCancelRequest(BaseModel):
+    job_id: str
+
+
+class RecutRenderResult(BaseModel):
+    ok: bool
+    out_path: str
+    duration_sec: float
+    audio_changed: bool
+    applied: list[str]
+    elapsed_ms: int
+    error: str | None = None
+    cancelled: bool = False  # B1 — bị hủy giữa-render
+
+
+class ProbeRequest(BaseModel):
+    """Đọc thông số media (cho cut-list FCPXML / batch)."""
+
+    media_path: str
+
+
+class ProbeResult(BaseModel):
+    width: int
+    height: int
+    fps: float
+    duration: float
+    has_audio: bool
 
 
 class BeatRequest(BaseModel):
@@ -83,6 +187,64 @@ class VisionRequest(BaseModel):
 
     media_path: str
     sample_interval_sec: float | None = None
+
+
+class VideoMapRequest(BaseModel):
+    """AI-2 — Request gộp nhiều clip thành bản đồ video (Tầng 3)."""
+
+    clip_paths: list[str]
+    goal: str | None = None
+    sample_interval_sec: float | None = None
+    # LF8 — cap số clip gọi Vision (lấy mẫu đều khi vượt). None = không giới hạn.
+    max_vision_clips: int | None = None
+
+
+class EditPlanRequest(BaseModel):
+    """AI-3 — Request lập kế hoạch edit từ clip + mục tiêu (Tầng 4)."""
+
+    clip_paths: list[str]
+    goal: str
+    sample_interval_sec: float | None = None
+    # LF1 — tham số phim dài (optional → không truyền thì giữ hành vi cũ).
+    target_duration_sec: float | None = None
+    keep_ratio: float | None = None
+    pacing_profile: str | None = None
+    structure: str | None = None  # "3act" | "chapters" | "recap"
+    # LF8 — cap số clip gọi Vision (lấy mẫu đều khi vượt). None = không giới hạn.
+    max_vision_clips: int | None = None
+
+
+class OrderRequest(BaseModel):
+    """A2 — Request gợi ý THỨ TỰ dựng clip theo mạch phim."""
+
+    clip_paths: list[str]
+    goal: str | None = None
+
+
+class DeadAirRequest(BaseModel):
+    """LF4 — Request cắt dead-air/khoảng lặng đầu-cuối từng clip."""
+
+    clip_paths: list[str]
+    min_silence_sec: float = 1.0
+    keep_padding_sec: float = 0.25
+    threshold_db: float = -40.0
+    disable_if_silent_ratio: float = 0.85
+    min_kept_sec: float = 0.5
+
+
+class FilterBadRequest(BaseModel):
+    """MOD-3 — Request lọc clip kém (CV prefilter → Vision subset)."""
+
+    clip_paths: list[str]
+    threshold: float = 0.5
+    sample_interval_sec: float | None = None
+
+
+class ClusterRequest(BaseModel):
+    """COST-1 — Request gom clip gần giống (perceptual hash)."""
+
+    clip_paths: list[str]
+    max_distance: int = 6
 
 
 class VisionTag(BaseModel):

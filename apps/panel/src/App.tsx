@@ -10,21 +10,43 @@ import { OnboardingTour } from './components/OnboardingTour.js';
 // L2 — replaced lazy() with static imports. UXP's chunk-loader behaviour
 // in Premiere 26 may differ from web browsers; lazy() risked a silent
 // chunk 404 that would leave the panel blank with no error visible.
-import { StylePicker } from './components/StylePicker.js';
+// (StylePicker BỎ — audit: demo dữ liệu giả, lạc khỏi luồng thật.)
 import { ContextTab } from './components/ContextTab.js';
 import { DirectorTab } from './components/DirectorTab.js';
+import { AutoTab } from './components/AutoTab.js';
+import { FilmTab } from './components/FilmTab.js';
+import { RecutTab } from './components/RecutTab.js';
+import { AnalysisTab } from './components/AnalysisTab.js';
 import { wsClient, type ConnectionState, type LogEntry } from './bridge/ws-client.js';
+import { SessionProvider } from './state/session.js';
+import { Icon, type IconName } from './components/Icon.js';
+import { LogDrawer } from './components/LogDrawer.js';
+import { initLogCapture, pushLog, setLogSink } from './bridge/log-store.js';
+import './styles/tokens.css';
 import './App.css';
 
-export type ActiveTab = 'director' | 'chat' | 'style' | 'context';
+export type ActiveTab = 'film' | 'auto' | 'recut' | 'analysis' | 'director' | 'chat' | 'context';
 
-/** Nhãn tab tiếng Việt. */
-const TAB_LABELS: Record<ActiveTab, string> = {
-  director: '🎬 Đạo diễn',
-  chat: '💬 Trò chuyện',
-  style: '🎨 Phong cách',
-  context: '📊 Phân tích',
+/** R1 — Nhãn + ICON (SVG, không tofu) cho từng tab. */
+const TAB_META: Record<ActiveTab, { label: string; icon: IconName }> = {
+  film: { label: 'Phim dài', icon: 'film' },
+  auto: { label: 'Tự động', icon: 'zap' },
+  recut: { label: 'Tách & Tái dựng', icon: 'scissors' },
+  analysis: { label: 'Báo cáo', icon: 'report' },
+  director: { label: 'Đạo diễn', icon: 'clapperboard' },
+  chat: { label: 'Trò chuyện', icon: 'chat' },
+  context: { label: 'Ngữ cảnh', icon: 'sliders' },
 };
+
+/**
+ * Audit-gộp — 3 NHÓM thay vì 7 tab ngang hàng (bỏ Style demo).
+ *   Dựng phim (Phim/Tự động/Báo cáo) · Trợ lý (Đạo diễn/Chat) · Nâng cao (Ngữ cảnh).
+ */
+const TAB_GROUPS: { id: string; label: string; icon: IconName; tabs: ActiveTab[] }[] = [
+  { id: 'build', label: 'Dựng phim', icon: 'film', tabs: ['film', 'auto', 'recut', 'analysis'] },
+  { id: 'assist', label: 'Trợ lý', icon: 'sparkles', tabs: ['director', 'chat'] },
+  { id: 'advanced', label: 'Nâng cao', icon: 'sliders', tabs: ['context'] },
+];
 
 /** Restore a checkpoint into the chat log if it was created recently (< 5 min). */
 const RECENT_CHECKPOINT_MS = 5 * 60_000;
@@ -40,7 +62,31 @@ interface CheckpointPayload {
 export function App(): React.ReactElement {
   const [connState, setConnState] = useState<ConnectionState>('disconnected');
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('director');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('film');
+
+  // UI8 — Đồng bộ theme với host Premiere (sáng/tối). Đọc 1 lần khi mở.
+  useEffect(() => {
+    void import('./bridge/uxp-api.js').then(({ getHostTheme }) => {
+      const t = getHostTheme();
+      if (t && typeof document !== 'undefined') {
+        document.documentElement.setAttribute('data-theme', t);
+      }
+    });
+  }, []);
+
+  // Box log trong panel — bắt console/lỗi để check bug không cần UDT.
+  useEffect(() => {
+    initLogCapture();
+    // P3 — đẩy warn/error ra server ops.log (bền sau reload/crash panel).
+    setLogSink((it) => {
+      try {
+        wsClient.notify('_panel.log', it);
+      } catch {
+        // bỏ qua nếu WS chưa sẵn sàng
+      }
+    });
+    return () => setLogSink(null);
+  }, []);
 
   // L1 — Send mount lifecycle + global error events to server log
   // so we can debug panel render failures without UDT DevTools.
@@ -126,6 +172,16 @@ export function App(): React.ReactElement {
     });
     const unsubLog = wsClient.onLog((entry) => {
       setLogs((prev) => [entry, ...prev].slice(0, 500)); // keep last 500 entries
+      // Đổ vào box Nhật ký vận hành (lọc lỗi/ngữ cảnh nhanh).
+      const label = entry.method ? `${entry.type} · ${entry.method}` : entry.type;
+      const detail =
+        entry.error ?? (entry.result !== undefined ? JSON.stringify(entry.result) : undefined);
+      pushLog(
+        entry.error ? 'error' : 'info',
+        'ws',
+        entry.error ? `${label}: ${entry.error}` : label,
+        detail
+      );
     });
     wsClient.connect();
     return () => {
@@ -162,13 +218,10 @@ export function App(): React.ReactElement {
       // Everything else → LLM-driven natural-language router on the server
       await wsClient.call('nl.query', { prompt: trimmed });
     } catch (err) {
+      const m = err instanceof Error ? err.message : String(err);
+      pushLog('error', 'cmd', m);
       setLogs((prev) => [
-        {
-          id: String(Date.now()),
-          ts: Date.now(),
-          type: 'error',
-          error: err instanceof Error ? err.message : String(err),
-        },
+        { id: String(Date.now()), ts: Date.now(), type: 'error', error: m },
         ...prev,
       ]);
     }
@@ -177,24 +230,65 @@ export function App(): React.ReactElement {
   return (
     <div className="app">
       <Header connState={connState} onReconnect={() => wsClient.connect()} />
-      <nav className="tabs">
-        {(['director', 'chat', 'style', 'context'] as ActiveTab[]).map((tab) => (
-          <button
-            key={tab}
-            className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
-      </nav>
-      <main className="main-content">
-        {activeTab === 'director' && <DirectorTab />}
-        {activeTab === 'chat' && <ChatLog entries={logs} />}
-        {activeTab === 'style' && <StylePicker />}
-        {activeTab === 'context' && <ContextTab />}
-      </main>
+      {(() => {
+        const group = TAB_GROUPS.find((g) => g.tabs.includes(activeTab)) ?? TAB_GROUPS[0]!;
+        return (
+          <>
+            {/* Tầng 1 — nhóm. Dùng <div role=button> (KHÔNG <button>) vì UXP
+                <button> nuốt icon span; <div> render icon đúng. */}
+            <nav className="tab-groups">
+              {TAB_GROUPS.map((g) => (
+                <div
+                  key={g.id}
+                  role="button"
+                  tabIndex={0}
+                  className={`tab-group-btn ${g.id === group.id ? 'active' : ''}`}
+                  onClick={() => setActiveTab(g.tabs[0]!)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') setActiveTab(g.tabs[0]!);
+                  }}
+                >
+                  <Icon name={g.icon} size={15} />
+                  <span>{g.label}</span>
+                </div>
+              ))}
+            </nav>
+            {/* Tầng 2 — tab con (ẩn nếu nhóm chỉ 1 tab) */}
+            {group.tabs.length > 1 && (
+              <nav className="tabs">
+                {group.tabs.map((tab) => (
+                  <div
+                    key={tab}
+                    role="button"
+                    tabIndex={0}
+                    className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
+                    onClick={() => setActiveTab(tab)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab);
+                    }}
+                  >
+                    <Icon name={TAB_META[tab].icon} size={14} />
+                    <span>{TAB_META[tab].label}</span>
+                  </div>
+                ))}
+              </nav>
+            )}
+          </>
+        );
+      })()}
+      <SessionProvider>
+        <main className="main-content">
+          {activeTab === 'film' && <FilmTab />}
+          {activeTab === 'auto' && <AutoTab />}
+          {activeTab === 'recut' && <RecutTab />}
+          {activeTab === 'director' && <DirectorTab />}
+          {activeTab === 'analysis' && <AnalysisTab />}
+          {activeTab === 'chat' && <ChatLog entries={logs} />}
+          {activeTab === 'context' && <ContextTab />}
+        </main>
+      </SessionProvider>
       <ProgressBar />
+      <LogDrawer />
       <CommandBar onSubmit={handleCommand} disabled={connState !== 'connected'} />
       <StatusBar connState={connState} />
       <FirstRunWizard />

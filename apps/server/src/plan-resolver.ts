@@ -1,0 +1,204 @@
+/**
+ * SAFE-1a — Plan resolver + preview (Tầng an toàn, CHỈ ĐỌC).
+ *
+ * Kế hoạch edit (AI-3) tham chiếu clip theo `media_path` (đường dẫn file).
+ * Timeline thật tham chiếu clip theo `clipId`. Module này là CẦU: khớp
+ * media_path → clip thật trên timeline, rồi sinh PREVIEW người-đọc-được
+ * cho từng bước — KHÔNG ghi gì.
+ *
+ * Đây là nửa "Xem trước" của Tầng an toàn: bạn thấy chính xác từng bước sẽ
+ * làm gì (clip nào, thao tác gì, đổi ra sao) TRƯỚC khi duyệt cho ghi.
+ *
+ * Hàm `resolvePlan` thuần (không phụ thuộc adapter) để dễ test: caller chỉ
+ * cần truyền `clips` lấy từ `adapter.listClips`.
+ */
+
+import type { Clip } from '@directorai/core';
+import type { EditPlan, EditPlanStep, SafePlanAction } from './director-tools.js';
+
+/**
+ * NGUỒN SỰ THẬT DUY NHẤT: action nào executor THỰC SỰ ghi được an toàn
+ * NGAY BÂY GIỜ (cả resolver-preview lẫn executor đọc chung hằng này, tránh
+ * tình trạng preview hứa "ghi được" nhưng executor lại defer).
+ *
+ * - disable/trim/rename: map sạch, in-place, an toàn → bật.
+ * - move: BẬT LẠI (C1) — giờ dùng re-pack ripple-aware (park-then-place)
+ *   trên cùng 1 track video, không chồng lấn. Verify live còn chờ.
+ * - transition: BẬT (C2) — dùng API ĐÃ INTROSPECT thật (createVideoTransition
+ *   + AddTransitionOptions + createAddVideoTransitionAction). Additive, có
+ *   approval-gate + undo. Verify live còn chờ.
+ */
+export const EXECUTABLE_ACTIONS: Record<SafePlanAction, boolean> = {
+  disable: true,
+  // enable = inverse của disable (setClipDisabled(false)). Dùng cho hoàn tác
+  // ghi-thật (planner KHÔNG sinh enable; chỉ tầng test/revert dùng).
+  enable: true,
+  trim: true,
+  rename: true,
+  move: true,
+  transition: true,
+};
+
+export interface ResolvedStep {
+  order: number;
+  action: SafePlanAction;
+  targetPath: string;
+  clipId: string | null;
+  clipName: string | null;
+  resolved: boolean;
+  executable: boolean;
+  description: string;
+  warning?: string;
+  params: Record<string, unknown>;
+  reason: string;
+}
+
+export interface PlanPreview {
+  sequenceId: string;
+  totalSteps: number;
+  resolvedCount: number;
+  executableCount: number;
+  unresolvedCount: number;
+  steps: ResolvedStep[];
+  unresolvedPaths: string[];
+  /** Tầng an toàn LUÔN cần bạn duyệt trước khi ghi. */
+  requiresApproval: true;
+}
+
+function normPath(p: string): string {
+  return p.replace(/\\/g, '/').toLowerCase();
+}
+
+function basename(p: string): string {
+  return normPath(p).split('/').pop() ?? normPath(p);
+}
+
+function num(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v) : typeof v === 'number' ? v : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+function describe(
+  step: EditPlanStep,
+  clip: Clip | null
+): { description: string; warning?: string } {
+  const name = clip?.name ?? basename(step.target_path);
+  const p = step.params ?? {};
+  switch (step.action) {
+    case 'disable':
+      return { description: `Tắt clip "${name}" khỏi bản dựng (ẩn, KHÔNG xoá file)` };
+    case 'enable':
+      return { description: `Bật lại clip "${name}" trong bản dựng` };
+    case 'trim': {
+      const a = num(p.in_sec);
+      const b = num(p.out_sec);
+      const range = a !== null && b !== null ? `còn ${a}–${b}s` : '(thiếu in/out)';
+      return { description: `Tỉa clip "${name}" ${range}` };
+    }
+    case 'move': {
+      const to = num(p.to_index);
+      return { description: `Chuyển clip "${name}" tới vị trí ${to ?? '?'}` };
+    }
+    case 'transition': {
+      const kind = typeof p.kind === 'string' ? p.kind : 'mặc định';
+      const dur = num(p.duration_sec);
+      return {
+        description: `Thêm chuyển cảnh ${kind}${dur !== null ? ` (${dur}s)` : ''} tại clip "${name}"`,
+      };
+    }
+    case 'rename': {
+      const nn = typeof p.new_name === 'string' ? p.new_name : '?';
+      return { description: `Đổi tên "${name}" → "${nn}"` };
+    }
+    default:
+      return { description: `Thao tác "${step.action}" trên "${name}"` };
+  }
+}
+
+/**
+ * Khớp kế hoạch với timeline thật → preview. Thuần, không ghi.
+ *
+ * Khớp clip: ưu tiên full-path, fallback basename. Nếu basename trùng nhiều
+ * clip (1 file dùng nhiều lần) → vẫn resolve clip đầu + cảnh báo.
+ */
+export function resolvePlan(
+  plan: EditPlan,
+  clips: readonly Clip[],
+  sequenceId: string
+): PlanPreview {
+  // B2-resolver: CHỈ full-path (có separator) vào byFull. Nếu source.path là
+  // basename trần (host không cho full path → cả clip video LẪN audio cùng key
+  // "0530.mp4") thì byFull sẽ ĐÈ IM LẶNG (audio ghi đè video) → khớp nhầm. Để
+  // basename rơi xuống byBase (có cảnh báo + chọn clip ĐẦU = video, do video
+  // track liệt kê trước). Thêm byId để plan nhắm chính xác 1 clip qua id.
+  const hasSep = (p: string): boolean => /[\\/]/.test(p);
+  const byFull = new Map<string, Clip>();
+  const byId = new Map<string, Clip>();
+  const byBase = new Map<string, Clip[]>();
+  for (const c of clips) {
+    const src = c.source?.path ?? '';
+    if (src && hasSep(src)) byFull.set(normPath(src), c);
+    if (c.id) byId.set(c.id, c);
+    const b = basename(src || c.name);
+    const arr = byBase.get(b) ?? [];
+    arr.push(c);
+    byBase.set(b, arr);
+  }
+
+  const steps: ResolvedStep[] = [];
+  const unresolvedPaths: string[] = [];
+
+  for (const s of plan.steps ?? []) {
+    const target = s.target_path ?? '';
+    // Ưu tiên: id chính xác → full-path → basename (byBase, có cảnh báo).
+    let clip = byId.get(target) ?? byFull.get(normPath(target)) ?? null;
+    let warning: string | undefined;
+
+    if (!clip) {
+      const matches = byBase.get(basename(target));
+      if (matches && matches.length > 0) {
+        clip = matches[0] ?? null;
+        if (matches.length > 1) {
+          warning = `khớp ${matches.length} clip cùng tên — preview dùng clip đầu`;
+        }
+      }
+    }
+
+    const resolved = clip !== null;
+    if (!resolved) unresolvedPaths.push(target);
+
+    const d = describe(s, clip);
+    const executable = resolved && EXECUTABLE_ACTIONS[s.action] === true;
+    const combinedWarning = [warning, d.warning].filter(Boolean).join('; ') || undefined;
+
+    steps.push({
+      order: s.order,
+      action: s.action,
+      targetPath: target,
+      clipId: clip?.id ?? null,
+      clipName: clip?.name ?? null,
+      resolved,
+      executable,
+      description: resolved
+        ? d.description
+        : `${d.description} — ⚠ KHÔNG tìm thấy clip "${basename(target)}" trên timeline`,
+      warning: combinedWarning,
+      params: s.params ?? {},
+      reason: s.reason ?? '',
+    });
+  }
+
+  const resolvedCount = steps.filter((s) => s.resolved).length;
+  const executableCount = steps.filter((s) => s.executable).length;
+
+  return {
+    sequenceId,
+    totalSteps: steps.length,
+    resolvedCount,
+    executableCount,
+    unresolvedCount: steps.length - resolvedCount,
+    steps,
+    unresolvedPaths,
+    requiresApproval: true,
+  };
+}

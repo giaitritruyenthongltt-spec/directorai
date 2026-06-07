@@ -9,8 +9,11 @@
 import React, { useEffect, useState } from 'react';
 
 import { wsClient, type ConnectionState } from '../bridge/ws-client.js';
+import { withTimeout } from '../bridge/with-timeout.js';
 import { HelpButton } from './HelpButton.js';
 import { WorkflowDiagram } from './WorkflowDiagram.js';
+import { Icon, type IconName } from './Icon.js';
+import { ClickBox } from './ui/primitives.js';
 import './DirectorTab.css';
 
 type Persona = 'cinematic' | 'action' | 'vlog' | 'vintage';
@@ -31,6 +34,7 @@ interface Plan {
   estimatedMinutes: number;
   note?: string;
   steps: PlanStep[];
+  planId?: string; // B3 — id bản nháp (track lúc sinh) để refine TRƯỚC khi execute
 }
 
 interface StepResult {
@@ -52,42 +56,50 @@ interface PlanProgress {
 const GOAL_PRESETS: { id: string; label: string; prompt: string }[] = [
   {
     id: 'travel-cinematic',
-    label: '🏞️ Video du lịch — Điện ảnh — 3 phút',
+    label: 'Video du lịch — Điện ảnh — 3 phút',
     prompt: 'Dựng video du lịch phong cách điện ảnh dài khoảng 3 phút, chọn cảnh đẹp nhất',
   },
   {
     id: 'action-montage',
-    label: '⚡ Montage hành động — 60 giây',
+    label: 'Montage hành động — 60 giây',
     prompt: 'Tạo montage hành động nhịp nhanh 60 giây, cắt theo nhịp',
   },
   {
     id: 'remove-lowquality',
-    label: '🧹 Lọc bỏ cảnh chất lượng kém',
+    label: 'Lọc bỏ cảnh chất lượng kém',
     prompt:
       'Phân tích chất lượng từng clip (mờ, thiếu sáng, lệch khung) và xoá các clip chất lượng kém khỏi timeline',
   },
   {
     id: 'cut-silence',
-    label: '🔇 Cắt bỏ khoảng lặng audio',
+    label: 'Cắt bỏ khoảng lặng audio',
     prompt: 'Tìm và cắt bỏ tất cả khoảng lặng dài trên track audio',
   },
   {
     id: 'family-memory',
-    label: '👨‍👩‍👧 Video kỷ niệm gia đình — 1 phút',
+    label: 'Video kỷ niệm gia đình — 1 phút',
     prompt: 'Dựng video kỷ niệm gia đình ấm áp dài 1 phút từ các clip đẹp nhất',
   },
   {
     id: 'custom',
-    label: '✏️ Tự nhập mục tiêu của bạn',
+    label: 'Tự nhập mục tiêu của bạn',
     prompt: '',
   },
 ];
 
 const PERSONA_LABELS: Record<Persona, string> = {
-  cinematic: '🎞️ Điện ảnh',
-  action: '⚡ Hành động',
-  vlog: '📹 Vlog',
-  vintage: '📼 Hoài cổ',
+  cinematic: 'Điện ảnh',
+  action: 'Hành động',
+  vlog: 'Vlog',
+  vintage: 'Hoài cổ',
+};
+
+/** R7 — icon SVG cho từng phong cách (thay emoji tofu). */
+const PERSONA_ICONS: Record<Persona, IconName> = {
+  cinematic: 'film',
+  action: 'zap',
+  vlog: 'mic',
+  vintage: 'image',
 };
 
 const PERSONA_TIPS: Record<Persona, string> = {
@@ -155,7 +167,12 @@ export function DirectorTab(): React.ReactElement {
         setError('Vui lòng nhập mục tiêu trước khi sinh kế hoạch.');
         return;
       }
-      const result = await wsClient.call<Plan>('director.plan', { goal, persona });
+      // DT2 — Gemini có thể treo → timeout 120s (mở khoá UI, báo rõ).
+      const result = await withTimeout(
+        wsClient.call<Plan>('director.plan', { goal, persona }),
+        120_000,
+        'Tạo kế hoạch'
+      );
       setPlan(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -166,6 +183,15 @@ export function DirectorTab(): React.ReactElement {
 
   const execute = async (): Promise<void> => {
     if (!plan) return;
+    // DT8 — execute GHI THẬT (có thể cắt/XOÁ clip) → cổng xác nhận rõ ràng.
+    if (
+      !window.confirm(
+        `Chạy "${plan.title}" — AI sẽ GHI lên timeline (${plan.steps.length} bước, có thể cắt/xoá clip). ` +
+          'Hoàn tác bằng Ctrl-Z trong Premiere. Tiếp tục?'
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -193,15 +219,21 @@ export function DirectorTab(): React.ReactElement {
   };
 
   const refine = async (): Promise<void> => {
-    if (!progress?.planId || !feedback.trim()) return;
+    // B3 — refine được TRƯỚC execute (dùng plan.planId nháp) HOẶC sau (progress.planId).
+    const prevId = progress?.planId ?? plan?.planId;
+    if (!prevId || !feedback.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      const refined = await wsClient.call<Plan>('director.refine', {
-        previousPlanId: progress.planId,
-        feedback: feedback.trim(),
-        persona,
-      });
+      const refined = await withTimeout(
+        wsClient.call<Plan>('director.refine', {
+          previousPlanId: prevId,
+          feedback: feedback.trim(),
+          persona,
+        }),
+        120_000,
+        'Tinh chỉnh'
+      );
       setPlan(refined);
       setProgress(null);
       setFeedback('');
@@ -212,24 +244,36 @@ export function DirectorTab(): React.ReactElement {
     }
   };
 
-  // Hỏi tiến độ liên tục khi đang chạy
+  // Hỏi tiến độ liên tục khi đang chạy. DT1 — deps chỉ planId+status (currentStep
+  // đổi mỗi giây KHÔNG tạo lại interval). DT6 — dừng + báo sau 5 lần lỗi liên tiếp
+  // (server restart giữa chừng → không để progress đứng im âm thầm).
+  const planId = progress?.planId;
+  const status = progress?.status;
   useEffect(() => {
-    if (
-      !progress ||
-      progress.status === 'done' ||
-      progress.status === 'cancelled' ||
-      progress.status === 'error'
-    ) {
+    if (!planId || status === 'done' || status === 'cancelled' || status === 'error') {
       return;
     }
+    let fails = 0;
     const t = setInterval(() => {
       void wsClient
-        .call<PlanProgress>('director.progress', { planId: progress.planId })
-        .then((p) => setProgress(p))
-        .catch((e) => void e);
+        .call<PlanProgress>('director.progress', { planId })
+        .then((p) => {
+          fails = 0;
+          setProgress(p);
+        })
+        .catch(() => {
+          fails += 1;
+          if (fails >= 5) {
+            clearInterval(t);
+            setError(
+              'Mất liên lạc với tiến độ thực thi (máy chủ không phản hồi). ' +
+                'Bấm "Kế hoạch mới" để làm lại.'
+            );
+          }
+        });
     }, 1000);
     return () => clearInterval(t);
-  }, [progress]);
+  }, [planId, status]);
 
   // Đếm giây khi đang sinh plan (Gemini mất 15-45s)
   useEffect(() => {
@@ -265,10 +309,14 @@ export function DirectorTab(): React.ReactElement {
     return (
       <div className="director-tab">
         <header className="director-header">
-          <h2>🎬 Đạo diễn AI</h2>
+          <h2>
+            <Icon name="clapperboard" size={18} /> Đạo diễn AI
+          </h2>
         </header>
         <div className="director-offline">
-          <div className="director-offline-icon">📡</div>
+          <div className="director-offline-icon">
+            <Icon name="refresh" size={32} className="spin" />
+          </div>
           <h3>Đang kết nối tới máy chủ DirectorAI…</h3>
           <p>
             Trạng thái: <code>{wsState}</code>
@@ -288,7 +336,9 @@ export function DirectorTab(): React.ReactElement {
   return (
     <div className="director-tab">
       <header className="director-header">
-        <h2>🎬 Đạo diễn AI</h2>
+        <h2>
+          <Icon name="clapperboard" size={18} /> Đạo diễn AI
+        </h2>
         <p className="director-sub">
           Mô tả video bạn muốn — AI sẽ lập kế hoạch rồi dựng giúp bạn ngay trên timeline.
         </p>
@@ -347,16 +397,17 @@ export function DirectorTab(): React.ReactElement {
         </div>
         <div className="director-persona-grid">
           {(Object.keys(PERSONA_LABELS) as Persona[]).map((p) => (
-            <button
+            <ClickBox
               key={p}
-              type="button"
               className={`director-persona-card ${persona === p ? 'active' : ''}`}
               onClick={() => setPersona(p)}
               disabled={busy}
             >
-              <span className="director-persona-name">{PERSONA_LABELS[p]}</span>
+              <span className="director-persona-name">
+                <Icon name={PERSONA_ICONS[p]} size={15} /> {PERSONA_LABELS[p]}
+              </span>
               <span className="director-persona-tip">{PERSONA_TIPS[p]}</span>
-            </button>
+            </ClickBox>
           ))}
         </div>
       </section>
@@ -373,9 +424,18 @@ export function DirectorTab(): React.ReactElement {
             ]}
           />
         </div>
-        <button className="director-primary" onClick={() => void generate()} disabled={busy}>
-          {busy && !plan ? `⏳ Đang tạo kế hoạch… ${planningElapsed}s` : '✨ Tạo kế hoạch'}
-        </button>
+        <ClickBox className="director-primary" onClick={() => void generate()} disabled={busy}>
+          {busy && !plan ? (
+            <>
+              <Icon name="refresh" size={15} className="spin" /> Đang tạo kế hoạch…{' '}
+              {planningElapsed}s
+            </>
+          ) : (
+            <>
+              <Icon name="sparkles" size={15} /> Tạo kế hoạch
+            </>
+          )}
+        </ClickBox>
         {error && (
           <div className="director-error">
             <div className="director-error-msg">{error}</div>
@@ -395,14 +455,14 @@ export function DirectorTab(): React.ReactElement {
               title="Kế hoạch dựng"
               lines={[
                 'Mỗi dòng là một thao tác AI sẽ thực hiện trên timeline.',
-                '⏸ = điểm dừng để bạn kiểm tra. ✓ = xong. ✗ = lỗi.',
+                'Biểu tượng tạm dừng = điểm dừng kiểm tra · dấu tích = xong · dấu X = lỗi.',
                 'Bấm "Chạy kế hoạch" để AI bắt đầu thực thi tự động.',
               ]}
             />
           </div>
           <p className="director-plan-meta">
-            ⏱ ~{plan.estimatedMinutes} phút · {plan.steps.length} bước ·{' '}
-            {PERSONA_LABELS[plan.persona]}
+            <Icon name="clock" size={13} /> ~{plan.estimatedMinutes} phút · {plan.steps.length} bước
+            · <Icon name={PERSONA_ICONS[plan.persona]} size={13} /> {PERSONA_LABELS[plan.persona]}
           </p>
           {plan.note && <p className="director-plan-note">{plan.note}</p>}
           <ol className="director-steps">
@@ -420,31 +480,78 @@ export function DirectorTab(): React.ReactElement {
               return (
                 <li key={s.id} className={classes}>
                   <span className="director-step-id">
-                    {resultsForStep?.ok ? '✓' : resultsForStep ? '✗' : isCurrent ? '▶' : s.id}
+                    {resultsForStep?.ok ? (
+                      <Icon name="check" size={14} />
+                    ) : resultsForStep ? (
+                      <Icon name="x" size={14} />
+                    ) : isCurrent ? (
+                      <Icon name="play" size={12} />
+                    ) : (
+                      s.id
+                    )}
                   </span>
                   <div className="director-step-body">
                     <span className="director-step-tool">{toolLabel(s.tool)}</span>
                     <span className="director-step-why">{s.why}</span>
                     {resultsForStep && !resultsForStep.ok && resultsForStep.error && (
                       <span className="director-step-err" title={resultsForStep.error}>
-                        ⚠ {resultsForStep.error.slice(0, 80)}
+                        <Icon name="alert" size={12} /> {resultsForStep.error.slice(0, 80)}
                       </span>
                     )}
                   </div>
-                  {s.checkpoint && <span className="director-step-cp">⏸</span>}
+                  {s.checkpoint && (
+                    <span className="director-step-cp" title="Điểm dừng kiểm tra">
+                      <Icon name="pause" size={12} />
+                    </span>
+                  )}
                 </li>
               );
             })}
           </ol>
           {!progress && (
-            <div className="director-plan-actions">
-              <button className="director-primary" onClick={() => void execute()} disabled={busy}>
-                ▶ Chạy kế hoạch
-              </button>
-              <button className="director-secondary" onClick={reset}>
-                Huỷ
-              </button>
-            </div>
+            <>
+              <div className="director-plan-actions">
+                <ClickBox
+                  className="director-primary"
+                  onClick={() => void execute()}
+                  disabled={busy}
+                >
+                  <Icon name="play" size={15} /> Chạy kế hoạch
+                </ClickBox>
+                <button className="director-secondary" onClick={reset}>
+                  Huỷ
+                </button>
+              </div>
+              {/* B3 — tinh chỉnh kế hoạch TRƯỚC khi chạy (không phải ghi-timeline-rồi-mới-sửa). */}
+              <div className="director-refine">
+                <div className="director-label-row">
+                  <label htmlFor="refine-pre">Chưa ưng? Tinh chỉnh trước khi chạy</label>
+                  <HelpButton
+                    title="Tinh chỉnh trước khi chạy"
+                    lines={[
+                      'Mô tả điều muốn đổi, AI tạo kế hoạch mới dựa trên kế hoạch này — CHƯA ghi gì lên timeline.',
+                    ]}
+                    example="Cắt nhanh hơn, mỗi cảnh tối đa 3 giây, màu ấm hơn"
+                  />
+                </div>
+                <textarea
+                  id="refine-pre"
+                  className="director-custom-goal"
+                  placeholder="Ví dụ: cắt nhanh hơn, màu ấm hơn, bỏ phần lặng"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  disabled={busy}
+                  rows={2}
+                />
+                <ClickBox
+                  className="director-secondary"
+                  onClick={() => void refine()}
+                  disabled={busy || !feedback.trim()}
+                >
+                  <Icon name="wand" size={15} /> Tinh chỉnh
+                </ClickBox>
+              </div>
+            </>
           )}
         </section>
       )}
@@ -473,17 +580,17 @@ export function DirectorTab(): React.ReactElement {
             Bước {progress.currentStep}/{progress.totalSteps} · {progressLabel(progress.status)}
           </div>
           {progress.status === 'running' && (
-            <button className="director-secondary" onClick={() => void cancel()}>
-              ⏹ Dừng
-            </button>
+            <ClickBox className="director-secondary" onClick={() => void cancel()}>
+              <Icon name="stop" size={15} /> Dừng
+            </ClickBox>
           )}
           {(progress.status === 'done' ||
             progress.status === 'error' ||
             progress.status === 'cancelled') && (
             <>
-              <button className="director-secondary" onClick={reset}>
-                🔄 Kế hoạch mới
-              </button>
+              <ClickBox className="director-secondary" onClick={reset}>
+                <Icon name="refresh" size={15} /> Kế hoạch mới
+              </ClickBox>
               <div className="director-refine">
                 <div className="director-label-row">
                   <label htmlFor="refine-input">Tinh chỉnh kế hoạch này</label>
@@ -504,13 +611,13 @@ export function DirectorTab(): React.ReactElement {
                   disabled={busy}
                   rows={2}
                 />
-                <button
+                <ClickBox
                   className="director-secondary"
                   onClick={() => void refine()}
                   disabled={busy || !feedback.trim()}
                 >
-                  🔁 Tinh chỉnh
-                </button>
+                  <Icon name="wand" size={15} /> Tinh chỉnh
+                </ClickBox>
               </div>
             </>
           )}
@@ -529,10 +636,10 @@ function progressLabel(status: PlanStatus): string {
     case 'paused':
       return 'tạm dừng';
     case 'done':
-      return '✅ hoàn thành';
+      return 'hoàn thành';
     case 'cancelled':
       return 'đã huỷ';
     case 'error':
-      return '❌ có lỗi';
+      return 'có lỗi';
   }
 }

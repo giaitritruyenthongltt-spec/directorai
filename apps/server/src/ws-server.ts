@@ -11,9 +11,10 @@ import {
   PROGRESS_CANCEL_METHOD,
   type ProgressCancelParams,
 } from '@directorai/shared';
-import type { IPremiereAdapter } from '@directorai/premiere-adapter';
+import { type IPremiereAdapter, isMutatingMethod } from '@directorai/premiere-adapter';
 import { dispatchRpc } from './rpc-dispatcher.js';
 import { ProgressBus } from './progress-bus.js';
+import { opsLog } from './ops-log.js';
 
 export type NlQueryHandler = (input: { prompt: string; maxTurns?: number }) => Promise<unknown>;
 export type ContextHandler = (method: string, params: unknown) => Promise<unknown>;
@@ -42,6 +43,43 @@ export interface WsServerOptions {
   onFirstRun?: FirstRunHandler;
   /** Optional handler for `director.*` RPC methods (Sprint H.2 AI Director). */
   onDirector?: (method: string, params: unknown) => Promise<unknown>;
+  /**
+   * Optional composite-tool probe (CompositeTools.maybeHandle). Tried for
+   * tool calls BEFORE forwarding to the panel: returns the result on a hit,
+   * or `null` on a miss (then falls through to panel/primitive dispatch).
+   * Lets `safe.*` + composite `context.*`/`timeline.*` be called directly
+   * over WS, not just inside the Director plan executor.
+   */
+  onComposite?: (method: string, params: unknown) => Promise<unknown | null>;
+  /**
+   * R1+R3 — Batch xử-lý-cả-thư-mục headless (`recut.batch.folder`). Tách khỏi
+   * onComposite vì chạy nhiều phút/giờ → cần AbortSignal (Hủy) + onProgress
+   * (tiến độ per-file). ws-server mở 1 op trên ProgressBus, forward update về
+   * panel theo socket gốc, và abort khi panel gửi progress.cancel.
+   */
+  onRecutBatch?: (
+    params: unknown,
+    ctx: {
+      signal: AbortSignal;
+      onProgress: (done: number, total: number, label?: string) => void;
+    }
+  ) => Promise<unknown>;
+  /**
+   * B4 — context.buildEditPlan với tiến độ per-clip + Hủy. Gemini Vision chạy
+   * từng clip (phút) → cần progress; cùng kiểu onRecutBatch (signal + onProgress).
+   */
+  onBuildPlan?: (
+    params: unknown,
+    ctx: {
+      signal: AbortSignal;
+      onProgress: (done: number, total: number, label?: string) => void;
+    }
+  ) => Promise<unknown>;
+  /**
+   * P1 — Khi true, TỪ CHỐI method mutating nếu không có panel (chống "thành
+   * công giả" trên mock). Mặc định false. Đặt qua env REQUIRE_PANEL_FOR_MUTATION.
+   */
+  requirePanelForMutation?: boolean;
 }
 
 export interface RunningWsServer {
@@ -71,6 +109,7 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
   let activePanel: WebSocket | null = null;
   const pending = new Map<number, PendingResponse>();
   let outboundIdSeq = 1_000_000; // separate from inbound id space
+  let ridSeq = 0; // P1/P4 — correlation id mỗi RPC để lần 1 job xuyên log
 
   // P4.02 — progress bus + per-op originating-socket map. We need the
   // map so an event tied to an opId is forwarded only to the socket that
@@ -123,6 +162,84 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       return;
     }
 
+    // B4 — context.buildEditPlan (FilmTab): tiến độ per-clip Gemini Vision + Hủy.
+    if (req.method === 'context.buildEditPlan' && opts.onBuildPlan) {
+      const { opId, signal } = progress.start(req.method);
+      opOrigin.set(opId, ws);
+      try {
+        const result = await opts.onBuildPlan(req.params, {
+          signal,
+          onProgress: (done, total, label) => progress.update(opId, done, { total, label }),
+        });
+        progress.end(opId, signal.aborted ? 'cancelled' : 'completed');
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        const cancelled =
+          signal.aborted ||
+          (typeof err === 'object' &&
+            err !== null &&
+            (err as { name?: string }).name === 'AbortError');
+        progress.end(
+          opId,
+          cancelled ? 'cancelled' : 'error',
+          err instanceof Error ? err.message : String(err)
+        );
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: cancelled ? RpcErrorCode.CANCELLED : RpcErrorCode.INTERNAL_ERROR,
+            message: err instanceof Error ? err.message : 'buildEditPlan failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
+      return;
+    }
+
+    // R1+R3 — recut.batch.folder: batch headless dài (phút/giờ) với tiến độ +
+    // Hủy. Mở op trên ProgressBus → forward update theo socket gốc; Hủy =
+    // progress.cancel → AbortSignal → vòng lặp batch dừng giữa các file.
+    if (req.method === 'recut.batch.folder') {
+      if (!opts.onRecutBatch) {
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: { code: RpcErrorCode.METHOD_NOT_FOUND, message: 'recut.batch.folder unavailable' },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      const { opId, signal } = progress.start(req.method);
+      opOrigin.set(opId, ws);
+      try {
+        const result = await opts.onRecutBatch(req.params, {
+          signal,
+          onProgress: (done, total, label) => progress.update(opId, done, { total, label }),
+        });
+        progress.end(opId, signal.aborted ? 'cancelled' : 'completed');
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        const cancelled =
+          signal.aborted ||
+          (typeof err === 'object' &&
+            err !== null &&
+            (err as { name?: string }).name === 'AbortError');
+        progress.end(
+          opId,
+          cancelled ? 'cancelled' : 'error',
+          err instanceof Error ? err.message : String(err)
+        );
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: cancelled ? RpcErrorCode.CANCELLED : RpcErrorCode.INTERNAL_ERROR,
+            message: err instanceof Error ? err.message : 'batch failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
+      return;
+    }
+
     // Special: LLM-driven natural-language query (handled server-side)
     if (req.method === 'nl.query') {
       if (!opts.onNlQuery) {
@@ -150,6 +267,32 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
         } satisfies JsonRpcErrorResponse);
       }
       return;
+    }
+
+    // Composite tools (safe.*, module.*, composite context.*/timeline.*) —
+    // probed BEFORE all namespace routers + panel-forward. maybeHandle
+    // returns null on miss → fall through (real context.*/timeline.* still
+    // reach their routers / the panel). Composites run in-server and may
+    // issue primitive calls back through the panel adapter.
+    if (opts.onComposite) {
+      try {
+        const handled = await opts.onComposite(req.method, req.params);
+        if (handled !== null) {
+          send(ws, { jsonrpc: '2.0', id: req.id, result: handled } satisfies JsonRpcSuccess);
+          return;
+        }
+      } catch (err) {
+        opts.logger.warn({ method: req.method, err }, 'composite RPC error');
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message: err instanceof Error ? err.message : 'composite call failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
     }
 
     // Special: style.* methods → server-side planner+executor
@@ -319,18 +462,26 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
     }
 
     // If a panel is connected and this is a tool call, forward to panel.
+    // (Mutation logging xảy ra TRONG callPanel — chokepoint DUY NHẤT, bắt cả
+    // mutation phát từ composite/plan, không chỉ forward trực tiếp.)
     if (activePanel && activePanel !== ws && activePanel.readyState === activePanel.OPEN) {
       try {
         const result = await callPanel(req.method, req.params);
         send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
       } catch (err) {
-        opts.logger.warn({ method: req.method, err }, 'Panel RPC error');
+        // P2 — ngữ cảnh lỗi đầy đủ: message + data(method/stack/params) từ panel.
+        const data = (err as { data?: unknown })?.data;
+        opts.logger.warn(
+          { method: req.method, params: req.params, err: String(err), data },
+          'Panel RPC error'
+        );
         send(ws, {
           jsonrpc: '2.0',
           id: req.id,
           error: {
             code: RpcErrorCode.ADAPTER_ERROR,
             message: err instanceof Error ? err.message : 'Panel call failed',
+            ...(data !== undefined ? { data } : {}),
           },
         } satisfies JsonRpcErrorResponse);
       }
@@ -338,12 +489,59 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
     }
 
     // No panel: dispatch locally on the mock fallback, with progress tracking.
+    const ridMock = `r${++ridSeq}`;
+    const mutatingMock = isMutatingMethod(req.method);
+    const t0Mock = Date.now();
+    if (mutatingMock) {
+      // P1 — GUARD: nếu yêu cầu panel cho mutation → TỪ CHỐI (không "thành công giả").
+      if (opts.requirePanelForMutation) {
+        opsLog.recordMutation({
+          rid: ridMock,
+          method: req.method,
+          adapter: 'mock',
+          ok: false,
+          durationMs: 0,
+          params: req.params,
+          error: 'REQUIRE_PANEL_FOR_MUTATION: không có panel Premiere kết nối',
+        });
+        opts.logger.warn(
+          { rid: ridMock, method: req.method },
+          '⛔ TỪ CHỐI mutation: không có panel (REQUIRE_PANEL_FOR_MUTATION bật)'
+        );
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: RpcErrorCode.ADAPTER_ERROR,
+            message:
+              'Không có panel Premiere kết nối — mutation bị từ chối (REQUIRE_PANEL_FOR_MUTATION). Mở panel DirectorAI trong Premiere rồi thử lại.',
+          },
+        } satisfies JsonRpcErrorResponse);
+        return;
+      }
+      // CẢNH BÁO: mutation lúc không có panel = chạy MOCK, KHÔNG đụng timeline thật.
+      opts.logger.warn(
+        { rid: ridMock, method: req.method },
+        '⚠️ MUTATION trên MOCK (không có panel) — KHÔNG đụng timeline thật'
+      );
+    }
     const { opId, signal } = progress.start(req.method);
     opOrigin.set(opId, ws);
     try {
       const result = await dispatchRpc(req.method, req.params, opts.fallbackAdapter, {
         signal,
       });
+      if (mutatingMock) {
+        opsLog.recordMutation({
+          rid: ridMock,
+          method: req.method,
+          adapter: 'mock',
+          ok: true,
+          durationMs: Date.now() - t0Mock,
+          params: req.params,
+          result,
+        });
+      }
       progress.end(opId, 'completed');
       send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
     } catch (err) {
@@ -379,7 +577,7 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
     else handler.reject(new Error(msg.error.message));
   };
 
-  const callPanel = <T = unknown>(
+  const rawCallPanel = <T = unknown>(
     method: string,
     params?: unknown,
     timeoutMs = DEFAULT_PANEL_CALL_TIMEOUT
@@ -402,6 +600,47 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       const req: JsonRpcRequest = { jsonrpc: '2.0', id, method, params };
       send(activePanel, req);
     });
+  };
+
+  /**
+   * P1 — `callPanel` là CHOKEPOINT mọi lệnh gửi tới panel (forward trực tiếp
+   * LẪN lệnh primitive phát từ composite/plan). Log mutation TẠI ĐÂY ⇒ bắt
+   * TOÀN BỘ cắt/ghép, kể cả trong safe.applyPlan. Read (non-mutating) bỏ qua.
+   */
+  const callPanel = <T = unknown>(
+    method: string,
+    params?: unknown,
+    timeoutMs = DEFAULT_PANEL_CALL_TIMEOUT
+  ): Promise<T> => {
+    if (!isMutatingMethod(method)) return rawCallPanel<T>(method, params, timeoutMs);
+    const rid = `r${++ridSeq}`;
+    const t0 = Date.now();
+    return rawCallPanel<T>(method, params, timeoutMs).then(
+      (result) => {
+        opsLog.recordMutation({
+          rid,
+          method,
+          adapter: 'real',
+          ok: true,
+          durationMs: Date.now() - t0,
+          params,
+          result,
+        });
+        return result;
+      },
+      (err: unknown) => {
+        opsLog.recordMutation({
+          rid,
+          method,
+          adapter: 'real',
+          ok: false,
+          durationMs: Date.now() - t0,
+          params,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+    );
   };
 
   wss.on('connection', (ws) => {
@@ -437,10 +676,21 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
         } else if (m === '_panel.error') {
           // L1 — panel-side window error or unhandled rejection.
           opts.logger.error({ params }, 'panel error reported');
+          opsLog.record({ event: 'panel.error', ...(params as Record<string, unknown>) });
         } else if (m === '_panel.console') {
           // A4 — forward panel console.* to server log for live debug.
           const p = params as { level?: string; text?: string };
           opts.logger.info({ panelConsole: p.text }, `panel console [${p.level}]`);
+        } else if (m === '_panel.log') {
+          // P3 — log panel BỀN: error/warn từ LogDrawer đẩy về ops.log để
+          // còn dấu vết sau khi panel reload/crash.
+          const p = (params ?? {}) as { level?: string; src?: string; msg?: string };
+          opsLog.record({
+            event: 'panel.log',
+            level: p.level ?? 'info',
+            src: p.src ?? 'panel',
+            msg: typeof p.msg === 'string' ? p.msg.slice(0, 1000) : String(p.msg),
+          });
         }
       }
     });

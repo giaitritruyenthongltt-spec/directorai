@@ -6,6 +6,12 @@ export const ServerConfigSchema = z.object({
   host: z.string().default('127.0.0.1'),
   port: z.number().int().min(1).max(65535).default(7777),
   wsPort: z.number().int().min(1).max(65535).default(7778),
+  /**
+   * Khi true: TỪ CHỐI mọi method mutating nếu KHÔNG có panel Premiere kết nối
+   * (thay vì âm thầm chạy mock = "thành công giả"). Mặc định false để mock-test
+   * (dev/CI không cần Premiere) vẫn chạy. Bật qua env REQUIRE_PANEL_FOR_MUTATION=1.
+   */
+  requirePanelForMutation: z.boolean().default(false),
 });
 
 export const LLMConfigSchema = z.object({

@@ -1,0 +1,97 @@
+/* UI5 — Khung Timeline/Chương. */
+
+.ct-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+  margin: var(--sp-4) 0;
+}
+.ct-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--sp-4);
+}
+.ct-head-title {
+  font-weight: 600;
+  font-size: var(--fs-base);
+}
+.ct-head-meta {
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+/* Dải băng tỉ lệ */
+.ct-bar {
+  display: flex;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--sp-5);
+}
+.ct-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  border-right: 1px solid rgba(0, 0, 0, 0.35);
+  transition: filter var(--t-fast);
+}
+.ct-seg:last-child {
+  border-right: none;
+}
+.ct-seg:hover {
+  filter: brightness(1.15);
+}
+.ct-seg-label {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+/* Danh sách chương */
+.ct-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.ct-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+}
+.ct-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ct-item-idx {
+  font-weight: 700;
+  color: var(--text-dim);
+  min-width: 16px;
+}
+.ct-item-name {
+  flex: 1;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ct-item-purpose {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+}
+.ct-item-meta {
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}

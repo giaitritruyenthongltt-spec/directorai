@@ -1,0 +1,86 @@
+# Chuỗi phase: DirectorAI → Phim Nerf điện ảnh (Long-form pivot)
+
+> Quyết định người dùng (2026-06-02): dựng **phim Nerf có cốt truyện** (3 hồi,
+> chương, mạch nhân vật, màu/nhạc theo đoạn), KHÔNG phải shorts. UI: **chuẩn
+> hóa + thêm timeline** (không đập đi xây lại từ 0). Thứ tự: Claude tự xếp.
+>
+> Chẩn đoán nền (4 agent phân tích sâu — xem `docs/research/longform-audit`):
+> cả template/preset/planner/cutOnBeats/data-model/UI/scale đều **bias montage
+> 45s**. Giữ nguyên 3 tầng tốt: kiến trúc AI 4 tầng, cơ chế an toàn
+> (preview+checkpoint+approval), adapter ghi thật. Làm mạnh tay 2 tầng:
+> planner/template (long-form) và UI (chuẩn hóa + timeline).
+
+Thứ tự thực thi: **S (nền tảng) → DM (data model) → LF (bộ não) → UI**.
+
+---
+
+## Nhóm S — Nền tảng scale (để 413 clip chạy nhanh, không treo)
+
+Nguồn: agent #4 đo được 3 nút thắt. Mục tiêu: exec 413 clip **80s → ~25s**,
+100 thao tác → **1 undo** thay vì 100.
+
+| Phase  | Việc                                                                  | Trạng thái                                                                                                                                                                   |
+| ------ | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S1** | Dedup `listClips` — cache theo sequenceId, mọi mutation xóa. Bỏ 3×→1× | ✅ XONG (commit)                                                                                                                                                             |
+| **S2** | ~~Tối ưu `applyMovesToOrder`~~                                        | ❌ BỎ — agent tính nhầm: code hiện tại đã là O(K·M) (indexOf+2×splice mỗi O(K), lặp M lần), 413×10≈4.130 thao tác, đủ nhanh                                                  |
+| **S3** | Cache `findTrackItem` bền qua mutation                                | ⏸️ HOÃN — rủi ro: clip không có nodeId dùng synthetic id `track:ticks:name`; MOVE/TRIM đổi start→đổi id→cache cũ. Giá trị có điều kiện. Revisit sau khi apply live chạy được |
+| **S4** | Gộp N mutation → 1 transaction (1 undo)                               | ⏸️ HOÃN — refactor lớn plan-executor; làm khi vào tối ưu apply sâu                                                                                                           |
+| **S5** | Perf smoke 413 clip                                                   | ⏸️ Cần mở Premiere live (đo trước/sau)                                                                                                                                       |
+
+> Kết luận nhóm S: **S1 là nút thắt THẬT duy nhất** (đã sửa). Phần còn lại là
+> micro-opt rủi ro/điều kiện → hoãn để dồn sức vào DM+LF (giá trị cốt lõi cho
+> phim điện ảnh). Trung thực: không sửa thừa.
+
+## Nhóm DM — Mô hình dữ liệu long-form (chương/đoạn/vai trò track)
+
+Nguồn: agent #1 + #4 — data model phẳng, thiếu chapter/segment/track-role/
+metadata. Cần cho phim có cốt truyện.
+
+| Phase   | Việc                                                          | Trạng thái                                                |
+| ------- | ------------------------------------------------------------- | --------------------------------------------------------- |
+| **DM1** | Mở rộng `core` types (Chapter/Segment/TrackRole/ClipMetadata) | ✅ XONG — narrative.ts, optional fields, 8 core test pass |
+| **DM2** | Adapter đọc marker→chapter + track role                       | ⏸️ cần Premiere live (introspect marker API)              |
+| **DM3** | Ghi chapter marker                                            | ⏸️ cần Premiere live (sau introspect)                     |
+
+## Nhóm LF — Bộ não long-form (tinh túy của lần pivot này)
+
+Nguồn: agent #1 + #2. Định hướng lại planner + template cho phim điện ảnh.
+
+| Phase   | Việc                                                      | Trạng thái                                                                                                                  |
+| ------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **LF1** | Schema request planner (duration/keep/pacing/structure)   | ✅ XONG — models+endpoint+composite+preview/apply, LongformOptions                                                          |
+| **LF2** | Prompt planner điện ảnh (3 hồi, mạch nhân vật, ngân sách) | ✅ XONG — giữ ràng buộc safe ops                                                                                            |
+| **LF3** | Output lớp tự sự `chapters` (chương→clip)                 | ✅ XONG — \_sanitize_chapters, EditPlan.chapters, 6 pytest                                                                  |
+| **LF4** | Module **cắt dead-air/khoảng lặng tự động**               | ✅ XONG — dead_air.py + /audio/dead_air + context.planDeadAir→EditPlan, 6 pytest                                            |
+| **LF5** | Nhịp theo nội dung (pacing curve)                         | ✅ COVERED — prompt LF2 đã "nhịp biến đổi build→cao trào→lắng" + chapters[].pacing                                          |
+| **LF6** | Sửa cut cho clip dài                                      | ⛔ CHẶN — Premiere 26 KHÔNG có split action (cutClip ném lỗi). Chỉ trim (1 đoạn/clip) hoặc FCPXML pre-cut. Không giả vờ sửa |
+| **LF7** | Template điện ảnh Nerf (3 hồi/recap/chương)               | ✅ XONG — 3 template long-form mang LongformOptions, 11 test                                                                |
+| **LF8** | Scale Vision 413 clip                                     | ✅ XONG — vision_budget.sample_for_vision (cap lấy mẫu đều, default 150), 4 pytest, log minh bạch                           |
+
+## Nhóm UI — Chuẩn hóa + timeline (lộ ra năng lực long-form)
+
+Nguồn: agent #3. Refactor có kiểm soát (giữ tính năng), KHÔNG xóa sạch.
+
+| Phase   | Việc                              | Trạng thái                                                                               |
+| ------- | --------------------------------- | ---------------------------------------------------------------------------------------- |
+| **UI1** | Design tokens                     | ✅ XONG — tokens.css + alias `--ui-*`→chuẩn                                              |
+| **UI2** | Component dùng chung              | ✅ XONG — ui/primitives (Section/Button/Badge/ErrorBox/EmptyState/Field)                 |
+| **UI3** | Chuẩn hóa state                   | ✅ XONG — hook useAsync (busy/error/result)                                              |
+| **UI4** | Gộp tab thành 1 luồng "Dựng phim" | ✅ XONG — FilmTab "🎞️ Phim dài" (tab mặc định): nạp→template→kế hoạch→dead-air→duyệt→ghi |
+| **UI5** | **Khung Timeline/Chương**         | ✅ XONG — ChapterTimeline (dải băng tỉ lệ + list chương tô màu theo mục đích)            |
+| **UI6** | Trình duyệt clip (bảng)           | ✅ XONG — ClipTable (lọc/sắp 400+ clip, cảnh báo chưa map path)                          |
+| **UI7** | Điều khiển màu/nhạc theo chương   | ⏸️ HOÃN — cần color apply theo chương + verify live; là feature riêng lớn hơn            |
+| **UI8** | Đồng bộ theme host Premiere       | ✅ XONG — palette sáng + getHostTheme + data-theme                                       |
+
+---
+
+## Tiêu chí "xong" mỗi nhóm
+
+- **S**: smoke 413 clip preview <5s, apply 100 step <25s, 1 undo; tất cả test cũ xanh.
+- **DM**: core types có chapter/segment/role + metadata; adapter đọc được; test.
+- **LF**: planner nhận thời lượng mục tiêu + sinh bản đồ timeline có chương; dead-air
+  trim chạy trên clip Nerf thật; template điện ảnh thay 45s.
+- **UI**: design token thống nhất; 1 luồng dựng phim; timeline/chương hiển thị
+  413 clip mượt; theme đồng bộ host.
+
+> Ghi chú: C9 (verify ghi thật) vẫn treo — sẽ verify live khi user mở sequence test.

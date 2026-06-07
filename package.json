@@ -20,6 +20,10 @@
     "clean": "turbo run clean && rimraf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "smoke:functions": "node tools/function-smoke.mjs",
+    "smoke:write": "node tools/live-write-verify.mjs",
+    "test:job": "node tools/jobtest-tap11.mjs",
+    "test:job-write": "node tools/jobtest-write-tap11.mjs",
     "bench:perf": "tsx tools/perf-bench.ts",
     "bench:memory": "tsx --expose-gc tools/memory-soak.ts",
     "bundle:ccx": "tsx tools/bundle-ccx.ts",
@@ -46,6 +50,8 @@
     "smoke:rough-cut": "tsx tools/smoke-rough-cut.ts",
     "smoke:mvp": "tsx tools/smoke-mvp.ts",
     "smoke:plan-a": "tsx tools/smoke-plan-a.ts",
+    "smoke:safe-dryrun": "tsx tools/smoke-safe-dryrun.ts",
+    "smoke:live-write": "tsx tools/smoke-live-write.ts",
     "ops:tail": "tsx tools/tail-ops.ts",
     "prepare": "husky"
   },
@@ -54,6 +60,9 @@
     "@commitlint/config-conventional": "^19.5.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.7.0",
+    "@types/ws": "^8.5.13",
+    "@types/yauzl": "^2.10.3",
+    "@types/yazl": "^3.3.0",
     "@typescript-eslint/eslint-plugin": "^8.8.0",
     "@typescript-eslint/parser": "^8.8.0",
     "eslint": "^9.12.0",
@@ -69,11 +78,8 @@
     "typescript-eslint": "^8.59.4",
     "vitest": "^2.1.2",
     "ws": "^8.18.0",
-    "@types/ws": "^8.5.13",
-    "yazl": "^3.3.1",
-    "@types/yazl": "^3.3.0",
     "yauzl": "^3.2.0",
-    "@types/yauzl": "^2.10.3"
+    "yazl": "^3.3.1"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [

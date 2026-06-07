@@ -1,5 +1,6 @@
 import type { Seconds, TimeRange } from './time.js';
 import type { Effect } from './effect.js';
+import type { ClipMetadata } from './narrative.js';
 
 export type ClipKind = 'video' | 'audio' | 'still' | 'title' | 'adjustment';
 
@@ -20,4 +21,6 @@ export interface Clip {
   readonly source: MediaSource;
   readonly effects: readonly Effect[];
   readonly enabled: boolean;
+  /** DM1 — metadata phân tích (Vision/CV), optional để tương thích ngược. */
+  readonly metadata?: ClipMetadata;
 }

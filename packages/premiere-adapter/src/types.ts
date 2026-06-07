@@ -149,6 +149,15 @@ export interface INLEAdapter {
   deleteClip(clipId: string): Promise<void>;
   /** A3 — Tắt/bật clip (disable). An toàn hơn xoá; dùng cho "lọc clip kém". */
   setClipDisabled(clipId: string, disabled: boolean): Promise<void>;
+  /** SAFE-1b — Đổi tên clip trên timeline (createSetNameAction). Dùng cho
+   *  "đổi tên theo cảnh". An toàn, hoàn tác được. */
+  renameClip(clipId: string, newName: string): Promise<void>;
+  /**
+   * SAFE-1e — Tỉa nội dung clip theo in/out (giây, gốc nguồn) mà KHÔNG dịch
+   * vị trí trên timeline → an toàn, không gây chồng lấn. Dùng cho "tỉa phần
+   * thừa / cắt khoảng lặng". createSetInPoint + createSetOutPoint. inSec < outSec.
+   */
+  setClipInOut(clipId: string, inSec: Seconds, outSec: Seconds): Promise<void>;
 
   listTracks(sequenceId: string): Promise<readonly Track[]>;
 
@@ -168,13 +177,19 @@ export interface INLEAdapter {
   setColorParams(input: ColorParamsInput): Promise<void>;
 
   setAudioGain(input: AudioGainInput): Promise<void>;
+  /** Đọc gain (Level dB) hiện tại của clip audio — để hoàn tác setAudioGain. */
+  getAudioGain(clipId: string): Promise<number>;
   addAudioFade(input: AudioFadeInput): Promise<void>;
   muteTrack(sequenceId: string, trackId: string, muted: boolean): Promise<void>;
 
   addTextOverlay(input: TextOverlayInput): Promise<{ clipId: string }>;
 
   applyTransition(input: TransitionInput): Promise<void>;
+  /** Xoá chuyển cảnh ở ĐẦU (atStart=true, mặc định) hoặc CUỐI clip — inverse của applyTransition. */
+  removeTransition(clipId: string, atStart?: boolean): Promise<void>;
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]>;
+  /** Liệt kê component (hiệu ứng) trên 1 clip — để verify apply/remove. */
+  listClipEffects(clipId: string): Promise<readonly { matchName: string; displayName: string }[]>;
 
   beginUndoGroup(label: string): Promise<void>;
   endUndoGroup(): Promise<void>;

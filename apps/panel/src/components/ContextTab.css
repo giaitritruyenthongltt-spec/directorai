@@ -1,114 +1,214 @@
+/* Tab Nâng cao — Bộ máy ngữ cảnh. R5 redesign: thẻ + icon + empty state. */
+
 .context-tab {
+  padding: var(--sp-5) var(--sp-6) 40px;
+  color: var(--text);
+  font-size: var(--fs-base);
+  /* U-Wide — dùng nhiều bề ngang ở panel rộng. */
+  max-width: min(1040px, 100%);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  font-size: 12px;
-  color: #ddd;
+  gap: var(--sp-5);
 }
 
-.ctx-header {
+/* ── Tiêu đề + sức khỏe sidecar ─────────────────────────────────────── */
+.ctx-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
 }
-
-.ctx-header h3 {
+.ctx-title {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  color: var(--accent);
+}
+.ctx-title h3 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--fs-xl);
+  color: var(--text);
 }
-
+.ctx-subtitle {
+  margin: 2px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
 .ctx-health {
-  font-size: 11px;
-  color: #999;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  white-space: nowrap;
+  padding-top: 4px;
 }
-
 .ctx-health.ok {
-  color: #4caf50;
+  color: var(--success);
 }
-
 .ctx-health.err {
-  color: #f44336;
+  color: var(--error);
+}
+.ctx-health-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-bg);
 }
 
-.ctx-row {
+/* ── Thẻ (card) — gom nhóm chức năng, có chiều sâu ──────────────────── */
+.ctx-card {
+  background: var(--layer-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+  box-shadow: var(--shadow-1);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-4);
+}
+.ctx-card-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-dim);
 }
 
-.ctx-row label {
-  font-size: 11px;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.ctx-row input {
-  background: #1f1f23;
-  border: 1px solid #333;
-  border-radius: 4px;
-  color: #fff;
-  padding: 6px 8px;
+/* ── Ô nhập ─────────────────────────────────────────────────────────── */
+.ctx-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--fs-md);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
 }
-
-.ctx-row input:focus {
+.ctx-input:focus {
   outline: none;
-  border-color: #5b9bd5;
+  border-color: var(--accent);
+  box-shadow: var(--ring-focus);
 }
 
+/* ── Lưới nút thao tác ──────────────────────────────────────────────── */
 .ctx-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-3);
 }
-
-.ctx-actions button,
-.ctx-row button {
-  background: #2b2b30;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #ddd;
-  padding: 6px 10px;
+.ctx-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  padding: var(--sp-4);
+  text-align: left;
+  transition: border-color var(--t-fast), background var(--t-fast), color var(--t-fast);
 }
-
-.ctx-actions button:hover:not(:disabled),
-.ctx-row button:hover:not(:disabled) {
-  background: #3a3a40;
-  border-color: #5b9bd5;
+.ctx-action-btn .icon {
+  color: var(--accent);
 }
-
-.ctx-actions button:disabled,
-.ctx-row button:disabled {
-  opacity: 0.4;
+.ctx-action-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.ctx-action-btn:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
+/* ── Hàng tìm kiếm ──────────────────────────────────────────────────── */
+.ctx-search-row {
+  display: flex;
+  gap: var(--sp-3);
+}
+.ctx-search-row .ctx-input {
+  flex: 1;
+}
+.ctx-search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: var(--grad-accent);
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  cursor: pointer;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  padding: var(--sp-4) var(--sp-5);
+  white-space: nowrap;
+  transition: filter var(--t-fast);
+}
+.ctx-search-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.ctx-search-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Trạng thái: bận / lỗi / kết quả / rỗng ─────────────────────────── */
 .ctx-busy {
-  color: #ffb74d;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--accent);
+  font-size: var(--fs-md);
 }
-
 .ctx-error {
-  color: #f44336;
-  font-size: 12px;
-  white-space: pre-wrap;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  color: var(--error);
+  padding: var(--sp-4);
+  font-size: var(--fs-md);
 }
-
 .ctx-result {
-  background: #18181b;
-  border: 1px solid #2a2a2e;
-  border-radius: 4px;
-  padding: 8px;
-  font-size: 11px;
-  max-height: 320px;
-  overflow: auto;
   margin: 0;
+  background: var(--bg);
+  border-radius: var(--radius-md);
+  padding: var(--sp-4);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text);
   white-space: pre-wrap;
   word-break: break-word;
+  max-height: min(46vh, 420px);
+  overflow: auto;
+}
+.ctx-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-8) var(--sp-5);
+  color: var(--text-dim);
+  text-align: center;
+}
+.ctx-empty .icon {
+  opacity: 0.5;
+}
+.ctx-empty p {
+  margin: 0;
+  font-size: var(--fs-md);
+  max-width: 320px;
 }

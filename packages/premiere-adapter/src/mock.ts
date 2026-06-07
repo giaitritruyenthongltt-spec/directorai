@@ -259,6 +259,24 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     (clip as { enabled?: boolean }).enabled = !disabled;
   }
 
+  async renameClip(clipId: string, newName: string): Promise<void> {
+    if (!newName || !newName.trim()) throw new Error('renameClip: newName rỗng');
+    const { clip } = this.findClip(clipId);
+    (clip as { name?: string }).name = newName;
+  }
+
+  async setClipInOut(clipId: string, inSec: Seconds, outSec: Seconds): Promise<void> {
+    if (!(outSec > inSec)) throw new Error(`setClipInOut: outSec phải > inSec`);
+    const { clip } = this.findClip(clipId);
+    const dur = (outSec - inSec) as Seconds;
+    // Giữ vị trí timeline; đổi source in/out + rút thời lượng on-timeline.
+    clip.sourceRange = { start: inSec, end: outSec };
+    clip.timelineRange = {
+      start: clip.timelineRange.start,
+      end: (clip.timelineRange.start + dur) as Seconds,
+    };
+  }
+
   async listTracks(sequenceId: string): Promise<readonly Track[]> {
     const s = this.requireSequence(sequenceId);
     return s.tracks.map((t) => ({
@@ -428,6 +446,13 @@ export class MockPremiereAdapter implements IPremiereAdapter {
     }
   }
 
+  async getAudioGain(clipId: string): Promise<number> {
+    const { clip } = this.findClip(clipId);
+    const gain = clip.effects.find((e) => e.matchName === 'AudioGain');
+    const p = gain?.params.find((x) => x.name === 'gainDb');
+    return typeof p?.value === 'number' ? p.value : 0;
+  }
+
   async addAudioFade(input: AudioFadeInput): Promise<void> {
     const { clip } = this.findClip(input.clipId);
     clip.effects.push({
@@ -483,6 +508,17 @@ export class MockPremiereAdapter implements IPremiereAdapter {
   async applyTransition(input: TransitionInput): Promise<void> {
     this.findClip(input.clipIdA);
     this.findClip(input.clipIdB);
+  }
+
+  async removeTransition(clipId: string, _atStart = true): Promise<void> {
+    this.findClip(clipId);
+  }
+
+  async listClipEffects(
+    clipId: string
+  ): Promise<readonly { matchName: string; displayName: string }[]> {
+    const { clip } = this.findClip(clipId);
+    return clip.effects.map((e) => ({ matchName: e.matchName, displayName: e.matchName }));
   }
 
   async listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {

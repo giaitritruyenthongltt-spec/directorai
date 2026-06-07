@@ -29,6 +29,7 @@ this queue just await the result handle.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 import time
 import traceback
@@ -199,11 +200,9 @@ class JobQueue:
             raise JobNotFound(job_id)
         if entry.future is None:
             return entry.info
-        try:
-            entry.future.result(timeout=timeout)
-        except Exception:  # noqa: BLE001
+        with contextlib.suppress(Exception):
             # error already captured in entry.info
-            pass
+            entry.future.result(timeout=timeout)
         return entry.info
 
     def shutdown(self) -> None:
@@ -244,7 +243,7 @@ class JobQueue:
                 {"type": "status", "status": "done", "result": result, "terminal": True},
             )
             log.info("job_done", job_id=entry.info.id, label=entry.info.label)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             tb = traceback.format_exc()
             with self._lock:
                 entry.info.status = "error"
@@ -273,11 +272,9 @@ class JobQueue:
         with self._lock:
             listeners = list(entry.listeners)
         for q in listeners:
-            try:
-                entry.loop.call_soon_threadsafe(q.put_nowait, event)
-            except RuntimeError:
+            with contextlib.suppress(RuntimeError):
                 # loop is closed — listener will never receive; drop quietly
-                pass
+                entry.loop.call_soon_threadsafe(q.put_nowait, event)
 
 
 # ─── Module-level singleton ─────────────────────────────────────────────

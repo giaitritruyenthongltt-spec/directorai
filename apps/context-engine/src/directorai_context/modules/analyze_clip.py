@@ -42,7 +42,7 @@ def analyze_clip(
     *,
     sample_count: int = 10,
     max_dim: int = 1280,
-    progress_cb: "callable | None" = None,
+    progress_cb: callable | None = None,
 ) -> ClipAnalysis:
     """Sample N frames, score quality, return composite analysis.
 

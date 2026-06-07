@@ -143,6 +143,7 @@ async function main(): Promise<void> {
     port: config.server.wsPort,
     logger,
     fallbackAdapter: mockAdapter,
+    requirePanelForMutation: config.server.requirePanelForMutation,
     onNlQuery: nlRouter
       ? async (input) => {
           if (!routedAdapterRef.current) throw new Error('Adapter not ready');
@@ -157,6 +158,23 @@ async function main(): Promise<void> {
     onDirector: directorRouter
       ? (method, params) => directorRouter.dispatch(method, params)
       : undefined,
+    // SAFE-1d — cho phép gọi composite (safe.*, context.* composite, …)
+    // trực tiếp qua WS. compositeTools.current set sau startWebSocketServer
+    // nên đọc lazily trong closure.
+    onComposite: (method, params) =>
+      compositeTools.current
+        ? compositeTools.current.maybeHandle(method, params)
+        : Promise.resolve(null),
+    // R1+R3 — batch cả thư mục (cần signal + progress) qua hook riêng.
+    onRecutBatch: (params, ctx) =>
+      compositeTools.current
+        ? compositeTools.current.recutBatchFolder(params, ctx)
+        : Promise.reject(new Error('composite tools chưa sẵn sàng')),
+    // B4 — buildEditPlan với tiến độ per-clip (Gemini Vision) + Hủy.
+    onBuildPlan: (params, ctx) =>
+      compositeTools.current
+        ? compositeTools.current.buildEditPlanProgress(params, ctx)
+        : Promise.reject(new Error('composite tools chưa sẵn sàng')),
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 
@@ -175,6 +193,7 @@ async function main(): Promise<void> {
   compositeTools.current = new CompositeTools({
     adapter: routedAdapterRef.current,
     logger,
+    checkpoints: checkpointStore,
   });
   logger.info({ methods: compositeTools.current.listMethods().length }, 'Composite tools wired');
 

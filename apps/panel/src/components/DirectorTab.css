@@ -83,6 +83,9 @@
 }
 
 .director-persona-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 700;
   color: var(--ui-text, #d4d4d4);
@@ -123,6 +126,10 @@
 }
 
 .director-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
   border: none;
   color: white;
@@ -145,6 +152,10 @@
 }
 
 .director-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: transparent;
   border: 1px solid var(--ui-border, #3e3e3e);
   color: var(--ui-text, #d4d4d4);
@@ -198,6 +209,10 @@
 }
 
 .director-plan-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
   margin: 0;
   font-size: 11px;
   color: var(--ui-text-secondary, #969696);
@@ -238,6 +253,9 @@
 }
 
 .director-step-id {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--ui-text-secondary, #969696);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -323,7 +341,7 @@
 }
 
 .director-offline-icon {
-  font-size: 32px;
+  color: var(--accent, #5b9bd5);
 }
 
 .director-offline h3 {

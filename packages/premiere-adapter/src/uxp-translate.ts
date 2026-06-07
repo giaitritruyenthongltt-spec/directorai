@@ -10,13 +10,40 @@ import {
 } from '@directorai/core';
 import type {
   PProMarker,
+  PPro26Marker,
   PProProjectItem,
   PProSequence,
   PProTrack,
   PProTrackItem,
   TickTime,
   PProComponent,
+  PProModule,
 } from './uxp-ppro.js';
+
+/**
+ * PATH-FIX — Lấy đường dẫn media TUYỆT ĐỐI của 1 ProjectItem.
+ * Nguyên nhân gốc bug "chỉ basename": `getMediaFilePath()` KHÔNG có trên
+ * ProjectItem thô — nó nằm trên ClipProjectItem. Phải cast trước, rồi gọi
+ * (đồng bộ, theo tài liệu Adobe). Trả '' nếu không lấy được (synthetic/offline).
+ */
+export function resolveMediaPath(projItem: PProProjectItem, ppro?: PProModule): string {
+  // (1) Đường ĐÚNG: cast → ClipProjectItem.getMediaFilePath() (sync, full path).
+  try {
+    const clip = ppro?.ClipProjectItem?.cast?.(projItem);
+    const v = clip?.getMediaFilePath?.();
+    if (typeof v === 'string' && (v.includes('/') || v.includes('\\'))) return v;
+  } catch {
+    // ngã sang (2)
+  }
+  // (2) Dự phòng: 1 số bản có getMediaFilePath ngay trên item (sync/promise bỏ qua).
+  try {
+    const raw = (projItem as { getMediaFilePath?: () => unknown }).getMediaFilePath?.();
+    if (typeof raw === 'string' && (raw.includes('/') || raw.includes('\\'))) return raw;
+  } catch {
+    // bỏ
+  }
+  return '';
+}
 
 export function tickToSeconds(t: TickTime): Seconds {
   return seconds(t.seconds);
@@ -24,7 +51,11 @@ export function tickToSeconds(t: TickTime): Seconds {
 
 const VIDEO_MEDIA = 'Video';
 
-export async function translateTrack(track: PProTrack, index: number): Promise<Track> {
+export async function translateTrack(
+  track: PProTrack,
+  index: number,
+  ppro?: PProModule
+): Promise<Track> {
   const [mediaType, muted, locked, items] = await Promise.all([
     track.getMediaType(),
     track.isMuted(),
@@ -32,11 +63,17 @@ export async function translateTrack(track: PProTrack, index: number): Promise<T
     track.getTrackItems(1 /* ANY */, false),
   ]);
 
-  const trackKind: Track['kind'] = mediaType === VIDEO_MEDIA ? 'video' : 'audio';
+  // B2-FIX: getMediaType() khai báo string nhưng PPro26 trả SỐ (MediaType.VIDEO)
+  // → so chuỗi 'Video' luôn false. So thêm với hằng số UXP thật.
+  const videoConst = ppro?.MediaType?.VIDEO;
+  const trackKind: Track['kind'] =
+    mediaType === VIDEO_MEDIA || (videoConst !== undefined && (mediaType as unknown) === videoConst)
+      ? 'video'
+      : 'audio';
   const trackId = `${trackKind}-${index}`;
   const clips: Clip[] = [];
   for (const item of items) {
-    clips.push(await translateTrackItem(item, trackId, trackKind));
+    clips.push(await translateTrackItem(item, trackId, trackKind, ppro));
   }
 
   return {
@@ -119,9 +156,10 @@ function resolveTrackItemId(
 export async function translateTrackItem(
   item: PProTrackItem,
   trackId: string,
-  trackKind: Track['kind']
+  trackKind: Track['kind'],
+  ppro?: PProModule
 ): Promise<Clip> {
-  const [name, startT, endT, inT, outT, mediaType, projItem] = await Promise.all([
+  const [name, startT, endT, inT, outT, mediaType, projItem, disabled] = await Promise.all([
     safeAsync(
       () => item.getName(),
       () => item.name ?? 'Untitled'
@@ -138,49 +176,21 @@ export async function translateTrackItem(
       () => item.getProjectItem(),
       () => null
     ),
+    // Trạng thái tắt THẬT (PPro26 có isDisabled()). Đọc được → enabled phản
+    // ánh đúng (verify được disable/enable); lỗi → mặc định bật.
+    safeAsync(
+      () => item.isDisabled(),
+      () => false
+    ),
   ]);
 
   let sourcePath = '';
   let sourceDuration: Seconds = seconds(0);
   if (projItem) {
-    // O1/O2 — Premiere 26 sometimes returns empty string from
-    // getMediaFilePath() or throws altogether. Try every known accessor
-    // before falling back to bare name (which is useless for the sidecar
-    // because it needs an absolute path to read frames from disk).
-    const pi = projItem as PProProjectItem & {
-      mediaFilePath?: string;
-      filePath?: string;
-      path?: string;
-      getMediaPath?: () => Promise<string>;
-      getFilePath?: () => Promise<string>;
-    };
-    const tryers: { label: string; fn: () => Promise<string> | string }[] = [
-      { label: 'getMediaFilePath', fn: () => pi.getMediaFilePath() },
-      { label: 'getMediaPath', fn: () => pi.getMediaPath?.() ?? '' },
-      { label: 'getFilePath', fn: () => pi.getFilePath?.() ?? '' },
-      { label: 'mediaFilePath', fn: () => pi.mediaFilePath ?? '' },
-      { label: 'filePath', fn: () => pi.filePath ?? '' },
-      { label: 'path', fn: () => pi.path ?? '' },
-    ];
-    for (const t of tryers) {
-      try {
-        const v = await t.fn();
-        if (typeof v === 'string' && v.length > 0 && v !== projItem.name) {
-          // Accept only an absolute-looking path (has separator).
-          if (v.includes('/') || v.includes('\\')) {
-            sourcePath = v;
-            break;
-          }
-        }
-      } catch {
-        // try next accessor
-      }
-    }
-    if (!sourcePath) {
-      // Last-resort: bare name. Sidecar will fail on this — at least the
-      // ops log will show the path was empty so we know why.
-      sourcePath = projItem.name;
-    }
+    // PATH-FIX — cast sang ClipProjectItem rồi getMediaFilePath() (đường ĐÚNG).
+    // Nếu lấy được path tuyệt đối → dùng; nếu không (synthetic/offline) thì để
+    // basename (folder-scan hoặc .prproj fallback sẽ map sau).
+    sourcePath = resolveMediaPath(projItem, ppro) || projItem.name;
     try {
       sourceDuration = tickToSeconds(await projItem.getDuration());
     } catch {
@@ -188,7 +198,16 @@ export async function translateTrackItem(
     }
   }
 
-  const kind: Clip['kind'] = mediaType === VIDEO_MEDIA ? 'video' : 'audio';
+  // B2-FIX: Premiere 26 trả getMediaType() là SỐ (MediaType.VIDEO), KHÔNG phải
+  // chuỗi 'Video' → so với 'Video' luôn false → MỌI clip thành 'audio'. trackKind
+  // (từ getVideoTrack/getAudioTrack) là nguồn ĐÁNG TIN → ưu tiên; getMediaType
+  // chỉ là fallback (mock trả 'Video').
+  const kind: Clip['kind'] =
+    trackKind === 'video' || trackKind === 'audio'
+      ? trackKind
+      : mediaType === VIDEO_MEDIA
+        ? 'video'
+        : 'audio';
 
   // Premiere 2026 sometimes returns undefined for `nodeId` on the readonly
   // property — try alternate accessors and finally fall back to a synthetic
@@ -209,18 +228,38 @@ export async function translateTrackItem(
       hasAudio: kind === 'audio',
     },
     effects: [],
-    enabled: true,
+    enabled: !disabled,
   };
 }
 
 export async function translateComponent(c: PProComponent): Promise<Effect> {
+  // PPro26: component dùng getMatchName()/getDisplayName()/getParamCount()/
+  // getParam(i)/param.getStartValue() — KHÔNG có .matchName/.getParams() (đường
+  // cũ → undefined.toLowerCase() crash).
+  const cc = c as unknown as {
+    getMatchName?: () => Promise<string>;
+    getDisplayName?: () => Promise<string>;
+    matchName?: string;
+    displayName?: string;
+    getParamCount?: () => Promise<number>;
+    getParam?: (i: number) => Promise<unknown>;
+  };
+  const matchName = (await cc.getMatchName?.()) ?? cc.matchName ?? '';
+  const displayName = (await cc.getDisplayName?.()) ?? cc.displayName ?? matchName;
+
   const params: { name: string; value: number | string | boolean }[] = [];
   try {
-    const ps = await c.getParams();
-    for (const p of ps) {
+    const pc = (await cc.getParamCount?.()) ?? 0;
+    for (let i = 0; i < pc; i++) {
       try {
-        const v = await p.getValue();
-        params.push({ name: p.displayName, value: v });
+        const p = (await cc.getParam?.(i)) as {
+          displayName?: string;
+          getStartValue?: () => Promise<number | string | boolean> | number | string | boolean;
+        } | null;
+        if (!p?.getStartValue) continue;
+        const v = await p.getStartValue();
+        if (v !== undefined && v !== null)
+          params.push({ name: p.displayName ?? `#${i}`, value: v });
       } catch {
         // skip unreadable param
       }
@@ -229,17 +268,16 @@ export async function translateComponent(c: PProComponent): Promise<Effect> {
     // no params
   }
 
-  const matchName = c.matchName;
+  const m = matchName.toLowerCase();
   let kind: Effect['kind'] = 'video';
-  if (matchName.toLowerCase().includes('audio')) kind = 'audio';
-  else if (matchName.toLowerCase().includes('lumetri')) kind = 'color';
-  else if (matchName.toLowerCase().includes('text') || matchName.toLowerCase().includes('title'))
-    kind = 'text';
+  if (m.includes('audio')) kind = 'audio';
+  else if (m.includes('lumetri')) kind = 'color';
+  else if (m.includes('text') || m.includes('title')) kind = 'text';
 
   return {
     id: `${matchName}-${Math.random().toString(36).slice(2, 8)}`,
     matchName,
-    displayName: c.displayName,
+    displayName,
     kind,
     enabled: true,
     params,
@@ -265,7 +303,48 @@ export async function translateMarker(m: PProMarker): Promise<Marker> {
   };
 }
 
-export async function translateSequence(seq: PProSequence): Promise<Sequence> {
+/** PPro26 — id tổng hợp marker (không có guid ổn định) = mk:<ms>:<name>. */
+export function markerSyntheticId(timeSec: number, name: string): string {
+  return `mk:${Math.round(timeSec * 1000)}:${name}`;
+}
+
+/** PPro26 — marker dùng getStart/getName/getType/getComments (action model). */
+export async function translatePPro26Marker(m: PPro26Marker): Promise<Marker> {
+  const [start, duration, name, type, comment] = await Promise.all([
+    m.getStart(),
+    m.getDuration(),
+    safeAsync(
+      () => m.getName(),
+      () => ''
+    ),
+    safeAsync(
+      () => m.getType(),
+      () => 'Comment'
+    ),
+    safeAsync(
+      () => m.getComments(),
+      () => ''
+    ),
+  ]);
+  const kindMap: Record<string, Marker['kind']> = {
+    Comment: 'comment',
+    Chapter: 'chapter',
+    Segmentation: 'segmentation',
+    WebLink: 'web',
+  };
+  const t = tickToSeconds(start);
+  return {
+    id: markerSyntheticId(t, name),
+    time: t,
+    duration: tickToSeconds(duration),
+    kind: kindMap[type] ?? 'comment',
+    name,
+    comment,
+    color: '#ffcc00',
+  };
+}
+
+export async function translateSequence(seq: PProSequence, ppro?: PProModule): Promise<Sequence> {
   const [name, endTime, vCount, aCount, settings] = await Promise.all([
     safeAsync(
       () => seq.getName(),
@@ -293,7 +372,7 @@ export async function translateSequence(seq: PProSequence): Promise<Sequence> {
   for (let i = 0; i < vCount; i++) {
     try {
       const t = await seq.getVideoTrack(i);
-      tracks.push(await translateTrack(t, i));
+      tracks.push(await translateTrack(t, i, ppro));
     } catch {
       // skip missing track
     }
@@ -301,7 +380,7 @@ export async function translateSequence(seq: PProSequence): Promise<Sequence> {
   for (let i = 0; i < aCount; i++) {
     try {
       const t = await seq.getAudioTrack(i);
-      tracks.push(await translateTrack(t, i));
+      tracks.push(await translateTrack(t, i, ppro));
     } catch {
       // skip missing track
     }

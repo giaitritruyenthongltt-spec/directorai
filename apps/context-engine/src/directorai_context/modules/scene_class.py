@@ -15,6 +15,7 @@ If you want real YOLO-based class detection later:
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -58,7 +59,7 @@ def _motion_score(frames_gray: list[np.ndarray]) -> float:
     if len(frames_gray) < 2:
         return 0.0
     diffs: list[float] = []
-    for a, b in zip(frames_gray[:-1], frames_gray[1:], strict=False):
+    for a, b in itertools.pairwise(frames_gray):
         if a.shape != b.shape:
             continue
         d = cv2.absdiff(a, b).astype(np.float32).mean() / 255.0
@@ -131,7 +132,7 @@ def classify_clip(media_path: str, sample_count: int = 7) -> SceneClassResult:
         if total <= 0:
             raise RuntimeError(f"No frames in media: {media_path}")
         n = max(2, min(sample_count, total))
-        idxs = [int(round(i * (total - 1) / max(1, n - 1))) for i in range(n)]
+        idxs = [round(i * (total - 1) / max(1, n - 1)) for i in range(n)]
         frames_bgr: list[np.ndarray] = []
         frames_gray: list[np.ndarray] = []
         for idx in idxs:

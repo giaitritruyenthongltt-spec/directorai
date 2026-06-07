@@ -1,4 +1,4 @@
-import type { Project, Sequence, Clip, Track, Effect, Marker } from '@directorai/core';
+import type { Project, Sequence, Clip, Track, Effect, Marker, Seconds } from '@directorai/core';
 import type {
   IPremiereAdapter,
   ApplyEffectInput,
@@ -76,6 +76,12 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   setClipDisabled(clipId: string, disabled: boolean): Promise<void> {
     return this.send<void>('timeline.setClipDisabled', { clipId, disabled });
   }
+  renameClip(clipId: string, newName: string): Promise<void> {
+    return this.send<void>('timeline.renameClip', { clipId, newName });
+  }
+  setClipInOut(clipId: string, inSec: Seconds, outSec: Seconds): Promise<void> {
+    return this.send<void>('timeline.setClipInOut', { clipId, inSec, outSec });
+  }
 
   // Effects
   applyEffect(input: ApplyEffectInput): Promise<Effect> {
@@ -123,6 +129,9 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   setAudioGain(input: AudioGainInput): Promise<void> {
     return this.send<void>('audio.setGain', input);
   }
+  getAudioGain(clipId: string): Promise<number> {
+    return this.send<number>('audio.getGain', { clipId });
+  }
   addAudioFade(input: AudioFadeInput): Promise<void> {
     return this.send<void>('audio.addFade', input);
   }
@@ -139,8 +148,16 @@ export class RemotePremiereAdapter implements IPremiereAdapter {
   applyTransition(input: TransitionInput): Promise<void> {
     return this.send<void>('transition.apply', input);
   }
+  removeTransition(clipId: string, atStart = true): Promise<void> {
+    return this.send<void>('transition.remove', { clipId, atStart });
+  }
   listTransitions(): Promise<readonly { matchName: string; displayName: string }[]> {
     return this.send<readonly { matchName: string; displayName: string }[]>('transition.list');
+  }
+  listClipEffects(clipId: string): Promise<readonly { matchName: string; displayName: string }[]> {
+    return this.send<readonly { matchName: string; displayName: string }[]>('effect.list', {
+      clipId,
+    });
   }
 
   // Undo

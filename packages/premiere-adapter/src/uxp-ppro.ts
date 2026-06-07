@@ -21,9 +21,28 @@ export interface TickTimeStatic {
 export interface PProProjectItem {
   readonly name: string;
   readonly id: string;
-  getMediaFilePath(): Promise<string>;
+  // PATH-FIX: `getMediaFilePath` KHÔNG có trên ProjectItem thô (xác minh live:
+  // projItemMembers không chứa nó). Phải cast sang ClipProjectItem. Để optional
+  // để type không dối, nhưng đường lấy path đúng là qua PProClipProjectItem.
+  getMediaFilePath?(): Promise<string> | string;
   getDuration(): Promise<TickTime>;
   getProjectItems(): Promise<PProProjectItem[]>;
+}
+
+/**
+ * PATH-FIX — `ClipProjectItem` là lớp con của ProjectItem; CHỈ nó mới có
+ * `getMediaFilePath()` (theo tài liệu Adobe UXP, minversion 25.0). Trả về
+ * đường dẫn TUYỆT ĐỐI, ĐỒNG BỘ (không await). Lấy bằng cách
+ * `ppro.ClipProjectItem.cast(projectItem)`.
+ */
+export interface PProClipProjectItem extends PProProjectItem {
+  getMediaFilePath(): string;
+  getOriginatingProjectPath?(): string;
+}
+
+export interface PProClipProjectItemStatic {
+  /** Cast 1 ProjectItem thô → ClipProjectItem (null nếu không phải clip). */
+  cast(item: PProProjectItem): PProClipProjectItem | null;
 }
 
 export interface PProComponentParam {
@@ -113,6 +132,27 @@ export interface PProMarkerCollection {
   createMarker(time: TickTime, name: string, color?: string, type?: string): Promise<PProMarker>;
   getMarkers(): Promise<PProMarker[]>;
   removeMarker(marker: PProMarker): Promise<boolean>;
+}
+
+/** PPro26 — Marker instance (action model; start set lúc construct). */
+export interface PPro26Marker {
+  getStart(): Promise<TickTime>;
+  getDuration(): Promise<TickTime>;
+  getName(): Promise<string>;
+  getType(): Promise<string>;
+  getComments(): Promise<string>;
+  createSetNameAction(name: string): PProAction;
+  createSetCommentsAction(comment: string): PProAction;
+  createSetDurationAction(t: TickTime): PProAction;
+  createSetTypeAction(type: string): PProAction;
+}
+
+/** PPro26 — `new ppro.Markers(seq)`: collection + action factory. */
+export interface PPro26Markers {
+  getMarkers(): Promise<PPro26Marker[]> | PPro26Marker[];
+  createAddMarkerAction(marker: PPro26Marker): PProAction;
+  createRemoveMarkerAction(marker: PPro26Marker): PProAction;
+  createMoveMarkerAction(marker: PPro26Marker, time: TickTime): PProAction;
 }
 
 export interface PProSequence {
@@ -209,6 +249,8 @@ export interface PProModule {
   readonly MediaType: PProMediaType;
   readonly MarkerType: PProMarkerType;
   readonly EncoderManager?: PProEncoderManager;
+  // PATH-FIX — static để cast ProjectItem → ClipProjectItem (lấy path đầy đủ).
+  readonly ClipProjectItem?: PProClipProjectItemStatic;
   // Component factories
   Component?: { create(matchName: string): Promise<PProComponent> };
 }

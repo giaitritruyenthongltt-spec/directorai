@@ -121,7 +121,7 @@ def session() -> Generator[Session, None, None]:
     """Context-managed Session with auto-commit on success, rollback on error."""
     if _SessionLocal is None:
         get_engine()
-    assert _SessionLocal is not None  # noqa: S101
+    assert _SessionLocal is not None
     s = _SessionLocal()
     try:
         yield s

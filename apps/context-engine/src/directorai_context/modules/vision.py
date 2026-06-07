@@ -119,7 +119,7 @@ def analyze_video(
             jpeg = _extract_frame(str(path), t)
             caption, tags = analyze_frame_with_claude(jpeg)
             frames.append(VisionTag(time=t, caption=caption, tags=tags))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.warn("vision_frame_failed", time=t, error=str(e))
         t += interval
 
