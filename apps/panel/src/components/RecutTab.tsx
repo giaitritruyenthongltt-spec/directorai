@@ -1,9 +1,10 @@
 /**
- * RecutTab — "Tách & Tái dựng" (Lane A, MVP).
+ * RecutTab — "Tách & Tái dựng" (Lane A + Lane B).
  *
- * Đưa 1 video đã-dựng → "Phân mảnh cảnh" (Scene Edit Detection native) → sequence
- * cắt-cảnh editable → "Tái dựng" chống-trùng cơ bản (rename Cảnh N + tỉa đuôi).
- * Các đòn nặng (flip/crop/speed/tách BGM) thuộc Lane B (headless) — pha kế.
+ * Lane A (Premiere): "Phân mảnh cảnh" (analyze adaptive/content + thumbnail + gom
+ * cảnh, hoặc Premiere SED) → "Tái dựng" (rename + tỉa) → cut-list FCPXML editable.
+ * Lane B (headless FFmpeg/Demucs): flip/crop/speed/màu/grain + tách/bỏ/thay BGM +
+ * xử lý CẢ THƯ MỤC (batch 3000 tập, có tiến độ/hủy). Tất cả ĐÃ triển khai.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -66,10 +67,38 @@ export function RecutTab(): React.ReactElement {
   const [minLen, setMinLen] = useState<number>(1.0);
   const [thumbs, setThumbs] = useState<boolean>(true);
   const [groupOn, setGroupOn] = useState<boolean>(false);
+  // A4 — hiệu chỉnh: so sánh detector/ngưỡng
+  const [cmpBusy, setCmpBusy] = useState(false);
+  const [cmpRows, setCmpRows] = useState<
+    | { label: string; sceneCount: number; minDur: number; medianDur: number; maxDur: number }[]
+    | null
+  >(null);
 
   const changeDetector = (d: Detector): void => {
     setDetector(d);
     setThreshold(THR_DEFAULT[d]); // đổi ngưỡng mặc định theo detector
+  };
+
+  const compareDetectors = async (): Promise<void> => {
+    const path = videoPath.trim();
+    if (!path) {
+      setErr('Hãy nhập đường dẫn video.');
+      return;
+    }
+    setErr(null);
+    setCmpBusy(true);
+    setCmpRows(null);
+    try {
+      const r = await wsClient.call<{ rows: NonNullable<typeof cmpRows> }>(
+        'recut.compareDetectors',
+        { videoPath: path }
+      );
+      setCmpRows(r.rows ?? null);
+    } catch (e) {
+      setErr(`[So sánh] ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setCmpBusy(false);
+    }
   };
 
   // Checklist tái dựng
@@ -91,6 +120,11 @@ export function RecutTab(): React.ReactElement {
   const [rGrain, setRGrain] = useState(6);
   const [rBgm, setRBgm] = useState<'keep' | 'strip' | 'replace'>('keep');
   const [rNewBgm, setRNewBgm] = useState(''); // đường dẫn nhạc mới (khi replace)
+  // A5 — màu nâng cao; A7 — metadata
+  const [rContrast, setRContrast] = useState(1.0);
+  const [rHue, setRHue] = useState(0);
+  const [rStripMeta, setRStripMeta] = useState(true);
+  const [rTitle, setRTitle] = useState('');
   const [batching, setBatching] = useState(false);
   const [batchRes, setBatchRes] = useState<{
     ok?: boolean;
@@ -246,9 +280,13 @@ export function RecutTab(): React.ReactElement {
     crop_pct: rCrop,
     speed: rSpeed,
     saturation: rColor ? 1.08 : 1.0,
+    contrast: rContrast,
+    hue_deg: rHue,
     grain: rGrain,
     bgm: rBgm,
     new_bgm_path: rBgm === 'replace' && rNewBgm.trim() ? rNewBgm.trim() : undefined,
+    strip_metadata: rStripMeta,
+    title: rTitle.trim() || undefined,
   });
 
   const runBatchFolder = async (): Promise<void> => {
@@ -397,6 +435,25 @@ export function RecutTab(): React.ReactElement {
               />
               <span>Gom shot → cảnh ngữ-nghĩa (cùng bối cảnh)</span>
             </label>
+            <Button variant="secondary" busy={cmpBusy} onClick={compareDetectors} iconName="list">
+              {cmpBusy ? 'Đang so sánh…' : 'So sánh độ nhạy (hiệu chỉnh)'}
+            </Button>
+            {cmpRows && (
+              <div className="recut-scenes">
+                <div className="recut-scene-row" style={{ fontWeight: 600 }}>
+                  <span className="recut-scene-i">Cấu hình</span>
+                  <span className="recut-scene-t">#cảnh</span>
+                  <span className="recut-scene-at">median</span>
+                </div>
+                {cmpRows.map((row) => (
+                  <div key={row.label} className="recut-scene-row">
+                    <span className="recut-scene-i">{row.label}</span>
+                    <span className="recut-scene-t">{row.sceneCount}</span>
+                    <span className="recut-scene-at">{row.medianDur}s</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -601,7 +658,33 @@ export function RecutTab(): React.ReactElement {
             checked={rColor}
             onChange={(e) => setRColor((e.target as HTMLInputElement).checked)}
           />
-          <span>Đổi màu nhẹ</span>
+          <span>Đổi bão hoà nhẹ</span>
+        </label>
+        <label className="recut-opt">
+          <span>Tương phản</span>
+          <input
+            className="recut-num"
+            type="number"
+            step="0.02"
+            min="0.8"
+            max="1.2"
+            value={rContrast}
+            onChange={(e) => setRContrast(Number((e.target as HTMLInputElement).value) || 1)}
+          />
+          <span className="recut-unit">1=giữ</span>
+        </label>
+        <label className="recut-opt">
+          <span>Xoay tông màu</span>
+          <input
+            className="recut-num"
+            type="number"
+            step="2"
+            min="-30"
+            max="30"
+            value={rHue}
+            onChange={(e) => setRHue(Number((e.target as HTMLInputElement).value) || 0)}
+          />
+          <span className="recut-unit">độ (phá Content-ID màu)</span>
         </label>
         <label className="recut-opt">
           <span>Nhiễu (grain)</span>
@@ -638,6 +721,21 @@ export function RecutTab(): React.ReactElement {
             onChange={(e) => setRNewBgm((e.target as HTMLInputElement).value)}
           />
         )}
+        <label className="recut-opt">
+          <input
+            type="checkbox"
+            checked={rStripMeta}
+            onChange={(e) => setRStripMeta((e.target as HTMLInputElement).checked)}
+          />
+          <span>Xoá metadata gốc (chống "reused content")</span>
+        </label>
+        <input
+          className="recut-input"
+          type="text"
+          placeholder='Tiêu đề/metadata mới (tuỳ chọn, vd "Nerf War S2 - Recut")'
+          value={rTitle}
+          onChange={(e) => setRTitle((e.target as HTMLInputElement).value)}
+        />
         <Button variant="primary" busy={batching} onClick={runBatch} iconName="zap" full>
           {batching ? 'Đang xử lý (FFmpeg)…' : 'Xử lý chống-trùng → xuất file mới'}
         </Button>

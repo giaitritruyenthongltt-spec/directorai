@@ -349,6 +349,8 @@ export class CompositeTools {
             fileName?: string;
           }
         );
+      case 'recut.compareDetectors':
+        return this.recutCompareDetectors(params as { videoPath: string });
       default:
         return null;
     }
@@ -384,6 +386,7 @@ export class CompositeTools {
       'recut.detectScenesSidecar',
       'recut.separateAudio',
       'recut.buildCutListFcpxml',
+      'recut.compareDetectors',
     ];
   }
 
@@ -790,6 +793,55 @@ export class CompositeTools {
       fileName: params.fileName ?? `recut-${base}`,
     });
     return { ...res, fps: tl.fps };
+  }
+
+  /**
+   * RECUT A4 — Hiệu chỉnh: chạy nhiều detector/ngưỡng trên CÙNG 1 video → bảng
+   * #cảnh + thời lượng (min/median/max) để người dùng chọn cấu hình cắt sát nhất.
+   */
+  private async recutCompareDetectors(params: { videoPath: string }): Promise<{
+    videoPath: string;
+    rows: {
+      label: string;
+      detector: string;
+      threshold: number;
+      sceneCount: number;
+      minDur: number;
+      medianDur: number;
+      maxDur: number;
+    }[];
+  }> {
+    if (!params.videoPath) throw new Error('thiếu videoPath');
+    const configs: { label: string; detector: 'content' | 'adaptive'; threshold: number }[] = [
+      { label: 'content·27', detector: 'content', threshold: 27 },
+      { label: 'content·15', detector: 'content', threshold: 15 },
+      { label: 'adaptive·3', detector: 'adaptive', threshold: 3 },
+      { label: 'adaptive·1.5', detector: 'adaptive', threshold: 1.5 },
+    ];
+    const rows = [];
+    for (const c of configs) {
+      const body: Record<string, unknown> = {
+        media_path: params.videoPath,
+        detector: c.detector,
+        min_scene_len_sec: 1.0,
+        thumbnails: false,
+      };
+      if (c.detector === 'adaptive') body.adaptive_threshold = c.threshold;
+      else body.threshold = c.threshold;
+      const r = await sidecarPost<{ scenes: { duration: number }[] }>('/scenes', body);
+      const durs = (r.scenes ?? []).map((s) => s.duration).sort((a, b) => a - b);
+      const n = durs.length;
+      rows.push({
+        label: c.label,
+        detector: c.detector,
+        threshold: c.threshold,
+        sceneCount: n,
+        minDur: n ? Number(durs[0]!.toFixed(2)) : 0,
+        medianDur: n ? Number(durs[Math.floor(n / 2)]!.toFixed(2)) : 0,
+        maxDur: n ? Number(durs[n - 1]!.toFixed(2)) : 0,
+      });
+    }
+    return { videoPath: params.videoPath, rows };
   }
 
   /** RECUT — tách nhạc nền / voice (Demucs): trả {stems:{vocals,no_vocals}}. */

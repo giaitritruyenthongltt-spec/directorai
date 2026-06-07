@@ -181,11 +181,23 @@ def recut_render(
         f = cp / 100.0
         vf.append(f"crop=iw*{1 - 2 * f:.4f}:ih*{1 - 2 * f:.4f},scale={W}:{H}")
         applied.append(f"crop{cp}%")
+    # A5 — màu: eq (contrast/brightness/saturation/gamma) + hue shift riêng.
     sat = float(recipe.get("saturation") or 1.0)
     bri = float(recipe.get("brightness") or 0.0)
-    if abs(sat - 1.0) > 1e-3 or abs(bri) > 1e-3:
-        vf.append(f"eq=saturation={sat}:brightness={bri}")
+    con = float(recipe.get("contrast") or 1.0)
+    gam = float(recipe.get("gamma") or 1.0)
+    if (
+        abs(sat - 1.0) > 1e-3
+        or abs(bri) > 1e-3
+        or abs(con - 1.0) > 1e-3
+        or abs(gam - 1.0) > 1e-3
+    ):
+        vf.append(f"eq=contrast={con}:brightness={bri}:saturation={sat}:gamma={gam}")
         applied.append("color")
+    hue_deg = float(recipe.get("hue_deg") or 0.0)
+    if abs(hue_deg) > 1e-3:
+        vf.append(f"hue=h={hue_deg}")
+        applied.append(f"hue{hue_deg:g}")
     grain = float(recipe.get("grain") or 0)
     if grain > 0:
         vf.append(f"noise=alls={int(grain)}:allf=t")
@@ -266,12 +278,23 @@ def recut_render(
     # choose output format".
     tmp_out = out.with_suffix(f".part{out.suffix}")
 
+    # A7 — metadata: xoá nguồn (-map_metadata -1) + gắn title/comment riêng → chống
+    # "reused content" (YouTube đối chiếu cả metadata, không chỉ pixel/audio).
+    meta_args: list[str] = []
+    if recipe.get("strip_metadata", True):
+        meta_args += ["-map_metadata", "-1"]
+        applied.append("strip_meta")
+    if recipe.get("title"):
+        meta_args += ["-metadata", f"title={recipe['title']}"]
+    if recipe.get("comment"):
+        meta_args += ["-metadata", f"comment={recipe['comment']}"]
+
     def assemble(vcodec_args: list[str]) -> list[str]:
         cmd = ["ffmpeg", "-y", "-i", str(src), *audio_inputs]
         if fc:
             cmd += ["-filter_complex", ";".join(fc)]
         cmd += ["-map", vmap, "-map", amap, *vcodec_args]
-        cmd += ["-c:a", "aac", "-b:a", "192k", str(tmp_out)]
+        cmd += ["-c:a", "aac", "-b:a", "192k", *meta_args, str(tmp_out)]
         return cmd
 
     # B17 — bitrate theo ĐỘ PHÂN GIẢI (8M cứng làm 4K vỡ, 480p phí). x264 dùng

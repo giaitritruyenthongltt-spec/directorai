@@ -40,6 +40,9 @@ export function FilmTab(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   // G5 — bước bị bỏ (theo order) — không ghi.
   const [skip, setSkip] = useState<Set<number>>(new Set());
+  // A6 — tuỳ chỉnh ngoài template (0 = dùng mặc định của template).
+  const [ovrDurationMin, setOvrDurationMin] = useState<number>(0);
+  const [ovrKeepPct, setOvrKeepPct] = useState<number>(0);
 
   const tpl: EditTemplate | undefined = LONG_TEMPLATES.find((t) => t.id === tplId);
   const plan = s.editPlan;
@@ -87,8 +90,10 @@ export function FilmTab(): React.ReactElement {
         wsClient.call<{ edit_plan: SessionPlan }>('context.buildEditPlan', {
           clipPaths,
           goal: tpl.goal,
-          targetDurationSec: tpl.longform?.targetDurationSec,
-          keepRatio: tpl.longform?.keepRatio,
+          // A6 — override người dùng (nếu >0), nếu không dùng mặc định template.
+          targetDurationSec:
+            ovrDurationMin > 0 ? ovrDurationMin * 60 : tpl.longform?.targetDurationSec,
+          keepRatio: ovrKeepPct > 0 ? ovrKeepPct / 100 : tpl.longform?.keepRatio,
           pacingProfile: tpl.longform?.pacingProfile,
           structure: tpl.longform?.structure,
         }),
@@ -204,6 +209,34 @@ export function FilmTab(): React.ReactElement {
           ))}
         </div>
         {tpl && <p className="film-tpl-desc">{tpl.description}</p>}
+        <details className="film-folder-adv">
+          <summary>… Tuỳ chỉnh nâng cao (ghi đè template)</summary>
+          <div className="film-row" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+            <label className="film-ovr">
+              Thời lượng mục tiêu
+              <input
+                type="number"
+                min="0"
+                step="0.5"
+                value={ovrDurationMin}
+                onChange={(e) => setOvrDurationMin(Number(e.target.value) || 0)}
+              />
+              phút (0 = theo template)
+            </label>
+            <label className="film-ovr">
+              Tỉ lệ giữ clip
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="5"
+                value={ovrKeepPct}
+                onChange={(e) => setOvrKeepPct(Number(e.target.value) || 0)}
+              />
+              % (0 = theo template)
+            </label>
+          </div>
+        </details>
       </Section>
 
       {/* 3. Lập kế hoạch */}

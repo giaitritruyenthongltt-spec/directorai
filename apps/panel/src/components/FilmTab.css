@@ -188,6 +188,21 @@
   color: var(--warn);
   font-size: var(--fs-sm);
 }
+.film-ovr {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+.film-ovr input {
+  width: 64px;
+  padding: 2px 6px;
+  background: var(--bg, #1e1e1e);
+  color: var(--text, #eee);
+  border: 1px solid var(--border, #3a3a3a);
+  border-radius: 4px;
+}
 .film-warn {
   display: flex;
   align-items: flex-start;

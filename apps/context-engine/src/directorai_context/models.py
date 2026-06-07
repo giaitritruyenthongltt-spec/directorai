@@ -112,7 +112,14 @@ class RecutRecipe(BaseModel):
     speed: float = 1.0  # đổi tốc độ video (0.9..1.15) + atempo audio
     saturation: float = 1.0  # eq saturation
     brightness: float = 0.0  # eq brightness (-0.1..0.1)
+    contrast: float = 1.0  # A5 — eq contrast (0.9..1.1)
+    gamma: float = 1.0  # A5 — eq gamma (0.9..1.1)
+    hue_deg: float = 0.0  # A5 — xoay hue (độ, -30..30) — đổi tông màu, phá Content-ID màu
     grain: float = 0.0  # noise cường độ (0..20)
+    # A7 — chống "reused content": xoá metadata nguồn + gắn title/comment riêng.
+    strip_metadata: bool = True
+    title: str | None = None
+    comment: str | None = None
     # BGM: keep | strip (bỏ nhạc, giữ voice) | replace (voice + nhạc mới)
     bgm: str = "keep"
     new_bgm_path: str | None = None
