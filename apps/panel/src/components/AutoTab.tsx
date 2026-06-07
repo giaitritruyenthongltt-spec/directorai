@@ -14,7 +14,8 @@ import {
   NERF_TEMPLATES,
 } from '@directorai/modules';
 import { wsClient } from '../bridge/ws-client.js';
-import { useSession } from '../state/session.js';
+import { withTimeout, planTimeoutMs } from '../bridge/with-timeout.js';
+import { useSession, type SessionPlan } from '../state/session.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
 import { HelpButton } from './HelpButton.js';
 import { Icon } from './Icon.js';
@@ -41,7 +42,9 @@ interface ApplyResponse {
   dryRunCount: number;
   results: StepResult[];
   approvalNote?: string;
-  plan: { goal_understanding: string; strategy: string };
+  // Kế hoạch ĐẦY ĐỦ (có steps) — để "Duyệt & Ghi" dùng LẠI đúng kế hoạch đã xem
+  // trước (không gọi Gemini lần 2, không lệch kế hoạch).
+  plan: SessionPlan;
 }
 
 /** R6 — chấm màu trạng thái (CSS) thay emoji 🔵🟡 (tránh tofu). */
@@ -73,12 +76,30 @@ export function AutoTab(): React.ReactElement {
     }
   }, [ticked]);
   const [customGoal, setCustomGoal] = useState<string>('');
-  const [busy, setBusy] = useState<boolean>(false);
+  // AT4 — phân biệt đang xem-trước vs đang ghi (nhãn nút đúng).
+  const [busyKind, setBusyKind] = useState<'preview' | 'write' | null>(null);
+  const busy = busyKind !== null;
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ApplyResponse | null>(null);
   const [applied, setApplied] = useState<ApplyResponse | null>(null);
+  // AT6 — kế hoạch đã XEM TRƯỚC (đầy đủ steps) để GHI dùng lại đúng nó.
+  const [previewPlan, setPreviewPlan] = useState<SessionPlan | null>(null);
 
-  const clipPaths = s.clipPaths;
+  // AT1 — CHỈ clip VIDEO (loại nhạc/audio để planner không phí cost + không lẫn
+  // nhạc vào kế hoạch) + KHỬ TRÙNG.
+  const clipPaths = Array.from(
+    new Set(
+      s.clips
+        .filter((c) => c.hasFullPath && c.path && c.kind !== 'audio')
+        .map((c) => c.path as string)
+    )
+  );
+
+  const resetPreview = (): void => {
+    setPreview(null);
+    setApplied(null);
+    setPreviewPlan(null);
+  };
 
   const toggle = (id: string): void => {
     setTicked((prev) => {
@@ -87,8 +108,7 @@ export function AutoTab(): React.ReactElement {
       else next.add(id);
       return next;
     });
-    setPreview(null);
-    setApplied(null);
+    resetPreview();
   };
 
   // MOD-7 — áp template: chỉ tích module enabled trong template.
@@ -98,8 +118,7 @@ export function AutoTab(): React.ReactElement {
     );
     setTicked(new Set(enabledIds));
     setCustomGoal(goal);
-    setPreview(null);
-    setApplied(null);
+    resetPreview();
   };
 
   const buildGoal = (): string => buildGoalFromModules(Array.from(ticked), customGoal);
@@ -115,24 +134,33 @@ export function AutoTab(): React.ReactElement {
       setError('Hãy tích ít nhất 1 module hoặc nhập mục tiêu.');
       return;
     }
-    setBusy(true);
+    setBusyKind(dryRun ? 'preview' : 'write');
     try {
-      const res = await wsClient.call<ApplyResponse>('safe.applyPlan', {
-        clipPaths,
-        goal,
-        dryRun,
-        approved,
-      });
+      // AT6 — GHI dùng LẠI kế hoạch đã xem trước (truyền editPlan) → không gọi
+      // Gemini lần 2 + ghi đúng kế hoạch đã duyệt. Preview (dry-run) mới dựng mới.
+      const reusePlan = !dryRun && previewPlan;
+      const params = reusePlan
+        ? { editPlan: previewPlan, dryRun: false, approved: true }
+        : { clipPaths, goal, dryRun, approved };
+      // AT2 — timeout: chỉ cần khi PHẢI dựng kế hoạch (Gemini). Ghi dùng-lại-plan
+      // (reusePlan) chỉ resolve+ghi → nhanh, để timeout rộng.
+      const ms = reusePlan ? 120_000 : planTimeoutMs(clipPaths.length);
+      const res = await withTimeout(
+        wsClient.call<ApplyResponse>('safe.applyPlan', params),
+        ms,
+        dryRun ? 'Lập kế hoạch' : 'Ghi'
+      );
       if (dryRun) {
         setPreview(res);
         setApplied(null);
+        setPreviewPlan(res.plan ?? null);
       } else {
         setApplied(res);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      setBusyKind(null);
     }
   };
 
@@ -285,7 +313,7 @@ export function AutoTab(): React.ReactElement {
           disabled={busy}
           onClick={() => void run(true, false)}
         >
-          {busy && !applied ? (
+          {busyKind === 'preview' ? (
             <>
               <Icon name="refresh" size={15} className="spin" /> Đang lập kế hoạch…
             </>
@@ -297,15 +325,29 @@ export function AutoTab(): React.ReactElement {
         </ClickBox>
         <ClickBox
           className="auto-btn apply"
-          disabled={busy || !preview}
-          title={!preview ? 'Hãy "Xem trước" rồi mới ghi' : 'Ghi thật (có hoàn tác)'}
+          disabled={busy || !preview || s.conn !== 'connected'}
+          title={
+            s.conn !== 'connected'
+              ? 'Chưa kết nối Premiere'
+              : !preview
+                ? 'Hãy "Xem trước" rồi mới ghi'
+                : 'Ghi thật (có hoàn tác)'
+          }
           onClick={() => {
             if (window.confirm('Ghi thật lên timeline? (có thể Undo trong Premiere)')) {
               void run(false, true);
             }
           }}
         >
-          <Icon name="check" size={15} /> Duyệt &amp; Ghi
+          {busyKind === 'write' ? (
+            <>
+              <Icon name="refresh" size={15} className="spin" /> Đang ghi…
+            </>
+          ) : (
+            <>
+              <Icon name="check" size={15} /> Duyệt &amp; Ghi
+            </>
+          )}
         </ClickBox>
       </div>
 

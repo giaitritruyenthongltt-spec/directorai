@@ -188,3 +188,15 @@
   color: var(--warn);
   font-size: var(--fs-sm);
 }
+.film-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2, 4px);
+  margin-top: var(--sp-3);
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: var(--warn);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}

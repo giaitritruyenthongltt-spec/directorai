@@ -25,6 +25,10 @@ export interface SessionPlan {
   }[];
   total_target_duration_sec?: number;
   estimated_kept_clips?: number;
+  // FB13 — kế hoạch bị cắt do trần token (cảnh báo để user lọc bớt clip).
+  truncated?: boolean;
+  truncation_note?: string;
+  rejected_unsafe_steps?: number;
 }
 
 interface SessionValue {

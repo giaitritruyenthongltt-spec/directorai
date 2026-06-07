@@ -8,6 +8,7 @@
 
 import React, { useState } from 'react';
 import { wsClient } from '../bridge/ws-client.js';
+import { withTimeout, planTimeoutMs } from '../bridge/with-timeout.js';
 import { basename } from '../bridge/clip-paths.js';
 import { useSession } from '../state/session.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
@@ -36,7 +37,14 @@ export function AnalysisTab(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ReportResult | null>(null);
 
-  const clipPaths = s.clipPaths;
+  // AN1 — chỉ clip VIDEO (CV chấm net/blur vô nghĩa với file nhạc) + khử trùng.
+  const clipPaths = Array.from(
+    new Set(
+      s.clips
+        .filter((c) => c.hasFullPath && c.path && c.kind !== 'audio')
+        .map((c) => c.path as string)
+    )
+  );
 
   const run = async (): Promise<void> => {
     setError(null);
@@ -50,7 +58,12 @@ export function AnalysisTab(): React.ReactElement {
     }
     setBusy(true);
     try {
-      const r = await wsClient.call<ReportResult>('context.qualityReport', { clipPaths });
+      // AN2 — timeout: CV per clip (nhẹ hơn Gemini) — nền 60s + 2s/clip.
+      const r = await withTimeout(
+        wsClient.call<ReportResult>('context.qualityReport', { clipPaths }),
+        planTimeoutMs(clipPaths.length, 60_000, 2000),
+        'Phân tích chất lượng'
+      );
       setReport(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -117,24 +130,29 @@ export function AnalysisTab(): React.ReactElement {
               </tr>
             </thead>
             <tbody>
-              {report.rows.map((r) => (
-                <tr key={r.clip_path} className={r.is_suspect ? 'bad' : 'ok'}>
-                  <td title={r.clip_path}>{fname(r.clip_path)}</td>
-                  <td>{r.composite}</td>
-                  <td>{r.blur}</td>
-                  <td>
-                    {r.is_suspect ? (
-                      <span className="analysis-tag bad">
-                        <Icon name="alert" size={12} /> nghi
-                      </span>
-                    ) : (
-                      <span className="analysis-tag good">
-                        <Icon name="check" size={12} /> tốt
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {/* AN5 — xếp clip NGHI lên đầu, rồi theo composite tăng (kém nhất trước). */}
+              {[...report.rows]
+                .sort(
+                  (a, b) => Number(b.is_suspect) - Number(a.is_suspect) || a.composite - b.composite
+                )
+                .map((r) => (
+                  <tr key={r.clip_path} className={r.is_suspect ? 'bad' : 'ok'}>
+                    <td title={r.clip_path}>{fname(r.clip_path)}</td>
+                    <td>{r.composite}</td>
+                    <td>{r.blur}</td>
+                    <td>
+                      {r.is_suspect ? (
+                        <span className="analysis-tag bad">
+                          <Icon name="alert" size={12} /> nghi
+                        </span>
+                      ) : (
+                        <span className="analysis-tag good">
+                          <Icon name="check" size={12} /> tốt
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
           <div className="analysis-files">

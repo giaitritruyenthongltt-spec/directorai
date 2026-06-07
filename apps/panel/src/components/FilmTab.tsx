@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { NERF_TEMPLATES, type EditTemplate } from '@directorai/modules';
 import { wsClient } from '../bridge/ws-client.js';
+import { withTimeout, planTimeoutMs } from '../bridge/with-timeout.js';
 import { useSession, type SessionPlan } from '../state/session.js';
 import { Section, Button, ErrorBox } from './ui/primitives.js';
 import { Icon } from './Icon.js';
@@ -23,6 +24,8 @@ interface ApplyResponse {
   applied: number;
   failed: number;
   deferred: number;
+  skipped: number; // FB3 — bước không khớp clip trên timeline
+  dryRunCount: number; // FB4 — bước "sẽ ghi" khi xem trước
   approvalNote?: string;
 }
 
@@ -40,7 +43,15 @@ export function FilmTab(): React.ReactElement {
 
   const tpl: EditTemplate | undefined = LONG_TEMPLATES.find((t) => t.id === tplId);
   const plan = s.editPlan;
-  const clipPaths = s.clipPaths;
+  // FB2+FB10 — planner & dead-air CHỈ nhận clip VIDEO (loại nhạc/audio để dead-air
+  // không tỉa nhạc nền + Vision không phí cost trên file audio) + KHỬ TRÙNG.
+  const clipPaths = Array.from(
+    new Set(
+      s.clips
+        .filter((c) => c.hasFullPath && c.path && c.kind !== 'audio')
+        .map((c) => c.path as string)
+    )
+  );
   const ACTION_VN: Record<string, string> = {
     disable: 'Ẩn',
     trim: 'Tỉa',
@@ -70,14 +81,20 @@ export function FilmTab(): React.ReactElement {
     setError(null);
     setApplyRes(null);
     try {
-      const r = await wsClient.call<{ edit_plan: SessionPlan }>('context.buildEditPlan', {
-        clipPaths,
-        goal: tpl.goal,
-        targetDurationSec: tpl.longform?.targetDurationSec,
-        keepRatio: tpl.longform?.keepRatio,
-        pacingProfile: tpl.longform?.pacingProfile,
-        structure: tpl.longform?.structure,
-      });
+      // Timeout co giãn theo số clip (Vision chạy từng clip).
+      const ms = planTimeoutMs(clipPaths.length);
+      const r = await withTimeout(
+        wsClient.call<{ edit_plan: SessionPlan }>('context.buildEditPlan', {
+          clipPaths,
+          goal: tpl.goal,
+          targetDurationSec: tpl.longform?.targetDurationSec,
+          keepRatio: tpl.longform?.keepRatio,
+          pacingProfile: tpl.longform?.pacingProfile,
+          structure: tpl.longform?.structure,
+        }),
+        ms,
+        'Lập kế hoạch'
+      );
       s.setEditPlan(r.edit_plan);
       setSkip(new Set());
       setDeadAir(null);
@@ -97,12 +114,17 @@ export function FilmTab(): React.ReactElement {
     setBusy('deadair');
     setError(null);
     try {
-      const r = await wsClient.call<{
-        edit_plan: SessionPlan;
-        total_trims: number;
-        total_disables: number;
-        estimated_saved_sec: number;
-      }>('context.planDeadAir', { clipPaths });
+      const ms = planTimeoutMs(clipPaths.length, 60_000, 3000);
+      const r = await withTimeout(
+        wsClient.call<{
+          edit_plan: SessionPlan;
+          total_trims: number;
+          total_disables: number;
+          estimated_saved_sec: number;
+        }>('context.planDeadAir', { clipPaths }),
+        ms,
+        'Cắt khoảng chết'
+      );
       s.setEditPlan(r.edit_plan);
       setSkip(new Set());
       setDeadAir({
@@ -206,6 +228,13 @@ export function FilmTab(): React.ReactElement {
           </Button>
         </div>
 
+        {(busy === 'plan' || busy === 'deadair') && (
+          <div className="film-note">
+            Đang phân tích {clipPaths.length} clip… (AI chạy từng clip, có thể vài phút — đừng đóng
+            panel)
+          </div>
+        )}
+
         {deadAir && (
           <div className="film-deadair">
             <Icon name="scissors" size={14} /> Cắt dead-air: tỉa <b>{deadAir.trims}</b> clip · ẩn{' '}
@@ -227,6 +256,13 @@ export function FilmTab(): React.ReactElement {
               {plan.steps?.length ?? 0} bước
               {plan.estimated_kept_clips ? ` · giữ ~${plan.estimated_kept_clips} clip` : ''}
             </div>
+            {plan.truncated && (
+              <div className="film-warn">
+                <Icon name="alert" size={14} />{' '}
+                {plan.truncation_note ??
+                  'Kế hoạch dài vượt trần token nên chỉ giữ các bước đã sinh xong — hãy lọc bớt clip rồi lập lại để có kế hoạch đầy đủ.'}
+              </div>
+            )}
           </div>
         )}
       </Section>
@@ -260,7 +296,12 @@ export function FilmTab(): React.ReactElement {
             </div>
           )}
           <div className="film-row">
-            <Button iconName="eye" onClick={() => void apply(false)} busy={busy === 'preview'}>
+            <Button
+              iconName="eye"
+              onClick={() => void apply(false)}
+              busy={busy === 'preview'}
+              disabled={s.conn !== 'connected'}
+            >
               Xem trước
             </Button>
             <Button
@@ -268,15 +309,29 @@ export function FilmTab(): React.ReactElement {
               iconName="check"
               onClick={() => void apply(true)}
               busy={busy === 'apply'}
+              disabled={s.conn !== 'connected'}
             >
               Duyệt & Ghi
             </Button>
           </div>
+          {s.conn !== 'connected' && (
+            <div className="film-note">Chưa kết nối Premiere — mở panel trong Premiere để ghi.</div>
+          )}
           {applyRes && (
             <div className="film-result">
               <Icon name={applyRes.dryRun ? 'eye' : 'check'} size={14} />{' '}
-              {applyRes.dryRun ? 'Xem trước' : 'Đã ghi'}: {applyRes.applied} áp dụng ·{' '}
-              {applyRes.failed} lỗi · {applyRes.deferred} hoãn / {applyRes.total} bước.
+              {applyRes.dryRun
+                ? `Xem trước: sẽ ghi ${applyRes.dryRunCount} bước`
+                : `Đã ghi: ${applyRes.applied} áp dụng`}
+              {applyRes.failed > 0 ? ` · ${applyRes.failed} lỗi` : ''}
+              {applyRes.skipped > 0 ? ` · ${applyRes.skipped} không khớp` : ''}
+              {applyRes.deferred > 0 ? ` · ${applyRes.deferred} hoãn` : ''} / {applyRes.total} bước.
+              {applyRes.skipped > 0 && (
+                <div className="film-note">
+                  ⚠ {applyRes.skipped} bước không khớp clip nào — kiểm tra đã bấm "Lấy path tự động"
+                  và đang mở đúng sequence chưa.
+                </div>
+              )}
               {applyRes.approvalNote && <div className="film-note">{applyRes.approvalNote}</div>}
             </div>
           )}

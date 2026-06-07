@@ -9,6 +9,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { wsClient, type ConnectionState } from '../bridge/ws-client.js';
+import { withTimeout } from '../bridge/with-timeout.js';
 import { HelpButton } from './HelpButton.js';
 import { WorkflowDiagram } from './WorkflowDiagram.js';
 import { Icon, type IconName } from './Icon.js';
@@ -165,7 +166,12 @@ export function DirectorTab(): React.ReactElement {
         setError('Vui lòng nhập mục tiêu trước khi sinh kế hoạch.');
         return;
       }
-      const result = await wsClient.call<Plan>('director.plan', { goal, persona });
+      // DT2 — Gemini có thể treo → timeout 120s (mở khoá UI, báo rõ).
+      const result = await withTimeout(
+        wsClient.call<Plan>('director.plan', { goal, persona }),
+        120_000,
+        'Tạo kế hoạch'
+      );
       setPlan(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -176,6 +182,15 @@ export function DirectorTab(): React.ReactElement {
 
   const execute = async (): Promise<void> => {
     if (!plan) return;
+    // DT8 — execute GHI THẬT (có thể cắt/XOÁ clip) → cổng xác nhận rõ ràng.
+    if (
+      !window.confirm(
+        `Chạy "${plan.title}" — AI sẽ GHI lên timeline (${plan.steps.length} bước, có thể cắt/xoá clip). ` +
+          'Hoàn tác bằng Ctrl-Z trong Premiere. Tiếp tục?'
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -207,11 +222,15 @@ export function DirectorTab(): React.ReactElement {
     setBusy(true);
     setError(null);
     try {
-      const refined = await wsClient.call<Plan>('director.refine', {
-        previousPlanId: progress.planId,
-        feedback: feedback.trim(),
-        persona,
-      });
+      const refined = await withTimeout(
+        wsClient.call<Plan>('director.refine', {
+          previousPlanId: progress.planId,
+          feedback: feedback.trim(),
+          persona,
+        }),
+        120_000,
+        'Tinh chỉnh'
+      );
       setPlan(refined);
       setProgress(null);
       setFeedback('');
@@ -222,24 +241,36 @@ export function DirectorTab(): React.ReactElement {
     }
   };
 
-  // Hỏi tiến độ liên tục khi đang chạy
+  // Hỏi tiến độ liên tục khi đang chạy. DT1 — deps chỉ planId+status (currentStep
+  // đổi mỗi giây KHÔNG tạo lại interval). DT6 — dừng + báo sau 5 lần lỗi liên tiếp
+  // (server restart giữa chừng → không để progress đứng im âm thầm).
+  const planId = progress?.planId;
+  const status = progress?.status;
   useEffect(() => {
-    if (
-      !progress ||
-      progress.status === 'done' ||
-      progress.status === 'cancelled' ||
-      progress.status === 'error'
-    ) {
+    if (!planId || status === 'done' || status === 'cancelled' || status === 'error') {
       return;
     }
+    let fails = 0;
     const t = setInterval(() => {
       void wsClient
-        .call<PlanProgress>('director.progress', { planId: progress.planId })
-        .then((p) => setProgress(p))
-        .catch((e) => void e);
+        .call<PlanProgress>('director.progress', { planId })
+        .then((p) => {
+          fails = 0;
+          setProgress(p);
+        })
+        .catch(() => {
+          fails += 1;
+          if (fails >= 5) {
+            clearInterval(t);
+            setError(
+              'Mất liên lạc với tiến độ thực thi (máy chủ không phản hồi). ' +
+                'Bấm "Kế hoạch mới" để làm lại.'
+            );
+          }
+        });
     }, 1000);
     return () => clearInterval(t);
-  }, [progress]);
+  }, [planId, status]);
 
   // Đếm giây khi đang sinh plan (Gemini mất 15-45s)
   useEffect(() => {
