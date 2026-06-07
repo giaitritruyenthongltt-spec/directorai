@@ -5,7 +5,7 @@
  * thấy, đổi tab KHÔNG mất). Tab này chỉ giữ state riêng cho bước lập kế hoạch.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NERF_TEMPLATES, type EditTemplate } from '@directorai/modules';
 import { wsClient } from '../bridge/ws-client.js';
 import { withTimeout, planTimeoutMs } from '../bridge/with-timeout.js';
@@ -43,6 +43,26 @@ export function FilmTab(): React.ReactElement {
   // A6 — tuỳ chỉnh ngoài template (0 = dùng mặc định của template).
   const [ovrDurationMin, setOvrDurationMin] = useState<number>(0);
   const [ovrKeepPct, setOvrKeepPct] = useState<number>(0);
+  // B4 — tiến độ per-clip khi lập kế hoạch (Gemini Vision từng clip) + Hủy.
+  const [planProg, setPlanProg] = useState<{ done: number; total: number } | null>(null);
+  const [planOpId, setPlanOpId] = useState<string | null>(null);
+  useEffect(() => {
+    const off = wsClient.onProgress((evt) => {
+      if (evt.kind === 'start' && evt.method === 'context.buildEditPlan') {
+        setPlanOpId(evt.opId);
+        setPlanProg({ done: 0, total: evt.total ?? 0 });
+      } else if (evt.kind === 'update') {
+        setPlanOpId((cur) => {
+          if (cur && evt.opId === cur) setPlanProg({ done: evt.done ?? 0, total: evt.total ?? 0 });
+          return cur;
+        });
+      } else if (evt.kind === 'end') {
+        setPlanOpId((cur) => (evt.opId === cur ? null : cur));
+        setPlanProg(null);
+      }
+    });
+    return off;
+  }, []);
 
   const tpl: EditTemplate | undefined = LONG_TEMPLATES.find((t) => t.id === tplId);
   const plan = s.editPlan;
@@ -263,8 +283,18 @@ export function FilmTab(): React.ReactElement {
 
         {(busy === 'plan' || busy === 'deadair') && (
           <div className="film-note">
-            Đang phân tích {clipPaths.length} clip… (AI chạy từng clip, có thể vài phút — đừng đóng
-            panel)
+            {busy === 'plan' && planProg && planProg.total > 0
+              ? `Đang phân tích ${planProg.done}/${planProg.total} clip…`
+              : `Đang phân tích ${clipPaths.length} clip…`}{' '}
+            (AI chạy từng clip, có thể vài phút — đừng đóng panel)
+            {busy === 'plan' && planOpId && (
+              <>
+                {' '}
+                <Button iconName="stop" onClick={() => void wsClient.cancelOp(planOpId)}>
+                  Hủy
+                </Button>
+              </>
+            )}
           </div>
         )}
 

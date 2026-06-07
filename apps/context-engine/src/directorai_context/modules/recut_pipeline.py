@@ -21,6 +21,39 @@ from pathlib import Path
 from directorai_context.config import get_settings
 from directorai_context.logger import log
 
+# B1 — registry tiến trình ffmpeg đang chạy theo job_id để HỦY giữa-render.
+# cancel_job() terminate proc + đánh dấu _CANCELLED (chặn cả pha sau Demucs).
+_JOBS: dict[str, subprocess.Popen] = {}
+_CANCELLED: set[str] = set()
+
+
+def _run_ffmpeg(cmd: list[str], job_id: str | None) -> tuple[int, str]:
+    """Chạy ffmpeg qua Popen, đăng ký theo job_id để hủy được. Trả (rc, stderr)."""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if job_id:
+        _JOBS[job_id] = p
+    try:
+        _, err = p.communicate()
+    finally:
+        if job_id:
+            _JOBS.pop(job_id, None)
+    return p.returncode, err or ""
+
+
+def _is_cancelled(job_id: str | None) -> bool:
+    return bool(job_id) and job_id in _CANCELLED
+
+
+def cancel_job(job_id: str) -> bool:
+    """B1 — Hủy 1 job render: đánh dấu + terminate ffmpeg đang chạy (nếu có)."""
+    _CANCELLED.add(job_id)
+    p = _JOBS.get(job_id)
+    if p is not None and p.poll() is None:
+        with contextlib.suppress(Exception):
+            p.terminate()
+        return True
+    return False
+
 
 def _parse_fps(rate: str | None) -> float:
     """'30000/1001' → 29.97; '30' → 30.0; lỗi → 0.0."""
@@ -154,8 +187,12 @@ def recut_render(
     out_path: str | None,
     recipe: dict,
     use_nvenc: bool = True,
+    job_id: str | None = None,
 ) -> dict:
-    """Render video chống-trùng bằng FFmpeg theo recipe. Trả report."""
+    """Render video chống-trùng bằng FFmpeg theo recipe. Trả report.
+
+    job_id (B1): đăng ký tiến trình ffmpeg để hủy giữa-render qua cancel_job().
+    """
     t0 = time.time()
     src = Path(video_path)
     if not src.exists():
@@ -179,8 +216,22 @@ def recut_render(
     cp = float(recipe.get("crop_pct") or 0)
     if cp > 0 and W and H:
         f = cp / 100.0
-        vf.append(f"crop=iw*{1 - 2 * f:.4f}:ih*{1 - 2 * f:.4f},scale={W}:{H}")
-        applied.append(f"crop{cp}%")
+        crop_w, crop_h = int(W * (1 - 2 * f)), int(H * (1 - 2 * f))
+        center = None
+        if recipe.get("reframe"):
+            # A1 — đặt cửa sổ crop quanh CHỦ THỂ (YOLO) thay vì giữa khung.
+            from directorai_context.modules.reframe import subject_center
+
+            center = subject_center(str(src))
+        if center:
+            cx, cy = center
+            x = min(max(int(cx * W - crop_w / 2), 0), W - crop_w)
+            y = min(max(int(cy * H - crop_h / 2), 0), H - crop_h)
+            vf.append(f"crop={crop_w}:{crop_h}:{x}:{y},scale={W}:{H}")
+            applied.append(f"reframe{cp:g}%({cx:.2f},{cy:.2f})")
+        else:
+            vf.append(f"crop={crop_w}:{crop_h},scale={W}:{H}")  # giữa khung (mặc định)
+            applied.append(f"crop{cp:g}%")
     # A5 — màu: eq (contrast/brightness/saturation/gamma) + hue shift riêng.
     sat = float(recipe.get("saturation") or 1.0)
     bri = float(recipe.get("brightness") or 0.0)
@@ -317,27 +368,43 @@ def recut_render(
     ]
     x264_args = ["-c:v", "libx264", "-crf", "20", "-preset", "medium"]
 
-    log.info("recut_ffmpeg", applied=applied, nvenc=use_nvenc)
+    # B1 — bị hủy trong lúc Demucs (trước ffmpeg)? Bỏ luôn, không encode.
+    def _cancelled_result() -> dict:
+        with contextlib.suppress(OSError):
+            tmp_out.unlink(missing_ok=True)
+        _CANCELLED.discard(job_id or "")
+        return {
+            "ok": False, "out_path": str(out), "duration_sec": probe["duration"],
+            "audio_changed": audio_changed, "applied": applied,
+            "elapsed_ms": int((time.time() - t0) * 1000),
+            "cancelled": True, "error": "cancelled",
+        }
+
+    if _is_cancelled(job_id):
+        return _cancelled_result()
+
+    log.info("recut_ffmpeg", applied=applied, nvenc=use_nvenc, job_id=job_id)
     encoder = "nvenc" if use_nvenc else "x264"
-    proc = subprocess.run(
-        assemble(nvenc_args if use_nvenc else x264_args), capture_output=True, text=True
-    )
-    # B1 — NVENC fail (driver/không có/đầy session) → fallback CPU libx264. Tránh
-    # cả batch 3000 chết vì 1 vấn đề encoder.
-    if proc.returncode != 0 and use_nvenc:
-        log.warning("nvenc_failed_fallback_x264", err=proc.stderr[-300:])
+    rc, err = _run_ffmpeg(assemble(nvenc_args if use_nvenc else x264_args), job_id)
+    if _is_cancelled(job_id):
+        return _cancelled_result()
+    # B1(cũ) — NVENC fail (driver/không có/đầy session) → fallback CPU libx264.
+    if rc != 0 and use_nvenc:
+        log.warning("nvenc_failed_fallback_x264", err=err[-300:])
         encoder = "x264(fallback)"
         applied.append("cpu_fallback")
-        proc = subprocess.run(assemble(x264_args), capture_output=True, text=True)
+        rc, err = _run_ffmpeg(assemble(x264_args), job_id)
+        if _is_cancelled(job_id):
+            return _cancelled_result()
 
-    if proc.returncode != 0:
+    if rc != 0:
         with contextlib.suppress(OSError):
             tmp_out.unlink(missing_ok=True)
         return {
             "ok": False, "out_path": str(out), "duration_sec": probe["duration"],
             "audio_changed": audio_changed, "applied": applied,
             "elapsed_ms": int((time.time() - t0) * 1000),
-            "error": proc.stderr[-600:],
+            "error": err[-600:],
         }
 
     # rename atomic .part → out
@@ -352,6 +419,7 @@ def recut_render(
         }
 
     out_dur = _ffprobe(str(out))["duration"] if out.exists() else 0.0
+    _CANCELLED.discard(job_id or "")  # B1 — dọn cờ hủy sau khi xong
     applied.append(f"enc:{encoder}")
     if demucs_error:
         applied.append("bgm_skipped(demucs_unavailable)")

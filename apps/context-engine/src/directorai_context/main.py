@@ -33,6 +33,7 @@ from directorai_context.models import (
     ProbeResult,
     RecutRenderRequest,
     RecutRenderResult,
+    RecutCancelRequest,
     SearchHit,
     SearchRequest,
     SearchResult,
@@ -281,10 +282,18 @@ def create_app() -> FastAPI:
                 req.out_path,
                 req.recipe.model_dump(),
                 use_nvenc=req.use_nvenc,
+                job_id=req.job_id,
             )
             return RecutRenderResult(**r)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
+
+    @app.post("/recut/cancel")
+    async def post_recut_cancel(req: RecutCancelRequest) -> dict[str, bool]:
+        """B1 — Hủy 1 job render đang chạy (terminate ffmpeg + chặn pha sau)."""
+        from directorai_context.modules.recut_pipeline import cancel_job
+
+        return {"cancelled": cancel_job(req.job_id)}
 
     @app.post("/probe", response_model=ProbeResult)
     async def post_probe(req: ProbeRequest) -> ProbeResult:

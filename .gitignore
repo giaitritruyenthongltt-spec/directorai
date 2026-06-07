@@ -98,3 +98,7 @@ Adobe Premiere Pro Auto-Save/
 # UXP / CEP build artifacts
 *.ccx
 *.zxp
+
+# AI model weights (auto-downloaded, e.g. YOLO yolov8n.pt)
+*.pt
+*.onnx

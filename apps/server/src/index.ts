@@ -170,6 +170,11 @@ async function main(): Promise<void> {
       compositeTools.current
         ? compositeTools.current.recutBatchFolder(params, ctx)
         : Promise.reject(new Error('composite tools chưa sẵn sàng')),
+    // B4 — buildEditPlan với tiến độ per-clip (Gemini Vision) + Hủy.
+    onBuildPlan: (params, ctx) =>
+      compositeTools.current
+        ? compositeTools.current.buildEditPlanProgress(params, ctx)
+        : Promise.reject(new Error('composite tools chưa sẵn sàng')),
   });
   logger.info({ port: config.server.wsPort }, 'WebSocket server listening');
 

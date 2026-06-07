@@ -699,6 +699,12 @@ export class CompositeTools {
         continue;
       }
       const t0 = Date.now();
+      // B1 — job_id để HỦY ffmpeg đang render khi panel bấm Hủy (không chờ hết file).
+      const jobId = `recut_${i}_${t0}`;
+      const onAbort = (): void => {
+        void sidecarPost('/recut/cancel', { job_id: jobId }).catch(() => undefined);
+      };
+      ctx.signal.addEventListener('abort', onAbort, { once: true });
       try {
         const r = await sidecarPost<{
           ok: boolean;
@@ -710,6 +716,7 @@ export class CompositeTools {
           out_path: out,
           recipe: params.recipe ?? {},
           use_nvenc: true,
+          job_id: jobId,
         });
         if (r.ok) done++;
         else failed++;
@@ -729,6 +736,8 @@ export class CompositeTools {
           elapsedMs: Date.now() - t0,
           error: e instanceof Error ? e.message : String(e),
         });
+      } finally {
+        ctx.signal.removeEventListener('abort', onAbort);
       }
       ctx.onProgress(i + 1, total, `${i + 1}/${total} ${base}`);
     }
@@ -1276,6 +1285,55 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       structure,
     });
     return this.guardEditPlan(res);
+  }
+
+  /**
+   * B4 — buildEditPlan CÓ TIẾN ĐỘ per-clip + Hủy. Gọi understand_clip TỪNG clip
+   * (phát progress i/N, cache theo file-hash AI-2a) rồi build_edit_plan (toàn
+   * cache-hit → nhanh, ra map+plan). Không gọi Gemini Vision 2 lần (nhờ cache).
+   */
+  async buildEditPlanProgress(
+    rawParams: unknown,
+    ctx: {
+      signal: AbortSignal;
+      onProgress: (done: number, total: number, label?: string) => void;
+    }
+  ): Promise<EditPlanResult> {
+    const params = (rawParams ?? {}) as {
+      clipPaths: string[];
+      goal: string;
+      frames?: number;
+      maxVisionClips?: number;
+    } & LongformOptions;
+    const paths = dedupePaths(params.clipPaths ?? []);
+    if (!paths.length) throw new Error('clipPaths required (non-empty)');
+    const interval = params.frames ? 1.0 / params.frames : 0.33;
+    const cap = params.maxVisionClips ?? 150;
+    // Lấy mẫu đều nếu vượt cap (khớp hành vi sidecar) để progress đúng số clip hiểu.
+    const sampled =
+      paths.length > cap
+        ? Array.from({ length: cap }, (_, k) => paths[Math.floor((k * paths.length) / cap)]!)
+        : paths;
+    ctx.onProgress(0, sampled.length, `0/${sampled.length}`);
+    for (let i = 0; i < sampled.length; i++) {
+      if (ctx.signal.aborted) throw new Error('cancelled');
+      const p = sampled[i]!;
+      try {
+        await sidecarPost('/vision/understand_clip', {
+          media_path: p,
+          sample_interval_sec: interval,
+        });
+      } catch (e) {
+        this.deps.logger.warn(
+          { clip: p, err: e instanceof Error ? e.message : String(e) },
+          'buildEditPlanProgress: understand failed (bỏ qua, build_edit_plan sẽ thử lại)'
+        );
+      }
+      ctx.onProgress(i + 1, sampled.length, `${i + 1}/${sampled.length}`);
+    }
+    if (ctx.signal.aborted) throw new Error('cancelled');
+    // Understand đã cache → build_edit_plan tái dùng (map + plan), không Vision lại.
+    return this.buildEditPlan(params);
   }
 
   /**

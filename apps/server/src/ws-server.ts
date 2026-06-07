@@ -65,6 +65,17 @@ export interface WsServerOptions {
     }
   ) => Promise<unknown>;
   /**
+   * B4 — context.buildEditPlan với tiến độ per-clip + Hủy. Gemini Vision chạy
+   * từng clip (phút) → cần progress; cùng kiểu onRecutBatch (signal + onProgress).
+   */
+  onBuildPlan?: (
+    params: unknown,
+    ctx: {
+      signal: AbortSignal;
+      onProgress: (done: number, total: number, label?: string) => void;
+    }
+  ) => Promise<unknown>;
+  /**
    * P1 — Khi true, TỪ CHỐI method mutating nếu không có panel (chống "thành
    * công giả" trên mock). Mặc định false. Đặt qua env REQUIRE_PANEL_FOR_MUTATION.
    */
@@ -148,6 +159,40 @@ export async function startWebSocketServer(opts: WsServerOptions): Promise<Runni
       const { opId } = (req.params ?? {}) as ProgressCancelParams;
       const ok = opId ? progress.cancel(opId) : false;
       send(ws, { jsonrpc: '2.0', id: req.id, result: { ok } } satisfies JsonRpcSuccess);
+      return;
+    }
+
+    // B4 — context.buildEditPlan (FilmTab): tiến độ per-clip Gemini Vision + Hủy.
+    if (req.method === 'context.buildEditPlan' && opts.onBuildPlan) {
+      const { opId, signal } = progress.start(req.method);
+      opOrigin.set(opId, ws);
+      try {
+        const result = await opts.onBuildPlan(req.params, {
+          signal,
+          onProgress: (done, total, label) => progress.update(opId, done, { total, label }),
+        });
+        progress.end(opId, signal.aborted ? 'cancelled' : 'completed');
+        send(ws, { jsonrpc: '2.0', id: req.id, result } satisfies JsonRpcSuccess);
+      } catch (err) {
+        const cancelled =
+          signal.aborted ||
+          (typeof err === 'object' &&
+            err !== null &&
+            (err as { name?: string }).name === 'AbortError');
+        progress.end(
+          opId,
+          cancelled ? 'cancelled' : 'error',
+          err instanceof Error ? err.message : String(err)
+        );
+        send(ws, {
+          jsonrpc: '2.0',
+          id: req.id,
+          error: {
+            code: cancelled ? RpcErrorCode.CANCELLED : RpcErrorCode.INTERNAL_ERROR,
+            message: err instanceof Error ? err.message : 'buildEditPlan failed',
+          },
+        } satisfies JsonRpcErrorResponse);
+      }
       return;
     }
 

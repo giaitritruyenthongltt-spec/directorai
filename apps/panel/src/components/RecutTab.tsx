@@ -123,6 +123,7 @@ export function RecutTab(): React.ReactElement {
   // A5 — màu nâng cao; A7 — metadata
   const [rContrast, setRContrast] = useState(1.0);
   const [rHue, setRHue] = useState(0);
+  const [rReframe, setRReframe] = useState(false); // A1 — crop theo chủ thể (YOLO)
   const [rStripMeta, setRStripMeta] = useState(true);
   const [rTitle, setRTitle] = useState('');
   const [rCleanupStems, setRCleanupStems] = useState(false); // B2 — dọn stems sau render
@@ -279,6 +280,7 @@ export function RecutTab(): React.ReactElement {
   const recipeFromUI = (): Record<string, unknown> => ({
     flip: rFlip,
     crop_pct: rCrop,
+    reframe: rReframe,
     speed: rSpeed,
     saturation: rColor ? 1.08 : 1.0,
     contrast: rContrast,
@@ -640,6 +642,14 @@ export function RecutTab(): React.ReactElement {
             onChange={(e) => setRCrop(Number((e.target as HTMLInputElement).value) || 0)}
           />
           <span className="recut-unit">%</span>
+        </label>
+        <label className="recut-opt">
+          <input
+            type="checkbox"
+            checked={rReframe}
+            onChange={(e) => setRReframe((e.target as HTMLInputElement).checked)}
+          />
+          <span>Reframe theo chủ thể (YOLO — giữ nhân vật trong khung khi crop)</span>
         </label>
         <label className="recut-opt">
           <span>Đổi tốc độ</span>

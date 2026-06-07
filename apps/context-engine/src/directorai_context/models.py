@@ -109,6 +109,7 @@ class RecutRecipe(BaseModel):
 
     flip: bool = False  # lật ngang (hflip) — phá pHash
     crop_pct: float = 0.0  # zoom-crop % (0..10) — đổi khung hình
+    reframe: bool = False  # A1 — crop hướng về chủ thể (YOLO) thay vì giữa khung
     speed: float = 1.0  # đổi tốc độ video (0.9..1.15) + atempo audio
     saturation: float = 1.0  # eq saturation
     brightness: float = 0.0  # eq brightness (-0.1..0.1)
@@ -133,6 +134,11 @@ class RecutRenderRequest(BaseModel):
     out_path: str | None = None  # mặc định: <video>_recut.mp4
     recipe: RecutRecipe = RecutRecipe()
     use_nvenc: bool = True
+    job_id: str | None = None  # B1 — đăng ký để hủy giữa-render
+
+
+class RecutCancelRequest(BaseModel):
+    job_id: str
 
 
 class RecutRenderResult(BaseModel):
@@ -143,6 +149,7 @@ class RecutRenderResult(BaseModel):
     applied: list[str]
     elapsed_ms: int
     error: str | None = None
+    cancelled: bool = False  # B1 — bị hủy giữa-render
 
 
 class ProbeRequest(BaseModel):
