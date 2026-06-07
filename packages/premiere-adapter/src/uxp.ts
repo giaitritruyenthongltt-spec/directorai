@@ -60,6 +60,7 @@ import type {
   ExportInput,
   KeyframeInput,
   ColorParamsInput,
+  ColorReadResult,
   AudioGainInput,
   AudioFadeInput,
   TextOverlayInput,
@@ -245,7 +246,22 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
       const trackId = `${trackKind}-${trackIndex}`;
       for (const it of items) {
         if (!it) continue;
-        const nid = (it as { nodeId?: unknown }).nodeId;
+        // ĐỐI XỨNG với resolveTrackItemId (translate): thử nodeId PROP rồi
+        // getNodeId() FUNC. Trước đây findTrackItem chỉ thử prop → khi clip thật
+        // chỉ có getNodeId() func, listClips dùng nodeId thật còn findTrackItem
+        // dựng synthetic → KHÔNG khớp → "clip not found" khi ghi (vd sửa màu).
+        let nid = (it as { nodeId?: unknown }).nodeId;
+        if (!(typeof nid === 'string' && nid.length > 0)) {
+          const getFn = (it as { getNodeId?: () => unknown }).getNodeId;
+          if (typeof getFn === 'function') {
+            try {
+              const v = getFn.call(it);
+              if (typeof v === 'string' && v.length > 0) nid = v;
+            } catch {
+              // bỏ qua
+            }
+          }
+        }
         if (typeof nid === 'string' && nid.length > 0) {
           cache.set(nid, { item: it, track, seq });
           if (nid === clipId) {
@@ -919,6 +935,71 @@ export class UXPPremiereAdapter implements IPremiereAdapter {
         for (const a of actions) compound.addAction(a);
       });
     }
+  }
+
+  /**
+   * Đọc-lại param Lumetri của clip (verify áp màu chính xác). API đọc GIÁ TRỊ
+   * param chưa cố định trên PPro26 → thử lần lượt nhiều getter, đồng thời trả
+   * rawParamNames để chẩn đoán. Không ghi gì.
+   */
+  async getColorParams(clipId: string): Promise<ColorReadResult> {
+    const { item } = await this.findTrackItem(clipId);
+    const chain = (await item.getComponentChain()) as {
+      getComponentCount?: () => Promise<number>;
+      getComponentAtIndex?: (i: number) => Promise<unknown>;
+    };
+    const count = (await chain.getComponentCount?.()) ?? 0;
+    interface LumetriComp {
+      getParamCount?: () => Promise<number>;
+      getParam?: (i: number) => Promise<unknown>;
+    }
+    let lumetri: LumetriComp | null = null;
+    for (let i = 0; i < count; i++) {
+      const c = (await chain.getComponentAtIndex?.(i)) as
+        | (LumetriComp & { getMatchName?: () => Promise<string> })
+        | null;
+      const mn = (await c?.getMatchName?.()) ?? '';
+      if (mn.toLowerCase().includes('lumetri')) {
+        lumetri = c;
+        break;
+      }
+    }
+    if (!lumetri) return { hasLumetri: false, params: {} };
+    const lc: LumetriComp = lumetri;
+
+    const params: Record<string, number> = {};
+    const rawParamNames: string[] = [];
+    const pc = (await lc.getParamCount?.()) ?? 0;
+    for (let i = 0; i < pc; i++) {
+      const param = (await lc.getParam?.(i)) as Record<string, unknown> | null;
+      if (!param) continue;
+      const dnFn = param.getDisplayName as (() => Promise<string>) | undefined;
+      const dn = ((await dnFn?.()) ?? '').toString();
+      if (dn) rawParamNames.push(dn);
+      // Thử lần lượt các getter giá trị có thể có trên PPro26.
+      let val: number | undefined;
+      try {
+        const gv = param.getValue as (() => Promise<unknown>) | undefined;
+        if (gv) val = Number(await gv());
+        if (val === undefined || Number.isNaN(val)) {
+          const gk = param.getKeyframeAtIndex as ((n: number) => Promise<unknown>) | undefined;
+          const kf = (await gk?.(0)) as {
+            value?: unknown;
+            getValue?: () => Promise<unknown>;
+          } | null;
+          if (kf) {
+            const kv = kf.getValue ? await kf.getValue() : kf.value;
+            val = Number(kv);
+          }
+        }
+      } catch {
+        // getter không có/không đọc được → bỏ qua param này
+      }
+      if (val !== undefined && !Number.isNaN(val)) {
+        params[dn.toLowerCase()] = val;
+      }
+    }
+    return { hasLumetri: true, params, rawParamNames };
   }
 
   // ─── Audio ────────────────────────────────────────────────────────────────

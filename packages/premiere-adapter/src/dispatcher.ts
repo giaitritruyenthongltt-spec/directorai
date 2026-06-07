@@ -27,6 +27,7 @@ const MUTATING_METHODS = new Set([
   'keyframe.add',
   'color.applyPreset',
   'color.setParams',
+  'color.getParams',
   'audio.setGain',
   'audio.addFade',
   'audio.muteTrack',
@@ -238,6 +239,10 @@ const handlers: Record<string, RpcHandler> = {
       temperature: z.number().min(-100).max(100).optional(),
     }),
     run: (p, a) => a.setColorParams(p as Parameters<IPremiereAdapter['setColorParams']>[0]),
+  },
+  'color.getParams': {
+    schema: z.object({ clipId: z.string() }),
+    run: (p, a) => a.getColorParams((p as { clipId: string }).clipId),
   },
 
   'audio.setGain': {

@@ -92,6 +92,16 @@ export interface AudioGainInput {
   gainDb: number;
 }
 
+/** Kết quả đọc-lại màu Lumetri (verify áp màu). */
+export interface ColorReadResult {
+  /** Clip có component Lumetri không. */
+  hasLumetri: boolean;
+  /** map tên-slider (chữ thường) → giá trị đọc được. */
+  params: Record<string, number>;
+  /** Chẩn đoán: displayName mọi param của Lumetri (để dò API khi cần). */
+  rawParamNames?: string[];
+}
+
 export interface AudioFadeInput {
   clipId: string;
   durationSec: Seconds;
@@ -175,6 +185,8 @@ export interface INLEAdapter {
   addKeyframe(input: KeyframeInput): Promise<void>;
   applyColorPreset(clipId: string, presetName: string): Promise<void>;
   setColorParams(input: ColorParamsInput): Promise<void>;
+  /** Đọc-lại param Lumetri hiện tại của clip — để verify áp màu chính xác. */
+  getColorParams(clipId: string): Promise<ColorReadResult>;
 
   setAudioGain(input: AudioGainInput): Promise<void>;
   /** Đọc gain (Level dB) hiện tại của clip audio — để hoàn tác setAudioGain. */
