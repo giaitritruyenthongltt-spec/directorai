@@ -12,6 +12,7 @@
  * the free tier.
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Logger } from '@directorai/shared';
 import { director, type ToolDispatcher } from '@directorai/llm-client';
 import { PlanHistoryStore, type PlanHistoryEntry } from './director-history-store.js';
@@ -206,7 +207,10 @@ export class DirectorRouter {
 
   // ─── plan ─────────────────────────────────────────────────────────────
 
-  async plan(params: { goal: string; persona?: director.Persona }): Promise<Plan> {
+  async plan(params: {
+    goal: string;
+    persona?: director.Persona;
+  }): Promise<Plan & { planId: string }> {
     if (!this.deps.llm) throw new Error('No LLM configured');
     const persona: director.Persona = params.persona ?? 'cinematic';
     const goal = params.goal?.trim();
@@ -235,8 +239,13 @@ export class DirectorRouter {
       this.deps.logger.error({ issues: result.error }, 'director.plan: plan schema invalid');
       throw new Error(`Plan schema invalid: ${result.error}`);
     }
+    // B3 (DT5) — track plan ngay khi sinh (status 'draft') + trả planId, để
+    // director.refine dùng được TRƯỚC khi execute (không phải ghi-timeline-rồi-mới-sửa).
+    const draftId = `draft_${randomUUID().slice(0, 12)}`;
+    this.trackPlan(draftId, result.plan, goal);
     this.deps.logger.info(
       {
+        planId: draftId,
         elapsedMs: elapsed,
         steps: result.plan.steps.length,
         provider: this.deps.llm.provider,
@@ -244,7 +253,7 @@ export class DirectorRouter {
       },
       'director.plan ok'
     );
-    return result.plan;
+    return { ...result.plan, planId: draftId };
   }
 
   // ─── execute ──────────────────────────────────────────────────────────

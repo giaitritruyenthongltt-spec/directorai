@@ -355,6 +355,10 @@ def recut_render(
     applied.append(f"enc:{encoder}")
     if demucs_error:
         applied.append("bgm_skipped(demucs_unavailable)")
+    # B2 — dọn stems Demucs sau render (tránh phình cache ~50MB/clip x 3000 tập).
+    if recipe.get("cleanup_stems") and bgm in ("strip", "replace"):
+        shutil.rmtree(_stems_base_dir(src), ignore_errors=True)
+        applied.append("stems_cleaned")
     return {
         "ok": True, "out_path": str(out), "duration_sec": out_dur,
         "audio_changed": audio_changed, "applied": applied,

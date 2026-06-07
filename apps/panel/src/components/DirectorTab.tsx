@@ -34,6 +34,7 @@ interface Plan {
   estimatedMinutes: number;
   note?: string;
   steps: PlanStep[];
+  planId?: string; // B3 — id bản nháp (track lúc sinh) để refine TRƯỚC khi execute
 }
 
 interface StepResult {
@@ -218,13 +219,15 @@ export function DirectorTab(): React.ReactElement {
   };
 
   const refine = async (): Promise<void> => {
-    if (!progress?.planId || !feedback.trim()) return;
+    // B3 — refine được TRƯỚC execute (dùng plan.planId nháp) HOẶC sau (progress.planId).
+    const prevId = progress?.planId ?? plan?.planId;
+    if (!prevId || !feedback.trim()) return;
     setBusy(true);
     setError(null);
     try {
       const refined = await withTimeout(
         wsClient.call<Plan>('director.refine', {
-          previousPlanId: progress.planId,
+          previousPlanId: prevId,
           feedback: feedback.trim(),
           persona,
         }),
@@ -506,14 +509,49 @@ export function DirectorTab(): React.ReactElement {
             })}
           </ol>
           {!progress && (
-            <div className="director-plan-actions">
-              <ClickBox className="director-primary" onClick={() => void execute()} disabled={busy}>
-                <Icon name="play" size={15} /> Chạy kế hoạch
-              </ClickBox>
-              <button className="director-secondary" onClick={reset}>
-                Huỷ
-              </button>
-            </div>
+            <>
+              <div className="director-plan-actions">
+                <ClickBox
+                  className="director-primary"
+                  onClick={() => void execute()}
+                  disabled={busy}
+                >
+                  <Icon name="play" size={15} /> Chạy kế hoạch
+                </ClickBox>
+                <button className="director-secondary" onClick={reset}>
+                  Huỷ
+                </button>
+              </div>
+              {/* B3 — tinh chỉnh kế hoạch TRƯỚC khi chạy (không phải ghi-timeline-rồi-mới-sửa). */}
+              <div className="director-refine">
+                <div className="director-label-row">
+                  <label htmlFor="refine-pre">Chưa ưng? Tinh chỉnh trước khi chạy</label>
+                  <HelpButton
+                    title="Tinh chỉnh trước khi chạy"
+                    lines={[
+                      'Mô tả điều muốn đổi, AI tạo kế hoạch mới dựa trên kế hoạch này — CHƯA ghi gì lên timeline.',
+                    ]}
+                    example="Cắt nhanh hơn, mỗi cảnh tối đa 3 giây, màu ấm hơn"
+                  />
+                </div>
+                <textarea
+                  id="refine-pre"
+                  className="director-custom-goal"
+                  placeholder="Ví dụ: cắt nhanh hơn, màu ấm hơn, bỏ phần lặng"
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  disabled={busy}
+                  rows={2}
+                />
+                <ClickBox
+                  className="director-secondary"
+                  onClick={() => void refine()}
+                  disabled={busy || !feedback.trim()}
+                >
+                  <Icon name="wand" size={15} /> Tinh chỉnh
+                </ClickBox>
+              </div>
+            </>
           )}
         </section>
       )}

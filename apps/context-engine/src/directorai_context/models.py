@@ -120,6 +120,8 @@ class RecutRecipe(BaseModel):
     strip_metadata: bool = True
     title: str | None = None
     comment: str | None = None
+    # B2 — dọn stems Demucs sau render (tránh phình cache khi batch 3000 tập).
+    cleanup_stems: bool = False
     # BGM: keep | strip (bỏ nhạc, giữ voice) | replace (voice + nhạc mới)
     bgm: str = "keep"
     new_bgm_path: str | None = None

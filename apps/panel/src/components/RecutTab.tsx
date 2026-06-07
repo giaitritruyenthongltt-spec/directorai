@@ -125,6 +125,7 @@ export function RecutTab(): React.ReactElement {
   const [rHue, setRHue] = useState(0);
   const [rStripMeta, setRStripMeta] = useState(true);
   const [rTitle, setRTitle] = useState('');
+  const [rCleanupStems, setRCleanupStems] = useState(false); // B2 — dọn stems sau render
   const [batching, setBatching] = useState(false);
   const [batchRes, setBatchRes] = useState<{
     ok?: boolean;
@@ -287,6 +288,7 @@ export function RecutTab(): React.ReactElement {
     new_bgm_path: rBgm === 'replace' && rNewBgm.trim() ? rNewBgm.trim() : undefined,
     strip_metadata: rStripMeta,
     title: rTitle.trim() || undefined,
+    cleanup_stems: rCleanupStems,
   });
 
   const runBatchFolder = async (): Promise<void> => {
@@ -728,6 +730,14 @@ export function RecutTab(): React.ReactElement {
             onChange={(e) => setRStripMeta((e.target as HTMLInputElement).checked)}
           />
           <span>Xoá metadata gốc (chống "reused content")</span>
+        </label>
+        <label className="recut-opt">
+          <input
+            type="checkbox"
+            checked={rCleanupStems}
+            onChange={(e) => setRCleanupStems((e.target as HTMLInputElement).checked)}
+          />
+          <span>Dọn stems Demucs sau khi xong (tiết kiệm đĩa khi batch lớn)</span>
         </label>
         <input
           className="recut-input"
