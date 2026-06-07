@@ -95,13 +95,17 @@ export const MODULE_REGISTRY: readonly EditModuleDef[] = [
     category: 'color',
     name: 'Sửa màu từng cảnh',
     icon: '🎨',
-    feasibility: 'beta',
-    enabled: false,
-    goalHint: 'Cân chỉnh màu/exposure theo từng phân cảnh cho đồng nhất.',
+    feasibility: 'verified',
+    enabled: true,
+    goalHint: 'Áp màu Lumetri (chọn mẫu + cường độ) cho từng cảnh.',
     help: {
       title: 'Sửa màu (Lumetri)',
-      lines: ['Cân màu/độ sáng từng cảnh — đang thử nghiệm, chưa verify trên Premiere 26.'],
-      example: 'Tăng exposure cho cảnh tối; ấm màu cho cảnh ngoài trời.',
+      lines: [
+        'Áp màu Lumetri THẬT lên clip (đã verify ghi đúng giá trị trên Premiere 26).',
+        'Bấm ⚙️ chọn mẫu (Trong sáng/Điện ảnh/Ấm/Lạnh…) + cường độ, hoặc "Tự động theo cảnh".',
+        'Có Xem trước (đọc-lại giá trị) → Ghi (hoàn tác bằng Ctrl-Z).',
+      ],
+      example: 'Chọn "Điện ảnh" 100% → mọi clip lên tông teal-cam.',
     },
   },
 ];
