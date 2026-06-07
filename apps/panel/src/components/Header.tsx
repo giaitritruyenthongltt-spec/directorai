@@ -22,8 +22,12 @@ const SCALE_MAX = 1.6;
 const SCALE_STEP = 0.1;
 
 function loadScale(): number {
-  const raw = Number(localStorage.getItem(SCALE_KEY));
-  return raw >= SCALE_MIN && raw <= SCALE_MAX ? raw : 1;
+  try {
+    const raw = Number(localStorage.getItem(SCALE_KEY));
+    return raw >= SCALE_MIN && raw <= SCALE_MAX ? raw : 1;
+  } catch {
+    return 1;
+  }
 }
 
 export function Header({ connState, onReconnect }: Props): React.ReactElement {
@@ -31,7 +35,11 @@ export function Header({ connState, onReconnect }: Props): React.ReactElement {
 
   useEffect(() => {
     document.documentElement.style.setProperty('--ui-scale', String(scale));
-    localStorage.setItem(SCALE_KEY, String(scale));
+    try {
+      localStorage.setItem(SCALE_KEY, String(scale));
+    } catch {
+      // localStorage không sẵn → vẫn áp scale runtime, chỉ không nhớ.
+    }
   }, [scale]);
 
   const bump = (delta: number): void =>
