@@ -53,6 +53,7 @@ class SceneRequest(BaseModel):
     thumb_width: int | None = None
     group: bool = False  # gom shot→cảnh ngữ-nghĩa (histogram màu shot kề nhau)
     group_threshold: float | None = None  # 0..1, cao = gộp ít (nhiều nhóm hơn)
+    semantic: bool = False  # A3 — gán nhãn ngữ-nghĩa từng nhóm (Gemini Vision)
 
 
 class Scene(BaseModel):
@@ -74,6 +75,7 @@ class SceneGroup(BaseModel):
     duration: float
     shot_indices: list[int]  # các shot (cảnh) thành viên
     shot_count: int
+    label: str | None = None  # A3 — nhãn ngữ-nghĩa (Gemini Vision), vd "phục kích"
 
 
 class SceneResult(BaseModel):

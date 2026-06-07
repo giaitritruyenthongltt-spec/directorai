@@ -252,6 +252,7 @@ def create_app() -> FastAPI:
                 thumb_width=req.thumb_width,
                 group=req.group,
                 group_threshold=req.group_threshold,
+                semantic=req.semantic,
             )
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e

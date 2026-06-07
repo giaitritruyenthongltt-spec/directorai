@@ -138,6 +138,7 @@ def detect_scenes(
     thumb_width: int | None = None,
     group: bool = False,
     group_threshold: float | None = None,
+    semantic: bool = False,
 ) -> SceneResult:
     """Phát hiện điểm cắt cảnh (content-change). detector='content'|'adaptive'."""
     from scenedetect import SceneManager, open_video
@@ -204,6 +205,15 @@ def detect_scenes(
     if group and scenes:
         groups = _group_scenes(
             str(path), scenes, group_threshold or cfg.scene_group_threshold
+        )
+
+    # A3 — gán nhãn ngữ-nghĩa cho từng nhóm (Gemini Vision). Tuỳ chọn + degrade:
+    # thiếu key/lỗi mạng → groups vẫn trả về, chỉ không có label.
+    if semantic and groups and cfg.gemini_api_key:
+        from directorai_context.modules.scene_semantic import label_groups
+
+        label_groups(
+            str(path), groups, scenes, cfg.gemini_vision_model, cfg.gemini_api_key
         )
 
     log.info(

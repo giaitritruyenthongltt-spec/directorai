@@ -336,6 +336,9 @@ export class CompositeTools {
             threshold?: number;
             minSceneLenSec?: number;
             thumbnails?: boolean;
+            group?: boolean;
+            groupThreshold?: number;
+            semantic?: boolean;
           }
         );
       case 'recut.separateAudio':
@@ -514,6 +517,7 @@ export class CompositeTools {
     thumbnails?: boolean;
     group?: boolean;
     groupThreshold?: number;
+    semantic?: boolean;
   }): Promise<{
     detector: string;
     fps: number;
@@ -532,6 +536,7 @@ export class CompositeTools {
       durationSec: number;
       shotIndices: number[];
       shotCount: number;
+      label?: string | null;
     }[];
   }> {
     const det = (params.detector ?? 'adaptive').toLowerCase();
@@ -542,6 +547,8 @@ export class CompositeTools {
       thumbnails: params.thumbnails ?? true,
       group: params.group ?? false,
       group_threshold: params.groupThreshold ?? null,
+      // A3 — nhãn ngữ-nghĩa chỉ có ý nghĩa khi đã gom nhóm.
+      semantic: (params.semantic ?? false) && (params.group ?? false),
     };
     // Ngưỡng có ý nghĩa KHÁC nhau giữa 2 detector (content≈27 vs adaptive≈3).
     if (params.threshold != null) {
@@ -559,6 +566,7 @@ export class CompositeTools {
         duration: number;
         shot_indices: number[];
         shot_count: number;
+        label?: string | null;
       }[];
     }>('/scenes', body);
     return {
@@ -579,6 +587,7 @@ export class CompositeTools {
         durationSec: g.duration,
         shotIndices: g.shot_indices,
         shotCount: g.shot_count,
+        label: g.label ?? null,
       })),
     };
   }

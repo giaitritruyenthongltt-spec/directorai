@@ -26,6 +26,7 @@ interface SceneGroup {
   durationSec: number;
   shotCount: number;
   shotIndices: number[];
+  label?: string | null;
 }
 interface DetectResult {
   sequenceId?: string;
@@ -67,6 +68,7 @@ export function RecutTab(): React.ReactElement {
   const [minLen, setMinLen] = useState<number>(1.0);
   const [thumbs, setThumbs] = useState<boolean>(true);
   const [groupOn, setGroupOn] = useState<boolean>(false);
+  const [semanticOn, setSemanticOn] = useState<boolean>(false); // A3 — nhãn Gemini
   // A4 — hiệu chỉnh: so sánh detector/ngưỡng
   const [cmpBusy, setCmpBusy] = useState(false);
   const [cmpRows, setCmpRows] = useState<
@@ -223,6 +225,7 @@ export function RecutTab(): React.ReactElement {
           minSceneLenSec: minLen,
           thumbnails: thumbs,
           group: groupOn,
+          semantic: semanticOn,
         });
         setDet({ ...r, method: 'analyze' });
       } else {
@@ -439,6 +442,15 @@ export function RecutTab(): React.ReactElement {
               />
               <span>Gom shot → cảnh ngữ-nghĩa (cùng bối cảnh)</span>
             </label>
+            <label className="recut-opt">
+              <input
+                type="checkbox"
+                checked={semanticOn}
+                disabled={!groupOn}
+                onChange={(e) => setSemanticOn((e.target as HTMLInputElement).checked)}
+              />
+              <span>Gắn nhãn AI cho mỗi nhóm (Gemini — vd "phục kích", "nạp đạn")</span>
+            </label>
             <Button variant="secondary" busy={cmpBusy} onClick={compareDetectors} iconName="list">
               {cmpBusy ? 'Đang so sánh…' : 'So sánh độ nhạy (hiệu chỉnh)'}
             </Button>
@@ -494,6 +506,7 @@ export function RecutTab(): React.ReactElement {
                     <span className="recut-scene-i">
                       Cảnh {g.index + 1} ({g.shotCount} shot)
                     </span>
+                    {g.label ? <Badge tone="accent">{g.label}</Badge> : null}
                     <span className="recut-scene-t">{g.durationSec.toFixed(1)}s</span>
                     <span className="recut-scene-at">@{g.startSec.toFixed(1)}s</span>
                   </div>
