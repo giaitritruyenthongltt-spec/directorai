@@ -215,3 +215,20 @@
   font-size: var(--fs-sm);
   line-height: 1.4;
 }
+
+/* A2 — gợi ý thứ tự dựng theo mạch phim */
+.film-order {
+  margin-top: var(--sp-3);
+}
+.film-order-list {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.film-order-list li {
+  margin-bottom: 2px;
+}
+.film-order-reason {
+  color: var(--fg-muted);
+}

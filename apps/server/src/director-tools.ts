@@ -278,6 +278,8 @@ export class CompositeTools {
         return this.buildEditPlan(
           params as { clipPaths: string[]; goal: string; frames?: number } & LongformOptions
         );
+      case 'context.suggestOrder':
+        return this.suggestOrder(params as { clipPaths: string[]; goal?: string });
       case 'module.list':
         return { modules: listModuleInfos() };
       case 'context.activeSequenceClips':
@@ -372,6 +374,7 @@ export class CompositeTools {
       'context.understandClip',
       'context.buildVideoMap',
       'context.buildEditPlan',
+      'context.suggestOrder',
       'context.filterBad',
       'context.clusterClips',
       'context.qualityReport',
@@ -1294,6 +1297,54 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       structure,
     });
     return this.guardEditPlan(res);
+  }
+
+  /**
+   * A2 — Gợi ý THỨ TỰ dựng clip theo mạch phim (mở màn→dồn nén→cao trào→kết).
+   * Tái dùng understand_clip (cache) nên rẻ khi đã hiểu clip trước đó. Trả về
+   * thứ tự đề xuất + lý do từng clip — KHÔNG ghi gì, để panel áp vào buildEditPlan.
+   */
+  async suggestOrder(params: { clipPaths: string[]; goal?: string }): Promise<{
+    order: {
+      path: string;
+      reason: string;
+      phase: number;
+      phaseVi: string;
+      sceneType?: string | null;
+      actionLevel: number;
+      position: number;
+    }[];
+    strategy: string;
+    understood: number;
+  }> {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const clipPaths = dedupePaths(params.clipPaths);
+    const r = await sidecarPost<{
+      order: {
+        path: string;
+        reason: string;
+        phase: number;
+        phase_vi: string;
+        scene_type?: string | null;
+        action_level: number;
+        position: number;
+      }[];
+      strategy: string;
+      understood: number;
+    }>('/order/suggest', { clip_paths: clipPaths, goal: params.goal ?? null });
+    return {
+      order: (r.order ?? []).map((o) => ({
+        path: o.path,
+        reason: o.reason,
+        phase: o.phase,
+        phaseVi: o.phase_vi,
+        sceneType: o.scene_type ?? null,
+        actionLevel: o.action_level,
+        position: o.position,
+      })),
+      strategy: r.strategy,
+      understood: r.understood,
+    };
   }
 
   /**

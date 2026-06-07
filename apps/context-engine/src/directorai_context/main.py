@@ -24,6 +24,7 @@ from directorai_context.models import (
     FilterBadRequest,
     IngestRequest,
     IngestResult,
+    OrderRequest,
     ProbeRequest,
     ProbeResult,
     RecutCancelRequest,
@@ -460,6 +461,23 @@ def create_app() -> FastAPI:
             "clips_failed": len(errors),
             "errors": errors,
         }
+
+    @app.post("/order/suggest")
+    async def post_order_suggest(req: OrderRequest) -> dict[str, object]:
+        """A2 — Gợi ý thứ tự dựng clip theo mạch phim (setup→rising→climax→end).
+
+        Tái dùng understand_clip (CÓ CACHE) nên rẻ khi đã hiểu clip trước đó.
+        KHÔNG ghi gì — chỉ trả thứ tự đề xuất + lý do từng clip.
+        """
+        from directorai_context.modules.editorial_order import suggest_order
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        try:
+            return suggest_order(req.clip_paths, goal=req.goal)
+        except Exception as e:
+            log.error("order_suggest_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.post("/vision/cluster_clips")
     async def post_cluster_clips(req: ClusterRequest) -> dict[str, object]:

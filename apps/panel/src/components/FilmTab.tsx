@@ -46,6 +46,11 @@ export function FilmTab(): React.ReactElement {
   // B4 — tiến độ per-clip khi lập kế hoạch (Gemini Vision từng clip) + Hủy.
   const [planProg, setPlanProg] = useState<{ done: number; total: number } | null>(null);
   const [planOpId, setPlanOpId] = useState<string | null>(null);
+  // A2 — gợi ý thứ tự clip theo mạch phim (áp vào buildPlan khi dựng).
+  const [orderRows, setOrderRows] = useState<
+    { path: string; reason: string; phaseVi: string; actionLevel: number }[] | null
+  >(null);
+  const [orderStrategy, setOrderStrategy] = useState<string>('');
   useEffect(() => {
     const off = wsClient.onProgress((evt) => {
       if (evt.kind === 'start' && evt.method === 'context.buildEditPlan') {
@@ -104,11 +109,16 @@ export function FilmTab(): React.ReactElement {
     setError(null);
     setApplyRes(null);
     try {
+      // A2 — nếu đã có gợi ý thứ tự, dựng theo thứ tự đó (lọc về clip hiện có).
+      const ordered = orderRows
+        ? orderRows.map((o) => o.path).filter((p) => clipPaths.includes(p))
+        : null;
+      const planClipPaths = ordered && ordered.length === clipPaths.length ? ordered : clipPaths;
       // Timeout co giãn theo số clip (Vision chạy từng clip).
       const ms = planTimeoutMs(clipPaths.length);
       const r = await withTimeout(
         wsClient.call<{ edit_plan: SessionPlan }>('context.buildEditPlan', {
-          clipPaths,
+          clipPaths: planClipPaths,
           goal: tpl.goal,
           // A6 — override người dùng (nếu >0), nếu không dùng mặc định template.
           targetDurationSec:
@@ -159,6 +169,33 @@ export function FilmTab(): React.ReactElement {
       });
     } catch (e) {
       setError(`Cắt dead-air lỗi: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // ── A2: Gợi ý thứ tự dựng theo mạch phim ───────────────────────────────────
+  const suggestOrder = async (): Promise<void> => {
+    if (clipPaths.length === 0) {
+      setError('Chưa có clip có đường dẫn — bấm "Lấy path tự động" ở mục Nguồn clip.');
+      return;
+    }
+    setBusy('order');
+    setError(null);
+    try {
+      const ms = planTimeoutMs(clipPaths.length, 60_000, 4000);
+      const r = await withTimeout(
+        wsClient.call<{
+          order: { path: string; reason: string; phaseVi: string; actionLevel: number }[];
+          strategy: string;
+        }>('context.suggestOrder', { clipPaths, goal: tpl?.goal }),
+        ms,
+        'Gợi ý thứ tự'
+      );
+      setOrderRows(r.order ?? null);
+      setOrderStrategy(r.strategy ?? '');
+    } catch (e) {
+      setError(`Gợi ý thứ tự lỗi: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setBusy(null);
     }
@@ -279,7 +316,31 @@ export function FilmTab(): React.ReactElement {
           >
             Cắt khoảng chết (dead-air)
           </Button>
+          <Button
+            iconName="list"
+            onClick={() => void suggestOrder()}
+            busy={busy === 'order'}
+            disabled={!clipPaths.length}
+          >
+            Gợi ý thứ tự (AI)
+          </Button>
         </div>
+
+        {orderRows && orderRows.length > 0 && (
+          <div className="film-order">
+            <div className="film-note">
+              <Icon name="list" size={14} /> {orderStrategy} — sẽ dựng theo thứ tự này:
+            </div>
+            <ol className="film-order-list">
+              {orderRows.map((o) => (
+                <li key={o.path}>
+                  <b>{o.phaseVi}</b> · {o.path.split(/[\\/]/).pop()} —{' '}
+                  <span className="film-order-reason">{o.reason}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
 
         {(busy === 'plan' || busy === 'deadair') && (
           <div className="film-note">

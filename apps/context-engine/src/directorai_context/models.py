@@ -214,6 +214,13 @@ class EditPlanRequest(BaseModel):
     max_vision_clips: int | None = None
 
 
+class OrderRequest(BaseModel):
+    """A2 — Request gợi ý THỨ TỰ dựng clip theo mạch phim."""
+
+    clip_paths: list[str]
+    goal: str | None = None
+
+
 class DeadAirRequest(BaseModel):
     """LF4 — Request cắt dead-air/khoảng lặng đầu-cuối từng clip."""
 
