@@ -36,6 +36,7 @@ from directorai_context.models import (
     SearchRequest,
     SearchResult,
     SpeedAnalyzeRequest,
+    SpeedPlanRequest,
     TranscribeRequest,
     TranscribeResult,
     VideoMapRequest,
@@ -492,6 +493,35 @@ def create_app() -> FastAPI:
             return analyze_speed_batch(req.clip_paths, samples=req.samples)
         except Exception as e:
             log.error("speed_analyze_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/speed/plan")
+    async def post_speed_plan(req: SpeedPlanRequest) -> dict[str, object]:
+        """SPEED P2 — QUYẾT tốc độ từng clip từ PHÂN BỐ thật (percentile, không
+        hardcode). Trả speed + reason + confidence + fps-gate. CV thuần, 0 token."""
+        from directorai_context.modules.speed_analyze import analyze_speed_batch
+        from directorai_context.modules.speed_plan import plan_speed_batch
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        try:
+            analysis = analyze_speed_batch(req.clip_paths, samples=req.samples)
+            return plan_speed_batch(
+                analysis,
+                mode=req.mode,
+                p_lo=req.p_lo,
+                p_hi=req.p_hi,
+                min_speed=req.min_speed,
+                max_speed=req.max_speed,
+                slowmo_floor=req.slowmo_floor,
+                speedup_ceiling=req.speedup_ceiling,
+                target_motion=req.target_motion,
+                smooth_fps=req.smooth_fps,
+                slowmo_fps_floor=req.slowmo_fps_floor,
+                target_duration_sec=req.target_duration_sec,
+            )
+        except Exception as e:
+            log.error("speed_plan_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.post("/vision/cluster_clips")

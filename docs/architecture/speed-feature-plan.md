@@ -50,8 +50,8 @@ Mỗi shot → tổng hợp tín hiệu → speed + reason + confidence:
 | Phase   | Ẩn số     | Spike                                                                                        | Cổng PASS                      |
 | ------- | --------- | -------------------------------------------------------------------------------------------- | ------------------------------ |
 | ✅ P0   | đường ghi | FCPXML import live + introspect setSpeed                                                     | **xong: Lane-B**               |
-| P1      | engine số | `speed_analyze.py` (motion+action+silence+fps) trên 10 clip → in phân bố                     | bảng số hợp lý                 |
-| P2      | ngưỡng R3 | **calibrate** percentile + validate clip giữ-lại                                             | preview "nhìn đúng"            |
+| ✅ P1   | engine số | `speed_analyze.py` (motion+fps) trên 10 clip → in phân bố                                    | **xong: bảng số hợp lý**       |
+| ✅ P2   | ngưỡng R3 | `speed_plan.py` percentile + 4 mode + fps-gate + clamp; 8/8 test + 10 clip thật              | **xong: preview "nhìn đúng"**  |
 | P3      | apply     | nối speed/clip vào Lane-B batch (recipe.speed có sẵn) + R4 fps-gate                          | render đúng fps/độ dài (probe) |
 | P4      | UI        | module "Điều chỉnh tốc độ" + ⚙️ (mode/độ slow-mo/min-max/thời-lượng) + bảng preview + Render | preview khớp output            |
 | P5(phụ) | editable  | xuất FCPXML (sửa R1b width) cho ai muốn timeline retime                                      | import thủ công OK             |
@@ -59,8 +59,8 @@ Mỗi shot → tổng hợp tín hiệu → speed + reason + confidence:
 
 ## 5. Definition of MVP "xịn" (Gate)
 
-G1 apply path verified (✅ Lane-B) · G2 audio không méo (✅ atempo) · G3 ngưỡng từ data ·
-G4 fps-gate slow-mo · G5 preview khớp output · G6 chạy độc lập (không trộn trim/reorder) ·
+G1 apply path verified (✅ Lane-B) · G2 audio không méo (✅ atempo) · G3 ✅ ngưỡng từ data (percentile batch) ·
+G4 ✅ fps-gate slow-mo (test+24fps→0.8x) · G5 preview khớp output (P3/P4) · G6 chạy độc lập (không trộn trim/reorder) ·
 G7 mặc định CV (0 token), Vision tuỳ chọn.
 
 ## 2b. P1 SPIKE — phân bố motion THẬT (2026-06-08, 10 clip Nerf)
@@ -71,6 +71,28 @@ fps 24–60 (đa số 60). Cao nhất 3.mp4=0.21 (đấu súng), thấp nhất D
 → **R3 đóng**: ngưỡng = PERCENTILE phân bố mỗi batch (slow-mo ≥ p80, speed-up ≤ p20, else 1.0×) —
 tự thích nghi, không hardcode. Motion clustered hẹp (0.07–0.21) ⇒ percentile (tương đối) đúng hơn
 ngưỡng tuyệt đối. **60fps phổ biến ⇒ slow-mo mượt** (R4 chỉ cần gate cho clip <~50fps, vd 24fps).
+
+## 2c. P2 SPIKE — engine quyết tốc độ chạy trên 10 clip THẬT (2026-06-08)
+
+`speed_plan.py` + `/speed/plan` (analyze→plan 1 lần). Ngưỡng = percentile CỦA CHÍNH batch
+(không hardcode). Chạy 10 clip Nerf thật (mode content): p20=0.135 · p80=0.165 →
+slowmo=3 · speedup=3 · keep=4.
+
+| clip                   | motion | fps | speed    | category |
+| ---------------------- | ------ | --- | -------- | -------- |
+| 3.mp4 (đấu súng)       | 0.239  | 60  | **0.5x** | slow-mo  |
+| DJI ...0842            | 0.168  | 60  | 0.69x    | slow-mo  |
+| 2.mp4                  | 0.165  | 60  | 0.70x    | slow-mo  |
+| (4 clip giữa)          | ~0.14  | 60  | 1.0x     | keep     |
+| 7.mp4                  | 0.135  | 60  | 1.3x     | speed-up |
+| DJI ...1148 (drone êm) | 0.125  | 60  | **2.0x** | speed-up |
+
+→ **"Nhìn đúng"**: cảnh đấu súng động nhất chậm nhất, drone êm nhất nhanh nhất, giữa giữ nguyên.
+
+Unit-test (8/8 pass, hàm thuần không cần media): R4 fps-gate (24fps action 0.5x→**nâng 0.8x**
+chống judder), clamp [0.5,2.0] (motion 99→vẫn 0.5x), 4 mode (content/normalize/duration/music-fallback),
+duration mode ép 30s→đúng 20.0s, clip-lỗi giữ 1.0x không crash summary.
+→ **P2 đóng**. confidence scale theo độ cực đoan; 4 mode + ⚙️ tham số đã sẵn cho UI (P4).
 
 ## 6. Risk register
 

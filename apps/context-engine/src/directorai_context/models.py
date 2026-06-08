@@ -228,6 +228,24 @@ class SpeedAnalyzeRequest(BaseModel):
     samples: int = 12
 
 
+class SpeedPlanRequest(BaseModel):
+    """SPEED P2 — Request QUYẾT tốc độ từng clip (analyze + plan từ phân bố thật)."""
+
+    clip_paths: list[str]
+    samples: int = 12
+    mode: str = "content"  # content | normalize | music | duration
+    p_lo: float = 20.0  # percentile ngưỡng tua-nhanh (≤ p_lo → speed-up)
+    p_hi: float = 80.0  # percentile ngưỡng slow-mo (≥ p_hi → slow-mo)
+    min_speed: float = 0.5  # clamp ⊂ [0.5, 2.0]
+    max_speed: float = 2.0
+    slowmo_floor: float = 0.5  # slow-mo mạnh nhất (cảnh động nhất)
+    speedup_ceiling: float = 2.0  # tua nhanh nhất (cảnh tĩnh nhất)
+    target_motion: float = 0.0  # mode normalize: motion mục tiêu (0 = auto = trung vị)
+    smooth_fps: float = 50.0  # fps-gate: dưới mức này slow-mo mạnh bị giới hạn
+    slowmo_fps_floor: float = 0.8  # slow-mo nhẹ nhất cho clip fps thấp
+    target_duration_sec: float = 0.0  # mode duration: tổng thời lượng mục tiêu
+
+
 class DeadAirRequest(BaseModel):
     """LF4 — Request cắt dead-air/khoảng lặng đầu-cuối từng clip."""
 
