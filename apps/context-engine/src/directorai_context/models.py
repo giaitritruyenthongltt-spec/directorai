@@ -221,6 +221,13 @@ class OrderRequest(BaseModel):
     goal: str | None = None
 
 
+class SpeedAnalyzeRequest(BaseModel):
+    """SPEED P1 — Request phân tích tín hiệu tốc độ (motion/fps) từng clip."""
+
+    clip_paths: list[str]
+    samples: int = 12
+
+
 class DeadAirRequest(BaseModel):
     """LF4 — Request cắt dead-air/khoảng lặng đầu-cuối từng clip."""
 

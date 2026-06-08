@@ -63,7 +63,17 @@ G1 apply path verified (✅ Lane-B) · G2 audio không méo (✅ atempo) · G3 n
 G4 fps-gate slow-mo · G5 preview khớp output · G6 chạy độc lập (không trộn trim/reorder) ·
 G7 mặc định CV (0 token), Vision tuỳ chọn.
 
+## 2b. P1 SPIKE — phân bố motion THẬT (2026-06-08, 10 clip Nerf)
+
+`speed_analyze.py` + `/speed/analyze` đo motion (mean inter-frame diff) + fps/duration.
+Kết quả 10 clip (gameplay + DJI): **min 0.073 · p20 0.129 · p50 0.135 · p80 0.148 · max 0.209**;
+fps 24–60 (đa số 60). Cao nhất 3.mp4=0.21 (đấu súng), thấp nhất DJI_0010=0.073 (drone êm) → HỢP LÝ.
+→ **R3 đóng**: ngưỡng = PERCENTILE phân bố mỗi batch (slow-mo ≥ p80, speed-up ≤ p20, else 1.0×) —
+tự thích nghi, không hardcode. Motion clustered hẹp (0.07–0.21) ⇒ percentile (tương đối) đúng hơn
+ngưỡng tuyệt đối. **60fps phổ biến ⇒ slow-mo mượt** (R4 chỉ cần gate cho clip <~50fps, vd 24fps).
+
 ## 6. Risk register
 
 R1 ✅đóng (FCPXML auto-import bỏ→Lane-B) · R1b 🟡 producer width undefined · R2 ✅đóng (atempo) ·
-R3 🟡 ngưỡng-từ-data · R4 🟡 fps judder · R5 ✅đóng (native bỏ) · R6 🟢 xung đột module · R7 🟢 preview.
+R3 ✅đóng (percentile p20/p80 từ phân bố thật) · R4 🟡 fps judder (gate <50fps; footage chủ yếu 60fps) ·
+R5 ✅đóng (native bỏ) · R6 🟢 xung đột module · R7 🟢 preview.

@@ -35,6 +35,7 @@ from directorai_context.models import (
     SearchHit,
     SearchRequest,
     SearchResult,
+    SpeedAnalyzeRequest,
     TranscribeRequest,
     TranscribeResult,
     VideoMapRequest,
@@ -477,6 +478,20 @@ def create_app() -> FastAPI:
             return suggest_order(req.clip_paths, goal=req.goal)
         except Exception as e:
             log.error("order_suggest_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/speed/analyze")
+    async def post_speed_analyze(req: SpeedAnalyzeRequest) -> dict[str, object]:
+        """SPEED P1 — Đo tín hiệu tốc độ (motion/fps/duration) + phân bố để
+        calibrate ngưỡng. CV thuần, KHÔNG gọi Gemini."""
+        from directorai_context.modules.speed_analyze import analyze_speed_batch
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        try:
+            return analyze_speed_batch(req.clip_paths, samples=req.samples)
+        except Exception as e:
+            log.error("speed_analyze_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.post("/vision/cluster_clips")
