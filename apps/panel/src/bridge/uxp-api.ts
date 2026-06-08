@@ -819,6 +819,105 @@ export async function recutDetectScenes(videoPath?: string): Promise<Record<stri
 }
 
 /**
+ * ADJ-LAYER probe — liệt kê item trong bin (nhận diện adjustment layer) + chữ
+ * ký các action chèn của SequenceEditor. Gọi qua `_debug.adjLayerProbe`.
+ */
+export async function adjLayerProbe(): Promise<Record<string, unknown>> {
+  if (!ppro) return { error: 'not in UXP' };
+  const pp = ppro as Record<string, any>;
+  const out: Record<string, unknown> = {};
+  const proj = await pp.Project?.getActiveProject?.();
+  const root = await proj?.getRootItem?.();
+  if (!root) return { error: 'no root item' };
+  out.rootMembers = listMembers(root);
+  // Tìm hàm lấy con của bin.
+  let items: any[] = [];
+  for (const fn of ['getItems', 'getChildItems', 'getItemsByType', 'children']) {
+    try {
+      const f = (root as any)[fn];
+      if (typeof f === 'function') {
+        const r = await f.call(root);
+        if (Array.isArray(r) && r.length) {
+          items = r;
+          out.childGetter = fn;
+          break;
+        }
+      } else if (Array.isArray(f)) {
+        items = f;
+        out.childGetter = fn + ' (prop)';
+        break;
+      }
+    } catch (e) {
+      out[`${fn}_err`] = e instanceof Error ? e.message : String(e);
+    }
+  }
+  out.itemCount = items.length;
+  const rows: any[] = [];
+  const describe = async (it: any, depth: number): Promise<void> => {
+    const o: any = { depth };
+    try {
+      o.name = it?.name ?? (await it?.getName?.());
+    } catch {
+      o.name = '?';
+    }
+    // type là PROPERTY trên ProjectItem PPro26 (không phải method).
+    try {
+      const t = (it as any).type;
+      o.type = typeof t === 'function' ? await t.call(it) : t;
+    } catch {
+      /* skip */
+    }
+    // Adjustment layer = ProjectItem KHÔNG có media file path (synthetic).
+    let hasPath = false;
+    for (const m of ['getMediaFilePath', 'getMediaPath', 'getFilePath']) {
+      try {
+        const f = (it as any)[m];
+        if (typeof f === 'function') {
+          const p = await f.call(it);
+          if (typeof p === 'string' && p.length > 0) {
+            hasPath = true;
+            break;
+          }
+        }
+      } catch {
+        /* skip */
+      }
+    }
+    o.hasPath = hasPath;
+    rows.push(o);
+    // Đệ quy vào bin (depth tối đa 2).
+    if (depth < 2) {
+      try {
+        const kids = (it as any).getItems ? await (it as any).getItems() : null;
+        if (Array.isArray(kids) && kids.length) for (const k of kids) await describe(k, depth + 1);
+      } catch {
+        /* skip */
+      }
+    }
+  };
+  for (const it of items.slice(0, 60)) await describe(it, 0);
+  out.items = rows;
+  // Ứng viên adjustment layer: KHÔNG có media path + không phải bin.
+  out.adjCandidates = rows.filter((r) => !r.hasPath && !/bin|folder/i.test(String(r.type ?? '')));
+  // Chữ ký action chèn của SequenceEditor.
+  try {
+    const seq = await proj?.getActiveSequence?.();
+    const ed = pp.SequenceEditor?.getEditor?.(seq);
+    if (ed) {
+      out.editorArities = {
+        createOverwriteItemAction: ed.createOverwriteItemAction?.length,
+        createInsertProjectItemAction: ed.createInsertProjectItemAction?.length,
+        createAddItemAction: ed.createAddItemAction?.length,
+      };
+      out.vTrackCount = await seq?.getVideoTrackCount?.();
+    }
+  } catch (e) {
+    out.editorErr = e instanceof Error ? e.message : String(e);
+  }
+  return out;
+}
+
+/**
  * SPIKES S1/S5/S4 — kiểm 3 ẩn số chốt phạm vi MVP recut:
  *  S1: `color`/Lumetri Exposure SET value có PERSIST không (đọc lại)?
  *  S5: Transform `Scale` SET value persist không → quyết flip/crop làm được trong Premiere?
