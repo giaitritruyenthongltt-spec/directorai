@@ -867,31 +867,52 @@ export async function adjLayerProbe(): Promise<Record<string, unknown>> {
     } catch {
       /* skip */
     }
-    // Adjustment layer = ProjectItem KHÔNG có media file path (synthetic).
-    let hasPath = false;
-    for (const m of ['getMediaFilePath', 'getMediaPath', 'getFilePath']) {
-      try {
-        const f = (it as any)[m];
-        if (typeof f === 'function') {
-          const p = await f.call(it);
-          if (typeof p === 'string' && p.length > 0) {
-            hasPath = true;
-            break;
+    // Adjustment layer = ProjectItem KHÔNG có media file path. Lấy path THẬT
+    // qua cast ClipProjectItem (đúng pattern PPro26) + fallback method trực tiếp.
+    let path = '';
+    try {
+      const ClipPI = pp.ClipProjectItem as { cast?: (x: unknown) => any } | undefined;
+      const clip = ClipPI?.cast?.(it);
+      if (clip?.getMediaFilePath) path = (await clip.getMediaFilePath()) ?? '';
+    } catch {
+      /* not a clip item */
+    }
+    if (!path) {
+      for (const m of ['getMediaFilePath', 'getMediaPath', 'getFilePath']) {
+        try {
+          const f = (it as any)[m];
+          if (typeof f === 'function') {
+            const p = await f.call(it);
+            if (typeof p === 'string' && p.length > 0) {
+              path = p;
+              break;
+            }
           }
+        } catch {
+          /* skip */
         }
-      } catch {
-        /* skip */
       }
     }
-    o.hasPath = hasPath;
+    o.hasPath = !!path;
+    if (path) o.pathTail = path.slice(-40);
     rows.push(o);
-    // Đệ quy vào bin (depth tối đa 2).
+    // Đệ quy vào bin (depth tối đa 2). Bin (TYPE_BIN) cần CAST FolderItem mới có
+    // getItems (item từ getItems() là ProjectItem, không phải FolderItem).
     if (depth < 2) {
       try {
-        const kids = (it as any).getItems ? await (it as any).getItems() : null;
-        if (Array.isArray(kids) && kids.length) for (const k of kids) await describe(k, depth + 1);
-      } catch {
-        /* skip */
+        let host: any = it;
+        if (typeof host.getItems !== 'function') {
+          const Folder = pp.FolderItem as { cast?: (x: unknown) => any } | undefined;
+          const f = Folder?.cast?.(it);
+          if (f?.getItems) host = f;
+        }
+        if (typeof host.getItems === 'function') {
+          const kids = await host.getItems();
+          o.childCount = Array.isArray(kids) ? kids.length : 0;
+          if (Array.isArray(kids)) for (const k of kids) await describe(k, depth + 1);
+        }
+      } catch (e) {
+        o.childErr = e instanceof Error ? e.message : String(e);
       }
     }
   };
