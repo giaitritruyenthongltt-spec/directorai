@@ -32,6 +32,7 @@ import {
   sedProbe,
   spikeProbe,
   adjLayerProbe,
+  fcpxmlImportProbe,
   recutDetectScenes,
 } from './uxp-api.js';
 import { ReconnectMachine, DEFAULT_RECONNECT_CONFIG } from './reconnect-machine.js';
@@ -202,11 +203,15 @@ class WsClient {
                     ? await spikeProbe()
                     : req.method === '_debug.adjLayerProbe'
                       ? await adjLayerProbe()
-                      : req.method === 'recut.detectScenes'
-                        ? await recutDetectScenes(
-                            (req.params as { videoPath?: string } | undefined)?.videoPath
+                      : req.method === '_debug.fcpxmlImport'
+                        ? await fcpxmlImportProbe(
+                            (req.params as { path?: string } | undefined)?.path
                           )
-                        : await dispatchRpc(req.method, req.params, getPanelAdapter());
+                        : req.method === 'recut.detectScenes'
+                          ? await recutDetectScenes(
+                              (req.params as { videoPath?: string } | undefined)?.videoPath
+                            )
+                          : await dispatchRpc(req.method, req.params, getPanelAdapter());
       // A4 — JSON-RPC success PHẢI có field `result`. Method trả void
       // sẽ cho `undefined`, và JSON.stringify bỏ key undefined → response
       // không có result → server không nhận ra → treo. Ép null.

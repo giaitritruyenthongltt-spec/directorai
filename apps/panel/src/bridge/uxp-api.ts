@@ -819,6 +819,56 @@ export async function recutDetectScenes(videoPath?: string): Promise<Record<stri
 }
 
 /**
+ * SPEED P0 — Import FCPXML (có timeMap retime) vào Premiere + ĐỌC-LẠI getSpeed
+ * từng clip để verify retime sống sót qua import. Gọi qua `_debug.fcpxmlImport`.
+ * (Để lại sequence mới cho người dùng xem — KHÔNG dọn.)
+ */
+export async function fcpxmlImportProbe(path?: string): Promise<Record<string, unknown>> {
+  if (!ppro) return { error: 'not in UXP' };
+  const pp = ppro as Record<string, any>;
+  const fcpxml = path ?? 'C:\\Users\\KENLY\\.directorai\\exports\\speed_spike.fcpxml';
+  const out: Record<string, unknown> = { fcpxml };
+  const proj = await pp.Project.getActiveProject();
+  const seqs0 = (await proj.getSequences?.()) ?? [];
+  out.before = seqs0.length;
+  const variants: [string, () => Promise<unknown>][] = [
+    ['importSequences[arr]', async () => proj.importSequences([fcpxml])],
+    ['importSequences[str]', async () => proj.importSequences(fcpxml)],
+    ['importFiles[arr]', async () => proj.importFiles([fcpxml])],
+  ];
+  for (const [label, fn] of variants) {
+    try {
+      await fn();
+      const p2 = await pp.Project.getActiveProject();
+      const after = (await p2.getSequences?.()) ?? [];
+      if (after.length > seqs0.length) {
+        out.importedVia = label;
+        out.after = after.length;
+        const ns = after[after.length - 1];
+        out.newSeqName = ns?.name ?? (await ns?.getName?.());
+        const track = await ns.getVideoTrack?.(0);
+        const items = (await track?.getTrackItems?.(1, false)) ?? [];
+        const clips: any[] = [];
+        for (const it of items) {
+          clips.push({
+            name: await it.getName?.().catch(() => '?'),
+            speed: await it.getSpeed?.().catch(() => null),
+            startSec: (await it.getStartTime?.().catch(() => null))?.seconds,
+            durSec: (await it.getDuration?.().catch(() => null))?.seconds,
+          });
+        }
+        out.clips = clips;
+        break;
+      }
+      out[label] = 'no new seq';
+    } catch (e) {
+      out[label] = 'THREW: ' + (e instanceof Error ? e.message : String(e)).slice(0, 140);
+    }
+  }
+  return out;
+}
+
+/**
  * ADJ-LAYER probe — liệt kê item trong bin (nhận diện adjustment layer) + chữ
  * ký các action chèn của SequenceEditor. Gọi qua `_debug.adjLayerProbe`.
  */
