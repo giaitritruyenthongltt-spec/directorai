@@ -37,6 +37,7 @@ from directorai_context.models import (
     SearchResult,
     SpeedAnalyzeRequest,
     SpeedPlanRequest,
+    SpeedRenderRequest,
     TranscribeRequest,
     TranscribeResult,
     VideoMapRequest,
@@ -522,6 +523,42 @@ def create_app() -> FastAPI:
             )
         except Exception as e:
             log.error("speed_plan_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/speed/render")
+    async def post_speed_render(req: SpeedRenderRequest) -> dict[str, object]:
+        """SPEED P3 — Render Lane-B từng clip theo tốc độ đã quyết (setpts+atempo
+        giữ pitch). Probe output VERIFY fps giữ nguyên + duration ~= in/speed.
+        dry_run=True chỉ lập kế hoạch (preview), không render."""
+        from directorai_context.modules.speed_render import render_speed_batch
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        plan_kwargs = {
+            "p_lo": req.p_lo,
+            "p_hi": req.p_hi,
+            "min_speed": req.min_speed,
+            "max_speed": req.max_speed,
+            "slowmo_floor": req.slowmo_floor,
+            "speedup_ceiling": req.speedup_ceiling,
+            "target_motion": req.target_motion,
+            "smooth_fps": req.smooth_fps,
+            "slowmo_fps_floor": req.slowmo_fps_floor,
+            "target_duration_sec": req.target_duration_sec,
+        }
+        try:
+            return render_speed_batch(
+                req.clip_paths,
+                samples=req.samples,
+                mode=req.mode,
+                out_dir=req.out_dir,
+                use_nvenc=req.use_nvenc,
+                skip_unity=req.skip_unity,
+                dry_run=req.dry_run,
+                plan_kwargs=plan_kwargs,
+            )
+        except Exception as e:
+            log.error("speed_render_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.post("/vision/cluster_clips")

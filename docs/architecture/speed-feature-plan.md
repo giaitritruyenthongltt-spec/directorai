@@ -47,21 +47,21 @@ Mỗi shot → tổng hợp tín hiệu → speed + reason + confidence:
 
 ## 4. Plan v3 theo phase (mỗi phase = 1 vòng có CỔNG)
 
-| Phase   | Ẩn số     | Spike                                                                                        | Cổng PASS                      |
-| ------- | --------- | -------------------------------------------------------------------------------------------- | ------------------------------ |
-| ✅ P0   | đường ghi | FCPXML import live + introspect setSpeed                                                     | **xong: Lane-B**               |
-| ✅ P1   | engine số | `speed_analyze.py` (motion+fps) trên 10 clip → in phân bố                                    | **xong: bảng số hợp lý**       |
-| ✅ P2   | ngưỡng R3 | `speed_plan.py` percentile + 4 mode + fps-gate + clamp; 8/8 test + 10 clip thật              | **xong: preview "nhìn đúng"**  |
-| P3      | apply     | nối speed/clip vào Lane-B batch (recipe.speed có sẵn) + R4 fps-gate                          | render đúng fps/độ dài (probe) |
-| P4      | UI        | module "Điều chỉnh tốc độ" + ⚙️ (mode/độ slow-mo/min-max/thời-lượng) + bảng preview + Render | preview khớp output            |
-| P5(phụ) | editable  | xuất FCPXML (sửa R1b width) cho ai muốn timeline retime                                      | import thủ công OK             |
-| P6(sau) | precision | optical-flow + frame-interp                                                                  | slow-mo mượt                   |
+| Phase   | Ẩn số     | Spike                                                                                              | Cổng PASS                     |
+| ------- | --------- | -------------------------------------------------------------------------------------------------- | ----------------------------- |
+| ✅ P0   | đường ghi | FCPXML import live + introspect setSpeed                                                           | **xong: Lane-B**              |
+| ✅ P1   | engine số | `speed_analyze.py` (motion+fps) trên 10 clip → in phân bố                                          | **xong: bảng số hợp lý**      |
+| ✅ P2   | ngưỡng R3 | `speed_plan.py` percentile + 4 mode + fps-gate + clamp; 8/8 test + 10 clip thật                    | **xong: preview "nhìn đúng"** |
+| ✅ P3   | apply     | `speed_render.py` + `/speed/render` (recipe.speed→Lane-B) + probe-verify; 12/12 test + render thật | **xong: fps giữ, dur đúng**   |
+| P4      | UI        | module "Điều chỉnh tốc độ" + ⚙️ (mode/độ slow-mo/min-max/thời-lượng) + bảng preview + Render       | preview khớp output           |
+| P5(phụ) | editable  | xuất FCPXML (sửa R1b width) cho ai muốn timeline retime                                            | import thủ công OK            |
+| P6(sau) | precision | optical-flow + frame-interp                                                                        | slow-mo mượt                  |
 
 ## 5. Definition of MVP "xịn" (Gate)
 
-G1 apply path verified (✅ Lane-B) · G2 audio không méo (✅ atempo) · G3 ✅ ngưỡng từ data (percentile batch) ·
-G4 ✅ fps-gate slow-mo (test+24fps→0.8x) · G5 preview khớp output (P3/P4) · G6 chạy độc lập (không trộn trim/reorder) ·
-G7 mặc định CV (0 token), Vision tuỳ chọn.
+G1 ✅ apply path verified (render thật Lane-B) · G2 ✅ audio không méo (atempo, aac out đúng) · G3 ✅ ngưỡng từ data (percentile batch) ·
+G4 ✅ fps-gate slow-mo (test+24fps→0.8x) · G5 preview khớp output (dry_run=plan, P4 hiện UI) · G6 chạy độc lập (không trộn trim/reorder) ·
+G7 mặc định CV (0 token), Vision tuỳ chọn. → Còn G5-UI (P4).
 
 ## 2b. P1 SPIKE — phân bố motion THẬT (2026-06-08, 10 clip Nerf)
 
@@ -93,6 +93,21 @@ Unit-test (8/8 pass, hàm thuần không cần media): R4 fps-gate (24fps action
 chống judder), clamp [0.5,2.0] (motion 99→vẫn 0.5x), 4 mode (content/normalize/duration/music-fallback),
 duration mode ép 30s→đúng 20.0s, clip-lỗi giữ 1.0x không crash summary.
 → **P2 đóng**. confidence scale theo độ cực đoan; 4 mode + ⚙️ tham số đã sẵn cho UI (P4).
+
+## 2d. P3 SPIKE — RENDER thật + probe-verify (2026-06-08)
+
+`speed_render.py` + `/speed/render`: analyze→plan→với clip speed≠1.0 render Lane-B
+(`recipe.speed` → setpts+atempo), probe output VERIFY. Render thật 3 clip (NVENC):
+
+| clip  | speed | in_dur | out_dur               | expected | out_fps | verify     |
+| ----- | ----- | ------ | --------------------- | -------- | ------- | ---------- |
+| 3.mp4 | 0.7x  | ~9.0s  | 12.91s                | 12.94s   | 60      | ✅ fps+dur |
+| 6.mp4 | 1.3x  | ~10.0s | 7.75s                 | 7.73s    | 60      | ✅ fps+dur |
+| 7.mp4 | 1.0x  | —      | (giữ gốc, skip_unity) | —        | —       | bỏ qua     |
+
+Audio output: aac 44100Hz, duration khớp video (atempo áp → **giữ pitch, không méo giọng**).
+12/12 unit-test (dry_run + đặt tên + skip_unity + clip-lỗi). `dry_run=true` = preview path
+(không render) cho UI. → **P3 đóng**: G1/G2 verified end-to-end trên render THẬT.
 
 ## 6. Risk register
 

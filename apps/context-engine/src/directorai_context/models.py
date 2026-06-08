@@ -246,6 +246,15 @@ class SpeedPlanRequest(BaseModel):
     target_duration_sec: float = 0.0  # mode duration: tổng thời lượng mục tiêu
 
 
+class SpeedRenderRequest(SpeedPlanRequest):
+    """SPEED P3 — Request render Lane-B từng clip theo tốc độ đã quyết (P2)."""
+
+    out_dir: str | None = None  # nơi ghi output (mặc định cạnh file gốc)
+    use_nvenc: bool = True
+    skip_unity: bool = True  # bỏ qua clip speed 1.0x (giữ bản gốc)
+    dry_run: bool = False  # chỉ lập kế hoạch + đường ra, KHÔNG render
+
+
 class DeadAirRequest(BaseModel):
     """LF4 — Request cắt dead-air/khoảng lặng đầu-cuối từng clip."""
 
