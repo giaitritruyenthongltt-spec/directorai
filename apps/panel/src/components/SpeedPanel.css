@@ -1,0 +1,78 @@
+.spp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--layer-1);
+  margin-top: var(--sp-3);
+}
+.spp-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--sp-2);
+}
+.spp-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--layer-2);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.spp-mode:hover {
+  border-color: var(--accent-ring);
+}
+.spp-mode.on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+.spp-emoji {
+  font-size: 18px;
+  line-height: 1.1;
+}
+.spp-label {
+  font-size: var(--fs-xs);
+  text-align: center;
+}
+.spp-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+}
+.spp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+}
+.spp-row > span:first-child {
+  min-width: 130px;
+}
+.spp-row input[type='range'] {
+  flex: 1;
+}
+.spp-row input[type='number'] {
+  width: 90px;
+  padding: 4px 6px;
+  background: var(--layer-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}
+.spp-val {
+  min-width: 48px;
+  text-align: right;
+  color: var(--text-dim);
+}
+.spp-note {
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  line-height: 1.4;
+}

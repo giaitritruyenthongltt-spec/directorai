@@ -108,6 +108,25 @@ export const MODULE_REGISTRY: readonly EditModuleDef[] = [
       example: 'Chọn "Điện ảnh" 100% → mọi clip lên tông teal-cam.',
     },
   },
+  {
+    id: 'speed_adjust',
+    category: 'speed',
+    name: 'Điều chỉnh tốc độ',
+    icon: '⚡',
+    feasibility: 'verified',
+    enabled: true,
+    goalHint: 'Slow-mo cảnh động (đấu súng) + tua nhanh cảnh tĩnh, tự đo bằng AI/CV.',
+    help: {
+      title: 'Điều chỉnh tốc độ từng cảnh',
+      lines: [
+        'AI đo độ "động" (motion) mỗi clip → cảnh đấu súng SLOW-MO, cảnh tĩnh TUA NHANH.',
+        'Ngưỡng lấy từ chính bộ clip của bạn (không đoán cứng); giữ pitch tiếng (atempo).',
+        'Bấm ⚙️ chọn kiểu (theo nội dung/chuẩn hoá/đủ thời lượng) + độ slow-mo/min-max.',
+        'Xem trước bảng tốc độ → Render ra file mới (KHÔNG đụng clip gốc; tự kéo vào timeline).',
+      ],
+      example: 'Cảnh trúng đạn → 0.5×; cảnh drone bay êm → 2× cho gọn.',
+    },
+  },
 ];
 
 /** Tra cứu module theo id. */

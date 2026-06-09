@@ -25,6 +25,7 @@ export type ModuleCategory =
   | 'rename'
   | 'transition'
   | 'color'
+  | 'speed'
   | 'analysis';
 
 /** Thao tác an toàn (khớp SAFE_PLAN_ACTIONS phía server). */

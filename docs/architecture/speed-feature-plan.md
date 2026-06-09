@@ -53,15 +53,15 @@ Mỗi shot → tổng hợp tín hiệu → speed + reason + confidence:
 | ✅ P1   | engine số | `speed_analyze.py` (motion+fps) trên 10 clip → in phân bố                                          | **xong: bảng số hợp lý**      |
 | ✅ P2   | ngưỡng R3 | `speed_plan.py` percentile + 4 mode + fps-gate + clamp; 8/8 test + 10 clip thật                    | **xong: preview "nhìn đúng"** |
 | ✅ P3   | apply     | `speed_render.py` + `/speed/render` (recipe.speed→Lane-B) + probe-verify; 12/12 test + render thật | **xong: fps giữ, dur đúng**   |
-| P4      | UI        | module "Điều chỉnh tốc độ" + ⚙️ (mode/độ slow-mo/min-max/thời-lượng) + bảng preview + Render       | preview khớp output           |
+| ✅ P4   | UI        | module ⚡ + SpeedPanel ⚙️ + bảng preview + Render; speed.plan/render qua WS; panel mount sạch      | **xong: preview khớp output** |
 | P5(phụ) | editable  | xuất FCPXML (sửa R1b width) cho ai muốn timeline retime                                            | import thủ công OK            |
 | P6(sau) | precision | optical-flow + frame-interp                                                                        | slow-mo mượt                  |
 
 ## 5. Definition of MVP "xịn" (Gate)
 
 G1 ✅ apply path verified (render thật Lane-B) · G2 ✅ audio không méo (atempo, aac out đúng) · G3 ✅ ngưỡng từ data (percentile batch) ·
-G4 ✅ fps-gate slow-mo (test+24fps→0.8x) · G5 preview khớp output (dry_run=plan, P4 hiện UI) · G6 chạy độc lập (không trộn trim/reorder) ·
-G7 mặc định CV (0 token), Vision tuỳ chọn. → Còn G5-UI (P4).
+G4 ✅ fps-gate slow-mo (test+24fps→0.8x) · G5 ✅ preview khớp output (dry_run + render chung 1 plan sidecar) · G6 ✅ chạy độc lập (Lane-B file riêng, không trộn trim/reorder) ·
+G7 ✅ mặc định CV (0 token), Vision tuỳ chọn. → **TẤT CẢ GATE XANH — MVP "xịn" đạt** (P5 FCPXML + P6 optical-flow là tuỳ chọn).
 
 ## 2b. P1 SPIKE — phân bố motion THẬT (2026-06-08, 10 clip Nerf)
 
@@ -108,6 +108,18 @@ duration mode ép 30s→đúng 20.0s, clip-lỗi giữ 1.0x không crash summary
 Audio output: aac 44100Hz, duration khớp video (atempo áp → **giữ pitch, không méo giọng**).
 12/12 unit-test (dry_run + đặt tên + skip_unity + clip-lỗi). `dry_run=true` = preview path
 (không render) cho UI. → **P3 đóng**: G1/G2 verified end-to-end trên render THẬT.
+
+## 2e. P4 — UI module "Điều chỉnh tốc độ" (2026-06-09)
+
+- Module `speed_adjust` (⚡, category `speed`, verified) trong MODULE_REGISTRY → hiện chip
+  trong tab Tự động + `module.list` (verified qua WS).
+- `SpeedPanel.tsx` (⚙️): 3 mode (Theo nội dung / Chuẩn hoá / Đủ thời lượng) + slider
+  "slow-mo mạnh nhất" + "tua nhanh nhất" + "chặn slow-mo dưới (fps)" + ô thời lượng mục tiêu.
+- Server composite `speed.plan` / `speed.render` (director-tools.ts, map camelCase→snake_case)
+  → sidecar. **Verified end-to-end qua WS**: speed.render dry_run trả đúng quyết-định/clip.
+- AutoTab: nút "Xem trước tốc độ" (dry_run → bảng motion/speed/loại/độ-dài) + "Render tốc độ"
+  (xuất file mới cạnh clip gốc, KHÔNG đụng timeline). Panel **mount sạch** sau reload (lifecycle
+  PASS, không blank/CSP). preview & render dùng **CHUNG 1 plan sidecar** ⇒ G5 khớp (P3 đã probe).
 
 ## 6. Risk register
 

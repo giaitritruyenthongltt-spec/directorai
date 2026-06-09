@@ -125,6 +125,78 @@ export interface EditPlanResult {
   errors: { clip_path: string; error: string }[];
 }
 
+/** SPEED P4 — Tham số chung cho speed.plan / speed.render (camelCase, optional). */
+export interface SpeedParams {
+  clipPaths: string[];
+  samples?: number;
+  mode?: 'content' | 'normalize' | 'music' | 'duration';
+  pLo?: number;
+  pHi?: number;
+  minSpeed?: number;
+  maxSpeed?: number;
+  slowmoFloor?: number;
+  speedupCeiling?: number;
+  targetMotion?: number;
+  smoothFps?: number;
+  slowmoFpsFloor?: number;
+  targetDurationSec?: number;
+}
+
+/** Quyết-định tốc độ 1 clip (snake_case khớp sidecar speed_plan). */
+export interface SpeedDecision {
+  path: string;
+  speed: number;
+  reason: string;
+  confidence: number;
+  motion: number | null;
+  fps: number;
+  category: 'slowmo' | 'speedup' | 'keep' | 'error';
+  fps_gated: boolean;
+  in_duration?: number | null;
+  out_duration?: number | null;
+}
+
+export interface SpeedSummary {
+  mode: string;
+  count: number;
+  thresholds: { p_lo: number; p_hi: number; p_lo_pct: number; p_hi_pct: number };
+  n_slowmo: number;
+  n_speedup: number;
+  n_keep: number;
+  n_fps_gated: number;
+  total_in_sec: number;
+  total_out_sec: number;
+  duration_scale: number;
+  rendered?: number;
+  skipped?: number;
+  failed?: number;
+  dry_run?: boolean;
+  verified_ok?: number;
+}
+
+/** 1 hàng kết quả render speed (gồm probe-verify). */
+export interface SpeedRenderRow {
+  path: string;
+  speed: number;
+  category: string;
+  reason: string;
+  expected_duration?: number | null;
+  out_path?: string;
+  action: 'render' | 'keep' | 'skip' | 'plan' | 'error';
+  note?: string;
+  ok?: boolean;
+  elapsed_ms?: number;
+  verify?: {
+    ok: boolean;
+    out_fps?: number;
+    out_duration?: number;
+    expected_duration?: number | null;
+    fps_ok?: boolean;
+    dur_ok?: boolean;
+    error?: string;
+  };
+}
+
 async function sidecarPost<T>(path: string, payload: object): Promise<T> {
   const res = await fetch(`${SIDECAR_URL}${path}`, {
     method: 'POST',
@@ -286,6 +358,17 @@ export class CompositeTools {
         );
       case 'context.suggestOrder':
         return this.suggestOrder(params as { clipPaths: string[]; goal?: string });
+      case 'speed.plan':
+        return this.speedPlan(params as SpeedParams);
+      case 'speed.render':
+        return this.speedRender(
+          params as SpeedParams & {
+            outDir?: string;
+            useNvenc?: boolean;
+            skipUnity?: boolean;
+            dryRun?: boolean;
+          }
+        );
       case 'module.list':
         return { modules: listModuleInfos() };
       case 'context.activeSequenceClips':
@@ -391,6 +474,8 @@ export class CompositeTools {
       'context.buildVideoMap',
       'context.buildEditPlan',
       'context.suggestOrder',
+      'speed.plan',
+      'speed.render',
       'context.filterBad',
       'context.clusterClips',
       'context.qualityReport',
@@ -1362,6 +1447,70 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       strategy: r.strategy,
       understood: r.understood,
     };
+  }
+
+  /**
+   * SPEED P4 — Tham số chung cho plan/render (map camelCase → snake_case sidecar).
+   * mode: content | normalize | music | duration. Ngưỡng = percentile batch THẬT.
+   */
+  private speedPayload(p: SpeedParams): Record<string, unknown> {
+    return {
+      clip_paths: dedupePaths(p.clipPaths ?? []),
+      samples: p.samples ?? 12,
+      mode: p.mode ?? 'content',
+      p_lo: p.pLo ?? 20.0,
+      p_hi: p.pHi ?? 80.0,
+      min_speed: p.minSpeed ?? 0.5,
+      max_speed: p.maxSpeed ?? 2.0,
+      slowmo_floor: p.slowmoFloor ?? 0.5,
+      speedup_ceiling: p.speedupCeiling ?? 2.0,
+      target_motion: p.targetMotion ?? 0.0,
+      smooth_fps: p.smoothFps ?? 50.0,
+      slowmo_fps_floor: p.slowmoFpsFloor ?? 0.8,
+      target_duration_sec: p.targetDurationSec ?? 0.0,
+    };
+  }
+
+  /**
+   * SPEED P2 — QUYẾT tốc độ từng clip (preview, KHÔNG ghi). CV thuần (0 token).
+   * Trả speed + reason + confidence + phân loại + fps-gate cho bảng preview.
+   */
+  async speedPlan(
+    params: SpeedParams
+  ): Promise<{ decisions: SpeedDecision[]; summary: SpeedSummary }> {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const r = await sidecarPost<{ decisions: SpeedDecision[]; summary: SpeedSummary }>(
+      '/speed/plan',
+      this.speedPayload(params)
+    );
+    return { decisions: r.decisions ?? [], summary: r.summary };
+  }
+
+  /**
+   * SPEED P3 — Render Lane-B từng clip theo tốc độ đã quyết (setpts+atempo giữ
+   * pitch). dryRun=true = chỉ preview đường ra (không render). Probe-verify fps/độ-dài.
+   */
+  async speedRender(
+    params: SpeedParams & {
+      outDir?: string;
+      useNvenc?: boolean;
+      skipUnity?: boolean;
+      dryRun?: boolean;
+    }
+  ): Promise<{ results: SpeedRenderRow[]; summary: SpeedSummary }> {
+    if (!params.clipPaths?.length) throw new Error('clipPaths required (non-empty)');
+    const payload = {
+      ...this.speedPayload(params),
+      out_dir: params.outDir ?? null,
+      use_nvenc: params.useNvenc ?? true,
+      skip_unity: params.skipUnity ?? true,
+      dry_run: params.dryRun ?? false,
+    };
+    const r = await sidecarPost<{ results: SpeedRenderRow[]; summary: SpeedSummary }>(
+      '/speed/render',
+      payload
+    );
+    return { results: r.results ?? [], summary: r.summary };
   }
 
   /**

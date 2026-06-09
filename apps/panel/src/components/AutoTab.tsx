@@ -18,6 +18,7 @@ import { withTimeout, planTimeoutMs } from '../bridge/with-timeout.js';
 import { useSession, type SessionPlan } from '../state/session.js';
 import { ClipSourcePanel } from './ClipSourcePanel.js';
 import { ColorLookPicker, type ColorLookValue, LOOKS } from './ColorLookPicker.js';
+import { SpeedPanel, type SpeedSettings, DEFAULT_SPEED } from './SpeedPanel.js';
 import { HelpButton } from './HelpButton.js';
 import { Icon } from './Icon.js';
 import { ClickBox } from './ui/primitives.js';
@@ -31,6 +32,35 @@ interface ColorApplyResult {
   applied: number;
   failed: number;
   details: { name?: string; look: string; params: Record<string, number>; ok: boolean }[];
+}
+
+// SPEED P4 — 1 hàng kết quả tốc độ (khớp SpeedRenderRow phía server).
+interface SpeedRow {
+  path: string;
+  speed: number;
+  category: string;
+  action: string;
+  reason?: string;
+  out_path?: string;
+  expected_duration?: number | null;
+  ok?: boolean;
+  verify?: { out_duration?: number; out_fps?: number; dur_ok?: boolean; fps_ok?: boolean };
+}
+interface SpeedResult {
+  results: SpeedRow[];
+  summary: {
+    n_slowmo: number;
+    n_speedup: number;
+    n_keep: number;
+    n_fps_gated: number;
+    rendered?: number;
+    skipped?: number;
+    failed?: number;
+    dry_run?: boolean;
+    total_in_sec: number;
+    total_out_sec: number;
+    thresholds: { p_lo: number; p_hi: number };
+  };
 }
 
 const MODULES = MODULE_REGISTRY.map(moduleInfo);
@@ -133,6 +163,60 @@ export function AutoTab(): React.ReactElement {
       setError(`[Màu] ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setColorBusy(null);
+    }
+  };
+
+  // SPEED P4 — Điều chỉnh tốc độ (module speed_adjust): cài đặt nhớ qua reload.
+  const [speedCfg, setSpeedCfg] = useState<SpeedSettings>(() => {
+    try {
+      const raw = localStorage.getItem('directorai_speed');
+      if (raw) return { ...DEFAULT_SPEED, ...(JSON.parse(raw) as Partial<SpeedSettings>) };
+    } catch {
+      // bỏ qua
+    }
+    return DEFAULT_SPEED;
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('directorai_speed', JSON.stringify(speedCfg));
+    } catch {
+      // bỏ qua
+    }
+  }, [speedCfg]);
+  const [speedBusy, setSpeedBusy] = useState<'preview' | 'render' | null>(null);
+  const [speedRes, setSpeedRes] = useState<SpeedResult | null>(null);
+  const [speedRendered, setSpeedRendered] = useState<boolean>(false);
+
+  const runSpeed = async (dryRun: boolean): Promise<void> => {
+    setError(null);
+    if (clipPaths.length === 0) {
+      setError('Chưa có clip có đường dẫn — bấm "Lấy path tự động" ở mục Nguồn clip.');
+      return;
+    }
+    setSpeedBusy(dryRun ? 'preview' : 'render');
+    try {
+      // Render thật có thể lâu (re-encode từng clip) → timeout rộng theo số clip.
+      const ms = dryRun ? 120_000 : Math.max(180_000, clipPaths.length * 60_000);
+      const r = await withTimeout(
+        wsClient.call<SpeedResult>('speed.render', {
+          clipPaths,
+          mode: speedCfg.mode,
+          slowmoFloor: speedCfg.slowmoFloor,
+          speedupCeiling: speedCfg.speedupCeiling,
+          smoothFps: speedCfg.smoothFps,
+          targetDurationSec: speedCfg.targetDurationSec,
+          dryRun,
+          skipUnity: true,
+        }),
+        ms,
+        dryRun ? 'Xem trước tốc độ' : 'Render tốc độ'
+      );
+      setSpeedRes(r);
+      setSpeedRendered(!dryRun);
+    } catch (e) {
+      setError(`[Tốc độ] ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSpeedBusy(null);
     }
   };
 
@@ -431,6 +515,130 @@ export function AutoTab(): React.ReactElement {
                   Ví dụ {colorRes.details[0].name}: {JSON.stringify(colorRes.details[0].params)}
                 </div>
               )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {ticked.has('speed_adjust') && (
+        <section className="auto-section">
+          <div className="auto-section-title">
+            <Icon name="zap" size={15} /> Điều chỉnh tốc độ — slow-mo / tua nhanh
+            <HelpButton
+              title="Điều chỉnh tốc độ từng cảnh"
+              lines={[
+                'AI đo độ "động" mỗi clip → cảnh đấu súng SLOW-MO, cảnh tĩnh TUA NHANH.',
+                'Ngưỡng lấy từ chính bộ clip của bạn; giữ pitch tiếng (atempo).',
+                'Xem trước = bảng tốc độ (chưa render). Render = xuất file mới cạnh clip gốc.',
+                'KHÔNG đụng timeline — bạn tự kéo file đã render vào.',
+              ]}
+            />
+          </div>
+          <SpeedPanel
+            value={speedCfg}
+            onChange={(v) => {
+              setSpeedCfg(v);
+              setSpeedRes(null);
+              setSpeedRendered(false);
+            }}
+          />
+          <div className="auto-actions">
+            <ClickBox
+              className="auto-btn preview"
+              disabled={speedBusy !== null}
+              onClick={() => void runSpeed(true)}
+            >
+              {speedBusy === 'preview' ? (
+                <>
+                  <Icon name="refresh" size={15} className="spin" /> Đang đo &amp; tính tốc độ…
+                </>
+              ) : (
+                <>
+                  <Icon name="eye" size={15} /> Xem trước tốc độ
+                </>
+              )}
+            </ClickBox>
+            <ClickBox
+              className="auto-btn apply"
+              disabled={speedBusy !== null || !speedRes || speedRendered || s.conn !== 'connected'}
+              title={
+                s.conn !== 'connected'
+                  ? 'Chưa kết nối Premiere'
+                  : !speedRes
+                    ? 'Hãy "Xem trước tốc độ" trước'
+                    : 'Render file tốc độ mới (cạnh clip gốc)'
+              }
+              onClick={() => {
+                if (
+                  window.confirm('Render file tốc độ mới? (ghi cạnh clip gốc, không đụng timeline)')
+                ) {
+                  void runSpeed(false);
+                }
+              }}
+            >
+              {speedBusy === 'render' ? (
+                <>
+                  <Icon name="refresh" size={15} className="spin" /> Đang render…
+                </>
+              ) : (
+                <>
+                  <Icon name="check" size={15} /> Render tốc độ
+                </>
+              )}
+            </ClickBox>
+          </div>
+          {speedRes && (
+            <div className="auto-result">
+              <div className="auto-result-head">
+                {speedRes.summary.dry_run ? 'Xem trước tốc độ (chưa render)' : 'Đã render tốc độ'} ·{' '}
+                {speedRes.summary.n_slowmo} chậm · {speedRes.summary.n_speedup} nhanh ·{' '}
+                {speedRes.summary.n_keep} giữ
+                {speedRes.summary.n_fps_gated > 0 && ` · ${speedRes.summary.n_fps_gated} chặn-fps`}
+                {!speedRes.summary.dry_run &&
+                  ` · render ${speedRes.summary.rendered ?? 0}, lỗi ${speedRes.summary.failed ?? 0}`}
+              </div>
+              <table className="speed-table">
+                <thead>
+                  <tr>
+                    <th>Clip</th>
+                    <th>Tốc độ</th>
+                    <th>Loại</th>
+                    <th>Độ dài</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {speedRes.results.map((r) => {
+                    const name = r.path.split(/[/\\]/).pop() ?? r.path;
+                    const dur = r.verify?.out_duration ?? r.expected_duration ?? null;
+                    const cat =
+                      r.category === 'slowmo'
+                        ? '🐢 chậm'
+                        : r.category === 'speedup'
+                          ? '⚡ nhanh'
+                          : r.category === 'keep'
+                            ? '➖ giữ'
+                            : '⚠️ lỗi';
+                    return (
+                      <tr key={r.path}>
+                        <td title={r.reason ?? ''}>{name}</td>
+                        <td
+                          className={
+                            r.category === 'slowmo'
+                              ? 'sp-slow'
+                              : r.category === 'speedup'
+                                ? 'sp-fast'
+                                : ''
+                          }
+                        >
+                          {r.speed.toFixed(2)}×
+                        </td>
+                        <td>{cat}</td>
+                        <td>{dur != null ? `${dur.toFixed(1)}s` : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </section>

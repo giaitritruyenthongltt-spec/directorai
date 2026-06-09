@@ -289,3 +289,35 @@
   color: var(--warn);
   font-size: 12px;
 }
+
+/* SPEED P4 — bảng preview tốc độ từng clip. */
+.speed-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.speed-table th,
+.speed-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.speed-table th {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.speed-table td:first-child {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.speed-table .sp-slow {
+  color: var(--accent);
+  font-weight: 600;
+}
+.speed-table .sp-fast {
+  color: var(--warn);
+  font-weight: 600;
+}
