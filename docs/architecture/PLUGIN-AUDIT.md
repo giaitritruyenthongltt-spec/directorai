@@ -42,20 +42,20 @@ PREMIERE 26  ─UXP panel(7 tab,VN)─ dispatchRpc(executeTransaction) ─► GH
 
 ## 4. Điểm số (chặt tay)
 
-| Hạng mục                          | Điểm                                                                                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Lõi ghi trong Premiere            | 6.5/10 ↑ (test:job-write tap11 14/15 LIVE: transition+effect+trim+rename+disable+audio ghi+hoàn-tác; move dry-OK; chỉ insert bị chặn) |
-| Trí tuệ AI/CV                     | 8.0/10                                                                                                                                |
-| Đường ra headless (Lane-B/FCPXML) | 8.5/10 ↑ (P0: concat khép kín, verify thật; FCPXML editable còn phụ)                                                                  |
-| UX/giao diện                      | 8.0/10 ↑ (P1c: 1 cửa chính = Tự động; Phim dài/Đạo diễn thành phụ)                                                                    |
-| Độ tin cậy/kiểm thử thật          | 7.5/10 ↑↑ (P2a Python vào CI + P2b test assemble TỰ ĐỘNG ffmpeg + test panel)                                                         |
-| Kỷ luật phạm vi                   | 7.0/10 ↑↑ (P1a: quarantine 12 orphan → còn 7 app/15 pkg thực MVP)                                                                     |
-| Trung thực trạng thái             | 7.5/10 ↑↑ (P1b: known-issues sửa, audit doc chuẩn; MEMORY log còn phồng)                                                              |
+| Hạng mục                          | Điểm                                                                                                                                                 |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lõi ghi trong Premiere            | 7.0/10 ↑ (test:job-write tap11 **15/15** LIVE: transition+effect+color+trim+rename+disable+audio ghi+hoàn-tác sạch; move dry-OK; chỉ insert bị chặn) |
+| Trí tuệ AI/CV                     | 8.0/10                                                                                                                                               |
+| Đường ra headless (Lane-B/FCPXML) | 8.5/10 ↑ (P0: concat khép kín, verify thật; FCPXML editable còn phụ)                                                                                 |
+| UX/giao diện                      | 8.0/10 ↑ (P1c: 1 cửa chính = Tự động; Phim dài/Đạo diễn thành phụ)                                                                                   |
+| Độ tin cậy/kiểm thử thật          | 7.5/10 ↑↑ (P2a Python vào CI + P2b test assemble TỰ ĐỘNG ffmpeg + test panel)                                                                        |
+| Kỷ luật phạm vi                   | 7.0/10 ↑↑ (P1a: quarantine 12 orphan → còn 7 app/15 pkg thực MVP)                                                                                    |
+| Trung thực trạng thái             | 7.5/10 ↑↑ (P1b: known-issues sửa, audit doc chuẩn; MEMORY log còn phồng)                                                                             |
 
-**TỔNG re-verify ≈ 7.8/10 ↑↑ · Sẵn sàng MVP thực ≈ 80%.** Hành trình: 6.2 (gốc) → 6.5 (P0) → 7.0
-(P1a/b) → 7.6 (P1c + P2) → **7.8 (transition verify live)**. Mọi mục **≥ 6.5**; không còn mục < 6.
-Insert bị PPro26 chặn (đã né bằng Lane-B) là trần duy nhất của Lõi ghi. **Bug còn lại** (minor, không
-hỏng timeline): color self-revert để count=2 (write OK; chỉ revert chưa sạch — đã flag tách riêng).
+**TỔNG re-verify ≈ 7.7/10 ↑↑ · Sẵn sàng MVP thực ≈ 80%.** Hành trình: 6.2 (gốc) → 6.5 (P0) → 7.0
+(P1a/b) → 7.6 (P1c + P2) → **7.7 (transition+color live, job-write 15/15)**. Mọi mục **≥ 7.0**.
+Insert bị PPro26 chặn (đã né bằng Lane-B) là trần duy nhất của Lõi ghi. Bug color self-revert count=2
+đã FIX (test fragility — chọn clip chưa-có-Lumetri; product ensureLumetri vốn tái dùng đúng).
 
 ## 5. Lộ trình (vòng lặp có cổng — verify trên data/Premiere thật)
 
