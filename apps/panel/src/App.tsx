@@ -29,7 +29,7 @@ export type ActiveTab = 'film' | 'auto' | 'recut' | 'analysis' | 'director' | 'c
 
 /** R1 — Nhãn + ICON (SVG, không tofu) cho từng tab. */
 const TAB_META: Record<ActiveTab, { label: string; icon: IconName }> = {
-  film: { label: 'Phim dài', icon: 'film' },
+  film: { label: 'Phim dài (mẫu)', icon: 'film' },
   auto: { label: 'Tự động', icon: 'zap' },
   recut: { label: 'Tách & Tái dựng', icon: 'scissors' },
   analysis: { label: 'Báo cáo', icon: 'report' },
@@ -39,13 +39,18 @@ const TAB_META: Record<ActiveTab, { label: string; icon: IconName }> = {
 };
 
 /**
- * Audit-gộp — 3 NHÓM thay vì 7 tab ngang hàng (bỏ Style demo).
- *   Dựng phim (Phim/Tự động/Báo cáo) · Trợ lý (Đạo diễn/Chat) · Nâng cao (Ngữ cảnh).
+ * P1c (UX gộp) — MỘT cửa vào rõ ràng cho "dựng phim". Trước: 3-4 tab trùng
+ * (Phim dài / Tự động / Đạo diễn đều "tạo phim") gây rối người mới.
+ *   • Dựng phim = Tự động (CHÍNH — module + màu + tốc độ + Dựng&Xuất phim closed-loop)
+ *     + Tách&Tái dựng + Báo cáo.
+ *   • Trợ lý AI = Đạo diễn (ra lệnh bằng lời) + Chat.
+ *   • Khác = Phim dài (dựng theo template — cách thay thế) + Ngữ cảnh (sidecar thô).
+ * Mọi tab vẫn dùng được; chỉ sắp lại để 1 cửa chính = Tự động.
  */
 const TAB_GROUPS: { id: string; label: string; icon: IconName; tabs: ActiveTab[] }[] = [
-  { id: 'build', label: 'Dựng phim', icon: 'film', tabs: ['film', 'auto', 'recut', 'analysis'] },
-  { id: 'assist', label: 'Trợ lý', icon: 'sparkles', tabs: ['director', 'chat'] },
-  { id: 'advanced', label: 'Nâng cao', icon: 'sliders', tabs: ['context'] },
+  { id: 'build', label: 'Dựng phim', icon: 'zap', tabs: ['auto', 'recut', 'analysis'] },
+  { id: 'assist', label: 'Trợ lý AI', icon: 'sparkles', tabs: ['director', 'chat'] },
+  { id: 'advanced', label: 'Khác', icon: 'sliders', tabs: ['film', 'context'] },
 ];
 
 /** Restore a checkpoint into the chat log if it was created recently (< 5 min). */
@@ -62,7 +67,8 @@ interface CheckpointPayload {
 export function App(): React.ReactElement {
   const [connState, setConnState] = useState<ConnectionState>('disconnected');
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('film');
+  // P1c — cửa mặc định = Tự động (luồng dựng-phim hoàn chỉnh nhất, có closed-loop).
+  const [activeTab, setActiveTab] = useState<ActiveTab>('auto');
 
   // UI8 — Đồng bộ theme với host Premiere (sáng/tối). Đọc 1 lần khi mở.
   useEffect(() => {

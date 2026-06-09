@@ -42,19 +42,19 @@ PREMIERE 26  ─UXP panel(7 tab,VN)─ dispatchRpc(executeTransaction) ─► GH
 
 ## 4. Điểm số (chặt tay)
 
-| Hạng mục                          | Điểm                                                                               |
-| --------------------------------- | ---------------------------------------------------------------------------------- |
-| Lõi ghi trong Premiere            | 5.5/10 (chạy thật nhưng không insert; transition/reorder beta; verify thủ công)    |
-| Trí tuệ AI/CV                     | 8.0/10                                                                             |
-| Đường ra headless (Lane-B/FCPXML) | 8.5/10 ↑ (P0: concat khép kín, verify thật; FCPXML editable còn phụ)               |
-| UX/giao diện                      | 7.0/10 (3-4 cửa "dựng phim" trùng — chờ gộp tab)                                   |
-| Độ tin cậy/kiểm thử thật          | 6.0/10 ↑ (assemble verify headless + sửa test stale; Python/ghi-thật vẫn ngoài CI) |
-| Kỷ luật phạm vi                   | 7.0/10 ↑↑ (P1a: quarantine 12 orphan → còn 7 app/15 pkg thực MVP)                  |
-| Trung thực trạng thái             | 7.5/10 ↑↑ (P1b: known-issues sửa, audit doc chuẩn; MEMORY log còn phồng)           |
+| Hạng mục                          | Điểm                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------- |
+| Lõi ghi trong Premiere            | 5.5/10 (chạy thật nhưng không insert; transition/reorder beta; verify thủ công) |
+| Trí tuệ AI/CV                     | 8.0/10                                                                          |
+| Đường ra headless (Lane-B/FCPXML) | 8.5/10 ↑ (P0: concat khép kín, verify thật; FCPXML editable còn phụ)            |
+| UX/giao diện                      | 8.0/10 ↑ (P1c: 1 cửa chính = Tự động; Phim dài/Đạo diễn thành phụ)              |
+| Độ tin cậy/kiểm thử thật          | 7.5/10 ↑↑ (P2a Python vào CI + P2b test assemble TỰ ĐỘNG ffmpeg + test panel)   |
+| Kỷ luật phạm vi                   | 7.0/10 ↑↑ (P1a: quarantine 12 orphan → còn 7 app/15 pkg thực MVP)               |
+| Trung thực trạng thái             | 7.5/10 ↑↑ (P1b: known-issues sửa, audit doc chuẩn; MEMORY log còn phồng)        |
 
-**TỔNG re-verify ≈ 7.0/10 ↑ · Sẵn sàng MVP thực ≈ 70% ↑.** _Đính chính: 6.6 post-P0 hơi nương tay,
-re-verify thực = 6.5; P1a (dọn scaffold) + P1b (sửa doc) nhấc lên ~7.0._ Còn để chạm ~8: gộp 3-4 cửa
-dựng-phim → 1 luồng (UX 7→8), đưa Python+ghi-thật vào CI (Test 6→8), verify transition/reorder live (Lõi 5.5→7).
+**TỔNG re-verify ≈ 7.6/10 ↑↑ · Sẵn sàng MVP thực ≈ 78%.** Hành trình: 6.2 (gốc) → 6.5 (P0) → 7.0
+(P1a/b) → **7.6 (P1c + P2)**. Chỉ còn **Lõi ghi 5.5** kéo xuống (insert bị PPro26 chặn — đã né bằng
+Lane-B; transition/reorder verify live = việc còn lại để chạm ~8 toàn diện).
 
 ## 5. Lộ trình (vòng lặp có cổng — verify trên data/Premiere thật)
 
