@@ -63,6 +63,20 @@ interface SpeedResult {
   };
 }
 
+// P0 ASM — kết quả dựng phim (khớp AssembleResult phía server).
+interface AssembleResult {
+  ok: boolean;
+  out_path: string;
+  duration_sec?: number;
+  clips?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  dropped?: string[];
+  notes?: string[];
+  error?: string;
+}
+
 const MODULES = MODULE_REGISTRY.map(moduleInfo);
 const DEFAULT_TICKED = MODULES.filter((m) => m.defaultEnabled).map((m) => m.id);
 
@@ -217,6 +231,40 @@ export function AutoTab(): React.ReactElement {
       setError(`[Tốc độ] ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setSpeedBusy(null);
+    }
+  };
+
+  // P0 ASM — Dựng thành 1 PHIM hoàn chỉnh (xuất MP4 qua Lane-B, né insert PPro26).
+  const [asmSpeed, setAsmSpeed] = useState<boolean>(true);
+  const [asmDeadAir, setAsmDeadAir] = useState<boolean>(false);
+  const [asmBusy, setAsmBusy] = useState<boolean>(false);
+  const [asmRes, setAsmRes] = useState<AssembleResult | null>(null);
+
+  const runAssemble = async (): Promise<void> => {
+    setError(null);
+    if (clipPaths.length < 2) {
+      setError('Cần ít nhất 2 clip (lấy path ở mục Nguồn clip) để dựng thành phim.');
+      return;
+    }
+    setAsmBusy(true);
+    setAsmRes(null);
+    try {
+      // Re-encode từng clip → có thể lâu; timeout rộng theo số clip.
+      const ms = Math.max(180_000, clipPaths.length * 45_000);
+      const r = await withTimeout(
+        wsClient.call<AssembleResult>('assemble.auto', {
+          clipPaths,
+          withSpeed: asmSpeed,
+          withDeadAir: asmDeadAir,
+        }),
+        ms,
+        'Dựng phim'
+      );
+      setAsmRes(r);
+    } catch (e) {
+      setError(`[Dựng phim] ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAsmBusy(false);
     }
   };
 
@@ -519,6 +567,76 @@ export function AutoTab(): React.ReactElement {
           )}
         </section>
       )}
+
+      <section className="auto-section auto-assemble">
+        <div className="auto-section-title">
+          <Icon name="clapperboard" size={15} /> Dựng thành 1 phim hoàn chỉnh (xuất MP4)
+          <HelpButton
+            title="Dựng phim tự động → xuất MP4"
+            lines={[
+              'Ghép các clip (theo thứ tự nguồn) thành 1 video hoàn chỉnh, không cần dựng tay.',
+              'AI/CV tự chỉnh tốc độ + cắt khoảng lặng nếu bạn bật. Giữ pitch tiếng.',
+              'Xuất ra file MP4 cạnh clip gốc — KHÔNG đụng timeline; bạn tự kéo vào Premiere.',
+              'Đây là đường "dựng phim" chạy chắc chắn (không vướng giới hạn chèn clip của Premiere 26).',
+            ]}
+          />
+        </div>
+        <div className="auto-asm-opts">
+          <label>
+            <input
+              type="checkbox"
+              checked={asmSpeed}
+              onChange={(e) => setAsmSpeed((e.target as HTMLInputElement).checked)}
+            />
+            <span>Tự chỉnh tốc độ (slow-mo cảnh động, tua cảnh tĩnh)</span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={asmDeadAir}
+              onChange={(e) => setAsmDeadAir((e.target as HTMLInputElement).checked)}
+            />
+            <span>Cắt khoảng lặng đầu/cuối mỗi clip</span>
+          </label>
+        </div>
+        <ClickBox
+          className="auto-btn apply"
+          disabled={asmBusy || clipPaths.length < 2 || s.conn !== 'connected'}
+          title={
+            s.conn !== 'connected'
+              ? 'Chưa kết nối'
+              : clipPaths.length < 2
+                ? 'Cần ≥2 clip (lấy path ở Nguồn clip)'
+                : 'Ghép thành 1 phim MP4'
+          }
+          onClick={() => void runAssemble()}
+        >
+          {asmBusy ? (
+            <>
+              <Icon name="refresh" size={15} className="spin" /> Đang dựng phim… (có thể vài phút)
+            </>
+          ) : (
+            <>
+              <Icon name="film" size={15} /> Dựng &amp; Xuất phim ({clipPaths.length} clip)
+            </>
+          )}
+        </ClickBox>
+        {asmRes && asmRes.ok && (
+          <div className="auto-result">
+            <div className="auto-result-head">
+              <Icon name="check" size={13} /> Đã xuất phim · {asmRes.clips} clip ·{' '}
+              {asmRes.duration_sec?.toFixed(1)}s · {asmRes.width}×{asmRes.height}@{asmRes.fps}fps
+            </div>
+            <div className="auto-step-detail">{asmRes.out_path}</div>
+            {asmRes.notes && asmRes.notes.length > 0 && (
+              <div className="auto-step-detail">{asmRes.notes.join(' · ')}</div>
+            )}
+            {asmRes.dropped && asmRes.dropped.length > 0 && (
+              <div className="auto-step-detail">Bỏ {asmRes.dropped.length} clip lặng</div>
+            )}
+          </div>
+        )}
+      </section>
 
       {ticked.has('speed_adjust') && (
         <section className="auto-section">

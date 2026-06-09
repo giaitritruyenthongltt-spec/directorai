@@ -321,3 +321,22 @@
   color: var(--warn);
   font-weight: 600;
 }
+
+/* P0 ASM — section dựng phim (nổi bật, viền accent). */
+.auto-assemble {
+  border: 1px solid var(--accent-ring);
+  background: var(--accent-bg);
+}
+.auto-asm-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.auto-asm-opts label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}

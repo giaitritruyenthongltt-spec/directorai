@@ -263,6 +263,30 @@ export function dedupePaths(paths: readonly string[]): string[] {
   return out;
 }
 
+/** P0 ASM — Đường ra phim mặc định: cạnh clip nguồn, tên DirectorAI_film.mp4. */
+export function defaultFilmOut(firstClipPath: string): string {
+  const norm = String(firstClipPath ?? '').replace(/\\/g, '/');
+  const dir = norm.includes('/') ? norm.slice(0, norm.lastIndexOf('/')) : '.';
+  return `${dir}/DirectorAI_film.mp4`;
+}
+
+/** P0 ASM — Kết quả ghép phim (khớp assemble_film/assemble_auto sidecar). */
+export interface AssembleResult {
+  ok: boolean;
+  out_path: string;
+  duration_sec?: number;
+  expected_duration?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  clips?: number;
+  encoder?: string;
+  dropped?: string[];
+  notes?: string[];
+  segments?: { path: string; speed?: number; in_sec?: number; out_sec?: number }[];
+  error?: string;
+}
+
 export interface CompositeToolDeps {
   readonly adapter: IPremiereAdapter;
   readonly logger: Logger;
@@ -367,6 +391,28 @@ export class CompositeTools {
             useNvenc?: boolean;
             skipUnity?: boolean;
             dryRun?: boolean;
+          }
+        );
+      case 'assemble.auto':
+        return this.assembleAuto(
+          params as {
+            clipPaths: string[];
+            outPath?: string;
+            withDeadAir?: boolean;
+            withSpeed?: boolean;
+            speedMode?: string;
+            useNvenc?: boolean;
+          }
+        );
+      case 'assemble.render':
+        return this.assembleRender(
+          params as {
+            segments: { path: string; in_sec?: number; out_sec?: number; speed?: number }[];
+            outPath?: string;
+            width?: number;
+            height?: number;
+            fps?: number;
+            useNvenc?: boolean;
           }
         );
       case 'module.list':
@@ -476,6 +522,8 @@ export class CompositeTools {
       'context.suggestOrder',
       'speed.plan',
       'speed.render',
+      'assemble.auto',
+      'assemble.render',
       'context.filterBad',
       'context.clusterClips',
       'context.qualityReport',
@@ -1511,6 +1559,53 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       payload
     );
     return { results: r.results ?? [], summary: r.summary };
+  }
+
+  /**
+   * P0 ASM — KHÉP KÍN "dựng phim qua file": clip_paths → CV (tỉa lặng + tốc độ)
+   * → ghép 1 PHIM hoàn chỉnh (Lane-B concat). Né giới hạn insert PPro26 — xuất
+   * file, người dùng kéo vào timeline. Mặc định 0-token (không gọi Gemini).
+   */
+  async assembleAuto(params: {
+    clipPaths: string[];
+    outPath?: string;
+    withDeadAir?: boolean;
+    withSpeed?: boolean;
+    speedMode?: string;
+    useNvenc?: boolean;
+  }): Promise<AssembleResult> {
+    const paths = dedupePaths(params.clipPaths ?? []);
+    if (!paths.length) throw new Error('clipPaths required (non-empty)');
+    const out = params.outPath ?? defaultFilmOut(paths[0]!);
+    return sidecarPost<AssembleResult>('/assemble/auto', {
+      clip_paths: paths,
+      out_path: out,
+      with_dead_air: params.withDeadAir ?? false,
+      with_speed: params.withSpeed ?? false,
+      speed_mode: params.speedMode ?? 'content',
+      use_nvenc: params.useNvenc ?? true,
+    });
+  }
+
+  /** P0 ASM — Ghép segment ĐÃ chỉ định (clip+trim+speed) → 1 phim. */
+  async assembleRender(params: {
+    segments: { path: string; in_sec?: number; out_sec?: number; speed?: number }[];
+    outPath?: string;
+    width?: number;
+    height?: number;
+    fps?: number;
+    useNvenc?: boolean;
+  }): Promise<AssembleResult> {
+    if (!params.segments?.length) throw new Error('segments required (non-empty)');
+    const out = params.outPath ?? defaultFilmOut(params.segments[0]!.path);
+    return sidecarPost<AssembleResult>('/assemble/render', {
+      segments: params.segments,
+      out_path: out,
+      width: params.width ?? null,
+      height: params.height ?? null,
+      fps: params.fps ?? null,
+      use_nvenc: params.useNvenc ?? true,
+    });
   }
 
   /**
