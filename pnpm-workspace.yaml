@@ -2,6 +2,8 @@ packages:
   - "apps/*"
   - "packages/*"
   - "plugins/*"
+  # P1a — "future/*" parked (orphan scaffold không thuộc MVP): KHÔNG build/cài.
+  - "!future/**"
 
 allowBuilds:
   "@sentry/cli": set this to true or false

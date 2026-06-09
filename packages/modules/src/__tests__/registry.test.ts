@@ -26,11 +26,17 @@ describe('module registry', () => {
     expect(getModule('reorder')?.enabled).toBe(true);
   });
 
-  it('transition beta nhưng tick được (C2); color_grade beta chưa bật', () => {
+  it('transition beta nhưng tick được (C2)', () => {
     expect(getModule('transition')?.feasibility).toBe('beta');
     expect(getModule('transition')?.enabled).toBe(true);
-    expect(getModule('color_grade')?.feasibility).toBe('beta');
-    expect(getModule('color_grade')?.enabled).toBe(false);
+  });
+
+  it('color_grade + speed_adjust đã verified + enabled (GA màu + speed)', () => {
+    // Stale-test cũ assert color_grade beta/disabled — đã sai từ khi màu lên GA.
+    expect(getModule('color_grade')?.feasibility).toBe('verified');
+    expect(getModule('color_grade')?.enabled).toBe(true);
+    expect(getModule('speed_adjust')?.feasibility).toBe('verified');
+    expect(getModule('speed_adjust')?.enabled).toBe(true);
   });
 
   it('moduleInfo bỏ hàm, giữ metadata', () => {
@@ -51,9 +57,10 @@ describe('module registry', () => {
     expect(goal).toContain('làm 45s');
   });
 
-  it('buildGoalFromModules bỏ qua module disabled (color_grade)', () => {
-    const goal = buildGoalFromModules(['color_grade']);
-    expect(goal).toBe('');
+  it('buildGoalFromModules bỏ qua id không tồn tại / rỗng', () => {
+    // (mọi module hiện đã enabled; test đường "bỏ qua" bằng id không có thật)
+    expect(buildGoalFromModules([])).toBe('');
+    expect(buildGoalFromModules(['khong_ton_tai'])).toBe('');
   });
 
   it('runModules: module metadata-only → steps rỗng, không lỗi', async () => {
