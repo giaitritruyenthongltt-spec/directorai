@@ -83,7 +83,7 @@ def test_sample_one_frame_returns_middle(synthetic_clip: str) -> None:
 
 
 def test_resize_max_dim(synthetic_clip: str) -> None:
-    """640×360 source with max_dim=320 should downscale longest side to 320."""
+    """640x360 source with max_dim=320 should downscale longest side to 320."""
     frames = fs.sample(synthetic_clip, count=2, max_dim=320)
     for f in frames:
         assert max(f.width, f.height) <= 320

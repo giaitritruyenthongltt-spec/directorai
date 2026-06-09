@@ -48,14 +48,23 @@ jobs:
         run: pnpm sdk:surface
 
   python-checks:
-    name: Python checks
+    name: Python checks (context-engine)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: apps/context-engine
     steps:
       - uses: actions/checkout@v4
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
       - name: Setup Python
         run: uv python install 3.11
-      - name: Placeholder (context-engine added in P2)
-        run: echo "Python checks will be wired in Phase 2"
+      - name: Install ffmpeg (probe/concat tests)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install deps
+        run: uv sync
+      - name: Ruff lint (src + tests)
+        run: uv run ruff check src tests
+      - name: Pytest (131 tests, dữ liệu tổng hợp — không cần media thật)
+        run: uv run pytest -q

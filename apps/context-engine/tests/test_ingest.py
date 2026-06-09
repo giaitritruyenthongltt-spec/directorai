@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 from directorai_context.main import create_app
 from directorai_context.models import (
     BeatResult,
-    IngestRequest,
     Scene,
     SceneResult,
     TranscribeResult,
