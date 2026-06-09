@@ -42,18 +42,18 @@ PREMIERE 26  ─UXP panel(7 tab,VN)─ dispatchRpc(executeTransaction) ─► GH
 
 ## 4. Điểm số (chặt tay)
 
-| Hạng mục                          | Điểm                                                    |
-| --------------------------------- | ------------------------------------------------------- |
-| Lõi ghi trong Premiere            | 5.5/10 (chạy nhưng không insert, verify thủ công)       |
-| Trí tuệ AI/CV                     | 8.0/10                                                  |
-| Đường ra headless (Lane-B/FCPXML) | 7.5/10 (FCPXML auto-import hang; chưa ghép cả-sequence) |
-| UX/giao diện                      | 7.0/10 (3 tab dựng phim trùng)                          |
-| Độ tin cậy/kiểm thử thật          | 5.0/10 (mock nhiều, ghi-thật ngoài CI)                  |
-| Kỷ luật phạm vi                   | 3.0/10 (~12 app/package orphan)                         |
-| Trung thực trạng thái             | 5.0/10 (milestone + known-issues lệch)                  |
+| Hạng mục                          | Điểm                                                                 |
+| --------------------------------- | -------------------------------------------------------------------- |
+| Lõi ghi trong Premiere            | 5.5/10 (chạy nhưng không insert, verify thủ công)                    |
+| Trí tuệ AI/CV                     | 8.0/10                                                               |
+| Đường ra headless (Lane-B/FCPXML) | 8.5/10 ↑ (P0: concat khép kín, verify thật; FCPXML editable còn phụ) |
+| UX/giao diện                      | 7.0/10 (3 tab dựng phim trùng — chờ P1 gộp)                          |
+| Độ tin cậy/kiểm thử thật          | 5.5/10 ↑ (assemble verify headless; ghi-thật vẫn ngoài CI)           |
+| Kỷ luật phạm vi                   | 3.0/10 (~12 app/package orphan — chờ P1 dọn)                         |
+| Trung thực trạng thái             | 5.0/10 (milestone + known-issues lệch — chờ P1 sửa)                  |
 
-**TỔNG có trọng số ≈ 6.2/10 · Sẵn sàng MVP thực ≈ 55–60%.** Engine mạnh thật nhưng luồng giá trị
-hàng đầu CHƯA khép kín + nhiều scaffold ảo + verify ghi-thật mỏng.
+**TỔNG có trọng số ≈ 6.6/10 ↑ · Sẵn sàng MVP thực ≈ 65–70% ↑.** P0 đã KHÉP KÍN luồng giá trị hàng
+đầu (folder→1 phim, verify thật). Còn lại: P1 dọn scaffold + gộp tab + sửa doc, P2 siết verify ghi-thật.
 
 ## 5. Lộ trình (vòng lặp có cổng — verify trên data/Premiere thật)
 
@@ -63,12 +63,18 @@ Mối nối đang thiếu: `[folder] → phân tích + sắp thứ tự + tỉa/
 Hạ tầng đã có: `/order/suggest`, `/speed/plan`, dead_air, `buildContiguousTimeline`+`buildFcpxml`
 (ORPHAN), Lane-B per-clip render. Thiếu: **concat renderer** + **composite nối** + **UI**.
 
-| Phase | Ẩn số             | Spike                                             | Cổng PASS                   |
-| ----- | ----------------- | ------------------------------------------------- | --------------------------- |
-| ASM-0 | concat được không | `assemble.py` ffmpeg-concat N clip thật → ffprobe | out dur = Σ phần, phát được |
-| ASM-1 | mối nối           | composite folder→order→trim→concat (1 MP4)        | render đúng thứ tự/độ dài   |
-| ASM-2 | editable          | wire `buildContiguousTimeline`→fcpxml cả-sequence | xuất .fcpxml hợp lệ         |
-| ASM-3 | UI                | nút "Dựng phim tự động → MP4 / Timeline"          | 1 cửa, preview + render     |
+| Phase    | Ẩn số             | Spike                                                        | Cổng                                 |
+| -------- | ----------------- | ------------------------------------------------------------ | ------------------------------------ |
+| ✅ ASM-0 | concat được không | `assemble.py` ffmpeg-concat 3-4 clip thật → ffprobe          | **xong: expected=actual khớp**       |
+| ✅ ASM-1 | mối nối           | `assemble_auto` 0-token (CV speed+dead-air) → 1 MP4          | **xong: 40.96s khớp, NVENC, aac**    |
+| ✅ ASM-2 | server            | `/assemble/auto`+`/assemble/render` + composite `assemble.*` | **xong: WS end-to-end 27.7s khớp**   |
+| ✅ ASM-3 | UI                | section "Dựng & Xuất phim" + checkbox tốc độ/cắt lặng        | bundle build sạch; render chờ reload |
+| ⏳ ASM-4 | editable (phụ)    | wire `buildContiguousTimeline`→fcpxml cả-sequence importable | xuất .fcpxml hợp lệ (tuỳ chọn)       |
+
+> **P0 ĐÓNG (đường Lane-B concat).** Luồng `folder → CV (tốc độ/cắt lặng) → 1 PHIM MP4` chạy
+> trọn vẹn + verify thật (3-4 clip Nerf, độ dài expected=actual, audio giữ pitch). Đây là đường
+> "dựng phim" KHÉP KÍN né hẳn giới hạn insert PPro26. 5/5 test thuần. ASM-4 (xuất FCPXML editable)
+> là bản phụ cho ai muốn timeline sửa được — tuỳ chọn.
 
 ### P1 — Dọn & trung thực
 
