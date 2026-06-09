@@ -268,6 +268,34 @@ export function AutoTab(): React.ReactElement {
     }
   };
 
+  // ASM-4 — Xuất TIMELINE editable (FCPXML) thay vì MP4 phẳng (import thủ công).
+  const [fcpxmlPath, setFcpxmlPath] = useState<string | null>(null);
+  const runAssembleFcpxml = async (): Promise<void> => {
+    setError(null);
+    if (clipPaths.length < 2) {
+      setError('Cần ít nhất 2 clip để xuất timeline.');
+      return;
+    }
+    setAsmBusy(true);
+    setFcpxmlPath(null);
+    try {
+      const r = await withTimeout(
+        wsClient.call<{ path: string; clips: number }>('assemble.fcpxml', {
+          clipPaths,
+          withSpeed: asmSpeed,
+          withDeadAir: asmDeadAir,
+        }),
+        60_000,
+        'Xuất FCPXML'
+      );
+      setFcpxmlPath(r.path);
+    } catch (e) {
+      setError(`[FCPXML] ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAsmBusy(false);
+    }
+  };
+
   // AT1 — CHỈ clip VIDEO (loại nhạc/audio để planner không phí cost + không lẫn
   // nhạc vào kế hoạch) + KHỬ TRÙNG.
   const clipPaths = Array.from(
@@ -621,6 +649,14 @@ export function AutoTab(): React.ReactElement {
             </>
           )}
         </ClickBox>
+        <ClickBox
+          className="auto-btn preview"
+          disabled={asmBusy || clipPaths.length < 2 || s.conn !== 'connected'}
+          title="Xuất TIMELINE sửa được (.fcpxml) — File▸Import vào Premiere"
+          onClick={() => void runAssembleFcpxml()}
+        >
+          <Icon name="film" size={15} /> Xuất timeline (.fcpxml, sửa được)
+        </ClickBox>
         {asmRes && asmRes.ok && (
           <div className="auto-result">
             <div className="auto-result-head">
@@ -634,6 +670,14 @@ export function AutoTab(): React.ReactElement {
             {asmRes.dropped && asmRes.dropped.length > 0 && (
               <div className="auto-step-detail">Bỏ {asmRes.dropped.length} clip lặng</div>
             )}
+          </div>
+        )}
+        {fcpxmlPath && (
+          <div className="auto-result">
+            <div className="auto-result-head">
+              <Icon name="check" size={13} /> Đã xuất timeline (.fcpxml) — File▸Import vào Premiere
+            </div>
+            <div className="auto-step-detail">{fcpxmlPath}</div>
           </div>
         )}
       </section>

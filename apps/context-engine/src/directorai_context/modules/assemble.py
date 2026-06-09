@@ -277,8 +277,13 @@ def assemble_auto(
     use_nvenc: bool = True,
     job_id: str | None = None,
     dead_air_opts: dict | None = None,
+    plan_only: bool = False,
 ) -> dict:
-    """Khép kín: clip_paths -> (CV tỉa/tốc độ) -> ghép 1 PHIM. 0-token mặc định."""
+    """Khép kín: clip_paths -> (CV tỉa/tốc độ) -> ghép 1 PHIM. 0-token mặc định.
+
+    plan_only=True: CHỈ trả segments + probe (duration/fps/wh) mỗi clip, KHÔNG render.
+    Dùng cho ASM-4 (server dựng FCPXML editable từ buildContiguousTimeline).
+    """
     built = build_auto_segments(
         clip_paths,
         with_dead_air=with_dead_air,
@@ -289,6 +294,29 @@ def assemble_auto(
     segs = built["segments"]
     if not segs:
         raise ValueError("không còn clip nào sau khi lọc")
+
+    if plan_only:
+        probes = {}
+        for s in segs:
+            try:
+                info = probe_media(s["path"])
+                probes[s["path"]] = {
+                    "duration": round(float(info.get("duration") or 0), 3),
+                    "fps": round(float(info.get("fps") or 0), 3),
+                    "width": int(info.get("width") or 0),
+                    "height": int(info.get("height") or 0),
+                    "has_audio": bool(info.get("has_audio")),
+                }
+            except Exception as e:  # 1 clip lỗi không hỏng plan
+                log.warning("assemble_plan_probe_fail", clip=s["path"], error=str(e))
+        return {
+            "ok": True,
+            "plan_only": True,
+            "segments": segs,
+            "probes": probes,
+            "dropped": built["dropped"],
+            "notes": built["notes"],
+        }
     result = assemble_film(
         segs, out_path, width=width, height=height, fps=fps, use_nvenc=use_nvenc, job_id=job_id
     )

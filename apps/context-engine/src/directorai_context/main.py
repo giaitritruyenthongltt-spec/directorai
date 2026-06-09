@@ -607,6 +607,7 @@ def create_app() -> FastAPI:
                 fps=req.fps,
                 use_nvenc=req.use_nvenc,
                 job_id=req.job_id,
+                plan_only=req.plan_only,
             )
         except Exception as e:
             log.error("assemble_auto_failed", error=str(e))

@@ -289,6 +289,7 @@ class AssembleAutoRequest(BaseModel):
     fps: float | None = None
     use_nvenc: bool = True
     job_id: str | None = None
+    plan_only: bool = False  # ASM-4: chỉ trả segments+probe (không render) cho FCPXML
 
 
 class DeadAirRequest(BaseModel):

@@ -27,7 +27,7 @@ import {
   COLOR_LOOKS,
 } from '@directorai/effect-library';
 import { listModuleInfos } from '@directorai/modules';
-import { buildFcpxml, type FcpTimeline } from '@directorai/fcpxml';
+import { buildFcpxml, type FcpClip, type FcpTimeline } from '@directorai/fcpxml';
 import { resolvePlan, type PlanPreview } from './plan-resolver.js';
 import { applyResolvedPlan, type ApplyResult } from './plan-executor.js';
 import { readPrprojMedia } from './prproj-reader.js';
@@ -415,6 +415,16 @@ export class CompositeTools {
             useNvenc?: boolean;
           }
         );
+      case 'assemble.fcpxml':
+        return this.assembleFcpxml(
+          params as {
+            clipPaths: string[];
+            withDeadAir?: boolean;
+            withSpeed?: boolean;
+            speedMode?: string;
+            fileName?: string;
+          }
+        );
       case 'module.list':
         return { modules: listModuleInfos() };
       case 'context.activeSequenceClips':
@@ -524,6 +534,7 @@ export class CompositeTools {
       'speed.render',
       'assemble.auto',
       'assemble.render',
+      'assemble.fcpxml',
       'context.filterBad',
       'context.clusterClips',
       'context.qualityReport',
@@ -1606,6 +1617,80 @@ th{background:#f3f3f3;text-align:left}tr.bad{background:#fff2f2}tr.ok td:last-ch
       fps: params.fps ?? null,
       use_nvenc: params.useNvenc ?? true,
     });
+  }
+
+  /**
+   * ASM-4 — Xuất TIMELINE editable (FCPXML cả-sequence) thay vì 1 MP4 phẳng.
+   * clip_paths → CV (tốc độ/cắt lặng, plan_only KHÔNG render) → dựng FcpClip
+   * (trim qua sourceIn/duration, speed qua timeMap) → buildFcpxml → ghi .fcpxml.
+   * Người dùng File▸Import vào Premiere để có timeline SỬA ĐƯỢC (né insert PPro26).
+   */
+  async assembleFcpxml(params: {
+    clipPaths: string[];
+    withDeadAir?: boolean;
+    withSpeed?: boolean;
+    speedMode?: string;
+    fileName?: string;
+  }): Promise<{ path: string; bytes: number; clips: number; notes?: string[] }> {
+    const paths = dedupePaths(params.clipPaths ?? []);
+    if (!paths.length) throw new Error('clipPaths required (non-empty)');
+    interface Probe {
+      duration: number;
+      fps: number;
+      width: number;
+      height: number;
+      has_audio: boolean;
+    }
+    const plan = await sidecarPost<{
+      segments: { path: string; in_sec?: number; out_sec?: number; speed?: number }[];
+      probes: Record<string, Probe>;
+      notes?: string[];
+    }>('/assemble/auto', {
+      clip_paths: paths,
+      out_path: 'plan_only.mp4',
+      with_dead_air: params.withDeadAir ?? false,
+      with_speed: params.withSpeed ?? false,
+      speed_mode: params.speedMode ?? 'content',
+      plan_only: true,
+    });
+    const segs = plan.segments ?? [];
+    if (!segs.length) throw new Error('không còn clip nào sau khi lọc');
+    const first = plan.probes[segs[0]!.path];
+    let cursor = 0;
+    const clips: FcpClip[] = segs.map((s) => {
+      const pr = plan.probes[s.path] ?? {
+        duration: 0,
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        has_audio: true,
+      };
+      const inS = s.in_sec ?? 0;
+      const outS = s.out_sec && s.out_sec > inS ? s.out_sec : pr.duration;
+      const speed = s.speed ?? 1.0;
+      const tlDur = Math.max(0.1, (outS - inS) / speed); // độ dài on-timeline sau speed
+      const clip: FcpClip = {
+        assetPath: s.path,
+        name: s.path.split(/[/\\]/).pop() ?? s.path,
+        timelineStartSec: cursor,
+        sourceInSec: inS,
+        durationSec: tlDur,
+        speed,
+        assetDurationSec: pr.duration, // FULL nguồn (không phải đoạn cắt) cho asset
+        hasAudio: pr.has_audio,
+      };
+      cursor += tlDur;
+      return clip;
+    });
+    const tl: FcpTimeline = {
+      name: params.fileName ?? 'DirectorAI_timeline',
+      fps: first?.fps && first.fps > 0 ? first.fps : 30,
+      width: first?.width && first.width > 0 ? first.width : 1920,
+      height: first?.height && first.height > 0 ? first.height : 1080,
+      clips,
+    };
+    const res = await this.exportFcpxml({ timeline: tl, fileName: params.fileName });
+    return { ...res, notes: plan.notes };
   }
 
   /**
