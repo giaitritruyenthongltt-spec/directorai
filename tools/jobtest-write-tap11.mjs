@@ -374,22 +374,36 @@ try {
 // ── TEST 7 — COLOR (Lumetri exposure → gỡ) ───────────────────────────────────
 console.log('[7] COLOR (setParams Lumetri rồi gỡ)');
 try {
-  const v = t0.clips.find(
-    (c) => c.kind === 'video' && String(c.id).split(':')[0] === 'video-0'
-  );
-  const fx0 = await call('effect.list', { clipId: v.id });
-  await call('color.setParams', { clipId: v.id, exposure: 0.5, contrast: 8 });
-  const fx1 = await call('effect.list', { clipId: v.id });
-  const lum = fx1.some((e) => /Lumetri/i.test(e.matchName));
-  if (lum) ok('color ghi thật', `Lumetri thêm (exposure/contrast)`);
-  else bad('color verify', `không thấy Lumetri (${fx1.map((e) => e.matchName)})`);
-  dirty = true;
-  if (lum) await call('effect.remove', { clipId: v.id, effectId: 'AE.ADBE Lumetri' });
-  const fx2 = await call('effect.list', { clipId: v.id });
-  if (fx2.length === fx0.length && !fx2.some((e) => /Lumetri/i.test(e.matchName))) {
-    ok('color hoàn tác', `gỡ Lumetri → ${fx2.length} component`);
-    dirty = false;
-  } else bad('color hoàn tác', `count=${fx2.length}`);
+  // Chọn clip video CHƯA có Lumetri → add+remove là round-trip SẠCH. (Trước đây
+  // cố định video-0 — nếu clip đó đã được áp màu từ phiên trước thì revert gỡ
+  // Lumetri có-sẵn khiến fx2 = fx0-1 → "count=2" FAIL giả. ensureLumetri TÁI DÙNG
+  // Lumetri sẵn có nên product không nhân đôi; đây chỉ là test fragility.)
+  let v = null;
+  let fx0 = null;
+  for (const c of t0.clips.filter((x) => x.kind === 'video')) {
+    const fx = await call('effect.list', { clipId: c.id });
+    if (!fx.some((e) => /Lumetri/i.test(e.matchName))) {
+      v = c;
+      fx0 = fx;
+      break;
+    }
+  }
+  if (!v) {
+    note('color BỎ QUA', 'mọi clip video đã có Lumetri (không thử để khỏi đụng state)');
+  } else {
+    await call('color.setParams', { clipId: v.id, exposure: 0.5, contrast: 8 });
+    const fx1 = await call('effect.list', { clipId: v.id });
+    const lum = fx1.some((e) => /Lumetri/i.test(e.matchName));
+    if (lum) ok('color ghi thật', `Lumetri thêm (exposure/contrast)`);
+    else bad('color verify', `không thấy Lumetri (${fx1.map((e) => e.matchName)})`);
+    dirty = true;
+    if (lum) await call('effect.remove', { clipId: v.id, effectId: 'AE.ADBE Lumetri' });
+    const fx2 = await call('effect.list', { clipId: v.id });
+    if (fx2.length === fx0.length && !fx2.some((e) => /Lumetri/i.test(e.matchName))) {
+      ok('color hoàn tác', `gỡ Lumetri → ${fx2.length} component`);
+      dirty = false;
+    } else bad('color hoàn tác', `count=${fx2.length} (gốc ${fx0.length})`);
+  }
 } catch (e) {
   bad('color', e.message);
 }
