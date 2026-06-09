@@ -255,6 +255,42 @@ class SpeedRenderRequest(SpeedPlanRequest):
     dry_run: bool = False  # chỉ lập kế hoạch + đường ra, KHÔNG render
 
 
+class AssembleSegment(BaseModel):
+    """P0 ASM — 1 đoạn trong phim ghép (clip + tỉa + tốc độ)."""
+
+    path: str
+    in_sec: float | None = None
+    out_sec: float | None = None
+    speed: float | None = None
+
+
+class AssembleRenderRequest(BaseModel):
+    """P0 ASM — Ghép danh sách segment ĐÃ chỉ định -> 1 phim."""
+
+    segments: list[AssembleSegment]
+    out_path: str
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+    use_nvenc: bool = True
+    job_id: str | None = None
+
+
+class AssembleAutoRequest(BaseModel):
+    """P0 ASM — Khép kín: clip_paths -> (CV tỉa/tốc độ) -> ghép 1 phim (0-token)."""
+
+    clip_paths: list[str]
+    out_path: str
+    with_dead_air: bool = False
+    with_speed: bool = False
+    speed_mode: str = "content"
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+    use_nvenc: bool = True
+    job_id: str | None = None
+
+
 class DeadAirRequest(BaseModel):
     """LF4 — Request cắt dead-air/khoảng lặng đầu-cuối từng clip."""
 

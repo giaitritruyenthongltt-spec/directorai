@@ -1,0 +1,86 @@
+# DirectorAI — Audit toàn diện + Lộ trình khép-kín-luồng (2026-06-09)
+
+> Đánh giá CHẶT TAY sau nhiều lần nâng cấp. Phân biệt cái _chạy thật_ với _scaffold/stub/claim_.
+> Mọi số liệu verify trực tiếp trên code + data thật, không tin claim của doc/commit cũ.
+
+## 1. Sơ đồ vận hành hiện tại
+
+```
+PREMIERE 26  ─UXP panel(7 tab,VN)─ dispatchRpc(executeTransaction) ─► GHI clip CÓ SẴN ✅
+                                                                       (trim/move/disable/rename/
+                                                                        color Lumetri/marker/audio)
+                                                                       ❌ KHÔNG insert / sequence rỗng
+     │ WS :7778
+  SERVER(TS,32 tool) ── Gemini planner (đạo diễn) ── checkpoint/progress/cancel
+     │ HTTP :8000
+  CONTEXT-ENGINE(Python) ── CV 0-token (scene/motion/beat/silence/quality/cluster/embed)
+                         ── ML thật (Whisper/YOLO/Demucs/ChromaDB/Gemini Vision)
+  LANE-B headless (FFmpeg+Demucs): recut/anti-dup · speed · BGM · color → xuất FILE ✅ tin cậy nhất
+```
+
+## 2. Thực tế đường ghi (đã verify code + live session này)
+
+- **Write CHẠY THẬT** trên clip có sẵn: `uxp.ts` dùng `executeTransaction` + Action factories (KHÔNG
+  còn `lockedAccess` hỏng). Color Lumetri verify live read-back (BEFORE contrast0 → AFTER contrast18).
+  → **Doc `premiere-26-known-issues.md` (02/06) nói "mọi write hang" ĐÃ LỖI THỜI** (cần sửa).
+- **Giới hạn THẬT (còn nguyên):** KHÔNG `insert` clip / KHÔNG ghi sequence RỖNG (PPro26 UXP không có
+  razor/insert/createTrackItem). → "AI tự dựng phim TRONG Premiere" bị chặn ở khâu insert.
+- `.env` gitignore + không track (key an toàn — claim "lộ trong git" là SAI).
+
+## 3. Soi danh sách chức năng
+
+| Hạng mục                                                                                             | Thật           | Logic                              |
+| ---------------------------------------------------------------------------------------------------- | -------------- | ---------------------------------- |
+| CV phân tích (0-token)                                                                               | ✅             | hợp lý, nền vững                   |
+| AI hiểu clip 3 tầng (Gemini, cache/cluster/prefilter)                                                | ✅             | hợp lý, kỷ luật token              |
+| Lane-B recut/speed/color/BGM                                                                         | ✅ verified    | **mạnh nhất** → nên là trục chính  |
+| Ghi clip có sẵn (trim/rename/disable/color/marker)                                                   | ✅ live        | hợp lý                             |
+| transition/reorder                                                                                   | 🟡 beta        | chưa chốt live                     |
+| **Insert/dựng từ folder TRONG Premiere**                                                             | ❌ chặn        | **LỖ HỔNG lõi**                    |
+| 3 tab Đạo diễn/Tự động/Phim dài                                                                      | đều "tạo phim" | **chồng lấn — gây rối**            |
+| marketplace/teams/mobile/portal/render-worker/analytics/community/render-queue/updater/cli/mcp-tools | 🚫 orphan/stub | **scaffold ảo, thổi phồng "done"** |
+
+## 4. Điểm số (chặt tay)
+
+| Hạng mục                          | Điểm                                                    |
+| --------------------------------- | ------------------------------------------------------- |
+| Lõi ghi trong Premiere            | 5.5/10 (chạy nhưng không insert, verify thủ công)       |
+| Trí tuệ AI/CV                     | 8.0/10                                                  |
+| Đường ra headless (Lane-B/FCPXML) | 7.5/10 (FCPXML auto-import hang; chưa ghép cả-sequence) |
+| UX/giao diện                      | 7.0/10 (3 tab dựng phim trùng)                          |
+| Độ tin cậy/kiểm thử thật          | 5.0/10 (mock nhiều, ghi-thật ngoài CI)                  |
+| Kỷ luật phạm vi                   | 3.0/10 (~12 app/package orphan)                         |
+| Trung thực trạng thái             | 5.0/10 (milestone + known-issues lệch)                  |
+
+**TỔNG có trọng số ≈ 6.2/10 · Sẵn sàng MVP thực ≈ 55–60%.** Engine mạnh thật nhưng luồng giá trị
+hàng đầu CHƯA khép kín + nhiều scaffold ảo + verify ghi-thật mỏng.
+
+## 5. Lộ trình (vòng lặp có cổng — verify trên data/Premiere thật)
+
+### P0 — KHÉP KÍN "dựng phim qua đường file" (biến điểm yếu insert thành mạnh)
+
+Mối nối đang thiếu: `[folder] → phân tích + sắp thứ tự + tỉa/tốc độ → 1 SẢN PHẨM`.
+Hạ tầng đã có: `/order/suggest`, `/speed/plan`, dead_air, `buildContiguousTimeline`+`buildFcpxml`
+(ORPHAN), Lane-B per-clip render. Thiếu: **concat renderer** + **composite nối** + **UI**.
+
+| Phase | Ẩn số             | Spike                                             | Cổng PASS                   |
+| ----- | ----------------- | ------------------------------------------------- | --------------------------- |
+| ASM-0 | concat được không | `assemble.py` ffmpeg-concat N clip thật → ffprobe | out dur = Σ phần, phát được |
+| ASM-1 | mối nối           | composite folder→order→trim→concat (1 MP4)        | render đúng thứ tự/độ dài   |
+| ASM-2 | editable          | wire `buildContiguousTimeline`→fcpxml cả-sequence | xuất .fcpxml hợp lệ         |
+| ASM-3 | UI                | nút "Dựng phim tự động → MP4 / Timeline"          | 1 cửa, preview + render     |
+
+### P1 — Dọn & trung thực
+
+- Gộp 3 tab dựng phim → 1 luồng. Quarantine package orphan sang `future/`.
+- Sửa `premiere-26-known-issues.md` (write không còn hang) + chỉnh MEMORY milestone.
+
+### P2 — Siết verify
+
+- Smoke ghi-thật lặp được + read-back tự động. Test component panel. Python vào CI lint.
+- transition/reorder beta → verified bằng job live.
+
+## 6. Definition of MVP "xịn" (Gate khép-kín-luồng)
+
+A1 1 luồng folder→sản phẩm chạy trọn vẹn + verify · A2 sản phẩm đúng (thứ tự/độ dài/phát được) ·
+A3 1 cửa vào rõ ràng · A4 0-token mặc định · A5 repo sạch scaffold · A6 doc khớp thực tế.

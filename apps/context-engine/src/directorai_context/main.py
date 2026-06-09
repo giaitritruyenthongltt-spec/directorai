@@ -12,6 +12,8 @@ from directorai_context.config import get_settings
 from directorai_context.jobs import JobNotFound, get_queue
 from directorai_context.logger import log
 from directorai_context.models import (
+    AssembleAutoRequest,
+    AssembleRenderRequest,
     AudioSeparateRequest,
     AudioSeparateResult,
     BeatRequest,
@@ -559,6 +561,55 @@ def create_app() -> FastAPI:
             )
         except Exception as e:
             log.error("speed_render_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/assemble/render")
+    async def post_assemble_render(req: AssembleRenderRequest) -> dict[str, object]:
+        """P0 ASM — Ghép segment đã chỉ định -> 1 phim (Lane-B concat, không cần UXP insert)."""
+        from directorai_context.modules.assemble import assemble_film
+
+        if not req.segments:
+            raise HTTPException(status_code=400, detail="segments rỗng")
+        try:
+            return assemble_film(
+                [s.model_dump() for s in req.segments],
+                req.out_path,
+                width=req.width,
+                height=req.height,
+                fps=req.fps,
+                use_nvenc=req.use_nvenc,
+                job_id=req.job_id,
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:
+            log.error("assemble_render_failed", error=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @app.post("/assemble/auto")
+    async def post_assemble_auto(req: AssembleAutoRequest) -> dict[str, object]:
+        """P0 ASM — KHÉP KÍN: clip_paths -> CV (tỉa lặng + tốc độ) -> ghép 1 phim.
+        Mặc định 0-token (không gọi Gemini). Đây là đường 'dựng phim' né giới hạn
+        insert của PPro26 — xuất file hoàn chỉnh, người dùng kéo vào timeline."""
+        from directorai_context.modules.assemble import assemble_auto
+
+        if not req.clip_paths:
+            raise HTTPException(status_code=400, detail="clip_paths rỗng")
+        try:
+            return assemble_auto(
+                req.clip_paths,
+                req.out_path,
+                with_dead_air=req.with_dead_air,
+                with_speed=req.with_speed,
+                speed_mode=req.speed_mode,
+                width=req.width,
+                height=req.height,
+                fps=req.fps,
+                use_nvenc=req.use_nvenc,
+                job_id=req.job_id,
+            )
+        except Exception as e:
+            log.error("assemble_auto_failed", error=str(e))
             raise HTTPException(status_code=500, detail=str(e)) from e
 
     @app.post("/vision/cluster_clips")
