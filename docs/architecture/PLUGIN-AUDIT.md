@@ -42,18 +42,19 @@ PREMIERE 26  ─UXP panel(7 tab,VN)─ dispatchRpc(executeTransaction) ─► GH
 
 ## 4. Điểm số (chặt tay)
 
-| Hạng mục                          | Điểm                                                                 |
-| --------------------------------- | -------------------------------------------------------------------- |
-| Lõi ghi trong Premiere            | 5.5/10 (chạy nhưng không insert, verify thủ công)                    |
-| Trí tuệ AI/CV                     | 8.0/10                                                               |
-| Đường ra headless (Lane-B/FCPXML) | 8.5/10 ↑ (P0: concat khép kín, verify thật; FCPXML editable còn phụ) |
-| UX/giao diện                      | 7.0/10 (3 tab dựng phim trùng — chờ P1 gộp)                          |
-| Độ tin cậy/kiểm thử thật          | 5.5/10 ↑ (assemble verify headless; ghi-thật vẫn ngoài CI)           |
-| Kỷ luật phạm vi                   | 3.0/10 (~12 app/package orphan — chờ P1 dọn)                         |
-| Trung thực trạng thái             | 5.0/10 (milestone + known-issues lệch — chờ P1 sửa)                  |
+| Hạng mục                          | Điểm                                                                               |
+| --------------------------------- | ---------------------------------------------------------------------------------- |
+| Lõi ghi trong Premiere            | 5.5/10 (chạy thật nhưng không insert; transition/reorder beta; verify thủ công)    |
+| Trí tuệ AI/CV                     | 8.0/10                                                                             |
+| Đường ra headless (Lane-B/FCPXML) | 8.5/10 ↑ (P0: concat khép kín, verify thật; FCPXML editable còn phụ)               |
+| UX/giao diện                      | 7.0/10 (3-4 cửa "dựng phim" trùng — chờ gộp tab)                                   |
+| Độ tin cậy/kiểm thử thật          | 6.0/10 ↑ (assemble verify headless + sửa test stale; Python/ghi-thật vẫn ngoài CI) |
+| Kỷ luật phạm vi                   | 7.0/10 ↑↑ (P1a: quarantine 12 orphan → còn 7 app/15 pkg thực MVP)                  |
+| Trung thực trạng thái             | 7.5/10 ↑↑ (P1b: known-issues sửa, audit doc chuẩn; MEMORY log còn phồng)           |
 
-**TỔNG có trọng số ≈ 6.6/10 ↑ · Sẵn sàng MVP thực ≈ 65–70% ↑.** P0 đã KHÉP KÍN luồng giá trị hàng
-đầu (folder→1 phim, verify thật). Còn lại: P1 dọn scaffold + gộp tab + sửa doc, P2 siết verify ghi-thật.
+**TỔNG re-verify ≈ 7.0/10 ↑ · Sẵn sàng MVP thực ≈ 70% ↑.** _Đính chính: 6.6 post-P0 hơi nương tay,
+re-verify thực = 6.5; P1a (dọn scaffold) + P1b (sửa doc) nhấc lên ~7.0._ Còn để chạm ~8: gộp 3-4 cửa
+dựng-phim → 1 luồng (UX 7→8), đưa Python+ghi-thật vào CI (Test 6→8), verify transition/reorder live (Lõi 5.5→7).
 
 ## 5. Lộ trình (vòng lặp có cổng — verify trên data/Premiere thật)
 

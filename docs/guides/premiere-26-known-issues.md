@@ -60,7 +60,25 @@ Live `_debug.introspect` on the running panel revealed:
 
 ---
 
-## 🔴 What hangs (live observed)
+## ✅ RESOLVED 2026-06-09 — writes WORK now (Track A)
+
+> **Phần "ALL write operations hang" bên dưới ĐÃ LỖI THỜI.** Nguyên nhân gốc đúng là
+> `proj.lockedAccess(...)` wrapper bị treo trên PPro26. **Track A đã thay** đường ghi sang
+> `executeTransaction` + Action factories (`createSetInPointAction`, `createSetNameAction`,
+> `createSetDisabledAction`, `createMoveAction`, Lumetri set/get, marker, audio gain/fade).
+>
+> **Đã verify LIVE (read-back giá trị thật):** trim · rename · disable/enable · move · color
+> Lumetri (BEFORE contrast0 → AFTER contrast18) · marker · audio gain. transition/reorder = beta.
+>
+> **Giới hạn THẬT còn lại (khác với "không ghi được"):** PPro26 UXP **không có insert/razor/
+> createTrackItem** → không chèn clip mới / không ghi sequence RỖNG. Đường "dựng phim" né hẳn
+> giới hạn này bằng **Lane-B concat xuất file** (xem `assemble.py` + `PLUGIN-AUDIT.md`).
+>
+> Mục lịch sử dưới giữ lại để hiểu vì sao đổi kiến trúc.
+
+---
+
+## 🔴 What hangs (live observed) — LỊCH SỬ (đã fix, xem banner trên)
 
 ### UPDATE 2026-06-01 — bug is WIDER than initially thought
 
