@@ -42,18 +42,20 @@ PREMIERE 26  ─UXP panel(7 tab,VN)─ dispatchRpc(executeTransaction) ─► GH
 
 ## 4. Điểm số (chặt tay)
 
-| Hạng mục                          | Điểm                                                                                                                                                 |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Lõi ghi trong Premiere            | 7.0/10 ↑ (test:job-write tap11 **15/15** LIVE: transition+effect+color+trim+rename+disable+audio ghi+hoàn-tác sạch; move dry-OK; chỉ insert bị chặn) |
-| Trí tuệ AI/CV                     | 8.0/10                                                                                                                                               |
-| Đường ra headless (Lane-B/FCPXML) | 9.0/10 ↑ (P0 concat MP4 + ASM-4 FCPXML editable cả-sequence: 2 đường ra verify thật)                                                                 |
-| UX/giao diện                      | 8.0/10 ↑ (P1c: 1 cửa chính = Tự động; Phim dài/Đạo diễn thành phụ)                                                                                   |
-| Độ tin cậy/kiểm thử thật          | 7.5/10 ↑↑ (P2a Python vào CI + P2b test assemble TỰ ĐỘNG ffmpeg + test panel)                                                                        |
-| Kỷ luật phạm vi                   | 7.0/10 ↑↑ (P1a: quarantine 12 orphan → còn 7 app/15 pkg thực MVP)                                                                                    |
-| Trung thực trạng thái             | 7.5/10 ↑↑ (P1b: known-issues sửa, audit doc chuẩn; MEMORY log còn phồng)                                                                             |
+| Hạng mục                          | Điểm                                                                                                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Lõi ghi trong Premiere            | 7.0/10 ↑ (test:job-write tap11 **15/15** LIVE: transition+effect+color+trim+rename+disable+audio ghi+hoàn-tác sạch; move dry-OK; chỉ insert bị chặn)         |
+| Trí tuệ AI/CV                     | 8.0/10                                                                                                                                                       |
+| Đường ra headless (Lane-B/FCPXML) | 9.0/10 ↑ (P0 concat MP4 + ASM-4 FCPXML editable cả-sequence: 2 đường ra verify thật)                                                                         |
+| UX/giao diện                      | 8.5/10 ↑ (P1c + **XÁC NHẬN TRỰC QUAN LIVE**: panel render sạch — nav "Khác", default "Tự động", module ⚡, section "Dựng & Xuất phim" + nút FCPXML đều hiện) |
+| Độ tin cậy/kiểm thử thật          | 7.5/10 ↑↑ (P2a Python vào CI + P2b test assemble TỰ ĐỘNG ffmpeg + test panel)                                                                                |
+| Kỷ luật phạm vi                   | 7.0/10 ↑↑ (P1a: quarantine 12 orphan → còn 7 app/15 pkg thực MVP)                                                                                            |
+| Trung thực trạng thái             | 7.5/10 ↑↑ (P1b: known-issues sửa, audit doc chuẩn; MEMORY log còn phồng)                                                                                     |
 
-**TỔNG re-verify ≈ 7.8/10 ↑↑ · Sẵn sàng MVP thực ≈ 82%.** Hành trình: 6.2 (gốc) → 6.5 (P0) → 7.0
-(P1a/b) → 7.6 (P1c + P2) → 7.7 (transition+color live) → **7.8 (ASM-4 FCPXML editable)**. Mọi mục **≥ 7.0**.
+**TỔNG re-verify ≈ 7.9/10 ↑↑ · Sẵn sàng MVP thực ≈ 83%.** Hành trình: 6.2 → 6.5 (P0) → 7.0 (P1a/b)
+→ 7.6 (P1c+P2) → 7.8 (ASM-4) → **7.9 (UI XÁC NHẬN render live)**. **Rủi ro #1 (UI mới chưa thấy
+chạy) ĐÃ ĐÓNG**: reload UDT giải bằng Ctrl+Shift+R + ALT-trick + minimize-Premiere (`tools/reload-panel.ps1`);
+chụp panel xác nhận đủ tab/section/nút mới. Mọi mục **≥ 7.0**.
 Insert bị PPro26 chặn (đã né bằng Lane-B) là trần duy nhất của Lõi ghi. Bug color self-revert count=2
 đã FIX (test fragility — chọn clip chưa-có-Lumetri; product ensureLumetri vốn tái dùng đúng).
 
