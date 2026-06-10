@@ -23,38 +23,42 @@ PREMIERE 26  ─UXP panel(7 tab,VN)─ dispatchRpc(executeTransaction) ─► GH
 - **Write CHẠY THẬT** trên clip có sẵn: `uxp.ts` dùng `executeTransaction` + Action factories (KHÔNG
   còn `lockedAccess` hỏng). Color Lumetri verify live read-back (BEFORE contrast0 → AFTER contrast18).
   → **Doc `premiere-26-known-issues.md` (02/06) nói "mọi write hang" ĐÃ LỖI THỜI** (cần sửa).
-- **Giới hạn THẬT (còn nguyên):** KHÔNG `insert` clip / KHÔNG ghi sequence RỖNG (PPro26 UXP không có
-  razor/insert/createTrackItem). → "AI tự dựng phim TRONG Premiere" bị chặn ở khâu insert.
+- **ĐÍNH CHÍNH (research Adobe 2026): "insert bị chặn" là SAI.** `SequenceEditor.createInsertProjectItemAction`
+  - `createOverwriteItemAction` CÓ THẬT (developer.adobe.com) — chèn/dựng clip vào sequence ĐƯỢC. Code
+    ĐÃ probe (`uxp-api.ts` đo arity 2 action) + khai báo `insertClip` (`uxp-ppro.ts`) nhưng **CHƯA WIRE**.
+    → "AI dựng phim TRONG Premiere" là **tính năng CHƯA LÀM**, KHÔNG phải trần nền tảng. (File-export là
+    LỰA CHỌN, không phải bắt buộc.) · Thực sự bị chặn: move VERTICAL cross-track (Adobe community xác nhận).
 - `.env` gitignore + không track (key an toàn — claim "lộ trong git" là SAI).
 
 ## 3. Soi danh sách chức năng
 
-| Hạng mục                                                                                             | Thật           | Logic                              |
-| ---------------------------------------------------------------------------------------------------- | -------------- | ---------------------------------- |
-| CV phân tích (0-token)                                                                               | ✅             | hợp lý, nền vững                   |
-| AI hiểu clip 3 tầng (Gemini, cache/cluster/prefilter)                                                | ✅             | hợp lý, kỷ luật token              |
-| Lane-B recut/speed/color/BGM                                                                         | ✅ verified    | **mạnh nhất** → nên là trục chính  |
-| Ghi clip có sẵn (trim/rename/disable/color/marker)                                                   | ✅ live        | hợp lý                             |
-| transition/reorder                                                                                   | 🟡 beta        | chưa chốt live                     |
-| **Insert/dựng từ folder TRONG Premiere**                                                             | ❌ chặn        | **LỖ HỔNG lõi**                    |
-| 3 tab Đạo diễn/Tự động/Phim dài                                                                      | đều "tạo phim" | **chồng lấn — gây rối**            |
-| marketplace/teams/mobile/portal/render-worker/analytics/community/render-queue/updater/cli/mcp-tools | 🚫 orphan/stub | **scaffold ảo, thổi phồng "done"** |
+| Hạng mục                                                                                             | Thật           | Logic                                |
+| ---------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------ |
+| CV phân tích (0-token)                                                                               | ✅             | hợp lý, nền vững                     |
+| AI hiểu clip 3 tầng (Gemini, cache/cluster/prefilter)                                                | ✅             | hợp lý, kỷ luật token                |
+| Lane-B recut/speed/color/BGM                                                                         | ✅ verified    | **mạnh nhất** → nên là trục chính    |
+| Ghi clip có sẵn (trim/rename/disable/color/marker)                                                   | ✅ live        | hợp lý                               |
+| transition/reorder                                                                                   | 🟡 beta        | chưa chốt live                       |
+| **Insert/dựng từ folder TRONG Premiere** (SequenceEditor.createInsert/OverwriteItemAction CÓ API)    | 🟡 chưa-làm    | **LỖ HỔNG lõi — achievable, punted** |
+| 3 tab Đạo diễn/Tự động/Phim dài                                                                      | đều "tạo phim" | **chồng lấn — gây rối**              |
+| marketplace/teams/mobile/portal/render-worker/analytics/community/render-queue/updater/cli/mcp-tools | 🚫 orphan/stub | **scaffold ảo, thổi phồng "done"**   |
 
 ## 4. Điểm số (chặt tay)
 
-| Hạng mục                          | Điểm                                                                                                                                                         |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Lõi ghi trong Premiere            | 7.0/10 ↑ (test:job-write tap11 **15/15** LIVE: transition+effect+color+trim+rename+disable+audio ghi+hoàn-tác sạch; move dry-OK; chỉ insert bị chặn)         |
-| Trí tuệ AI/CV                     | 8.0/10                                                                                                                                                       |
-| Đường ra headless (Lane-B/FCPXML) | 9.0/10 ↑ (P0 concat MP4 + ASM-4 FCPXML editable cả-sequence: 2 đường ra verify thật)                                                                         |
-| UX/giao diện                      | 8.5/10 ↑ (P1c + **XÁC NHẬN TRỰC QUAN LIVE**: panel render sạch — nav "Khác", default "Tự động", module ⚡, section "Dựng & Xuất phim" + nút FCPXML đều hiện) |
-| Độ tin cậy/kiểm thử thật          | 7.5/10 ↑↑ (P2a Python vào CI + P2b test assemble TỰ ĐỘNG ffmpeg + test panel)                                                                                |
-| Kỷ luật phạm vi                   | 7.0/10 ↑↑ (P1a: quarantine 12 orphan → còn 7 app/15 pkg thực MVP)                                                                                            |
-| Trung thực trạng thái             | 7.5/10 ↑↑ (P1b: known-issues sửa, audit doc chuẩn; MEMORY log còn phồng)                                                                                     |
+| Hạng mục                          | Điểm                                                                                                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lõi ghi trong Premiere            | **5.5**/10 ↓ (edit-existing 7 op 15/15 LIVE tốt; NHƯNG insert/dựng-trong-Premiere ACHIEVABLE [createInsertProjectItemAction] mà CHƯA LÀM — copilot không dựng được, chỉ polish) |
+| Trí tuệ AI/CV                     | 8.0/10 (research xác nhận: faster-whisper/Demucs/YOLO production-grade)                                                                                                         |
+| Đường ra headless (Lane-B/FCPXML) | **7.5**/10 ↓ (MP4 concat solid+verify; FCPXML import CHƯA verify + Adobe: speed timeMap "do not transfer" → 1 đường chắc + 1 đường nghi)                                        |
+| UX/giao diện                      | 8.0/10 (XÁC NHẬN render live — nav/tab/section/nút mới đều hiện; panel tốt nhưng độ sâu vừa)                                                                                    |
+| Độ tin cậy/kiểm thử thật          | 7.0/10 (Python vào CI + test assemble tự-sinh; ghi-thật LIVE vẫn ngoài CI, panel ít test)                                                                                       |
+| Kỷ luật phạm vi                   | 7.0/10 (P1a quarantine 12 orphan; còn 3 web-app + vài pkg rìa)                                                                                                                  |
+| Trung thực trạng thái             | **6.5**/10 ↓ (doc audit từng claim SAI "insert bị chặn" — research bóc; MEMORY log còn phồng)                                                                                   |
 
-**TỔNG re-verify ≈ 7.9/10 ↑↑ · Sẵn sàng MVP thực ≈ 83%.** Hành trình: 6.2 → 6.5 (P0) → 7.0 (P1a/b)
-→ 7.6 (P1c+P2) → 7.8 (ASM-4) → **7.9 (UI XÁC NHẬN render live)**. **Rủi ro #1 (UI mới chưa thấy
-chạy) ĐÃ ĐÓNG**: reload UDT giải bằng Ctrl+Shift+R + ALT-trick + minimize-Premiere (`tools/reload-panel.ps1`);
+**TỔNG re-verify (research-grounded) ≈ 7.0/10 ↓ · Sẵn sàng MVP thực ≈ 70%.** _Đính chính lớn: doc từng
+ghi 7.9 — research Adobe bóc 2 chỗ nương tay: (1) "insert bị chặn" là SAI (API có, chưa làm) → Lõi ghi
+7.0→5.5; (2) FCPXML import chưa verify + Adobe nói speed không transfer → Headless 9.0→7.5. Honest = 7.0._
+**Rủi ro #1 (UI mới chưa thấy chạy) ĐÃ ĐÓNG**: reload UDT giải bằng Ctrl+Shift+R + ALT-trick + minimize-Premiere (`tools/reload-panel.ps1`);
 chụp panel xác nhận đủ tab/section/nút mới. Mọi mục **≥ 7.0**.
 Insert bị PPro26 chặn (đã né bằng Lane-B) là trần duy nhất của Lõi ghi. Bug color self-revert count=2
 đã FIX (test fragility — chọn clip chưa-có-Lumetri; product ensureLumetri vốn tái dùng đúng).
